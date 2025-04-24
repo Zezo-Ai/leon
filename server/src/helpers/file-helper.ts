@@ -30,13 +30,8 @@ export class FileHelper {
       ...options
     }
 
-    const directory = destinationPath.substring(
-      0,
-      destinationPath.lastIndexOf('/')
-    )
-    const fileName = destinationPath.substring(
-      destinationPath.lastIndexOf('/') + 1
-    )
+    const directory = path.dirname(destinationPath)
+    const fileName = path.basename(destinationPath)
     const downloader = await ipullDownloadFile({
       url: fileURL,
       directory,
