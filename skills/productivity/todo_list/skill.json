@@ -8,5 +8,20 @@
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
     "url": "https://github.com/louistiti"
+  },
+  "actions": {
+    "create_list": {
+      "type": "logic",
+      "description": "Create a new to-do list based on the given list name.",
+      "parameters": {
+        "properties": {
+          "list_name": {
+            "type": "string",
+            "description": "The name of the to-do list to create."
+          }
+        },
+        "required": ["list_name"]
+      }
+    }
   }
 }

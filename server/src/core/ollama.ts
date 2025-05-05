@@ -19,8 +19,10 @@ export default class Ollama {
   }
 
   public async chooseSkill(utterance: NLPUtterance): Promise<void> {
+    /**
+     * TODO: the skill list should be saved at build time
+     */
     const friendlyPrompts = await SkillDomainHelper.listSkillFriendlyPrompts()
-    // count list for each friendly prompt: '1. ' + skillFriendlyPrompt, etc.
     const formattedFriendlyPrompts = friendlyPrompts
       .map((friendlyPrompt, index) => {
         return `${index + 1}. ${friendlyPrompt}`
