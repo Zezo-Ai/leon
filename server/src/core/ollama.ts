@@ -1,10 +1,27 @@
-import ollama from 'ollama'
+import { Ollama as OllamaServer } from 'ollama'
 
 import { LogHelper } from '@/helpers/log-helper'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
 import { NLPUtterance } from '@/core/nlp/types'
 
-const MODEL_IDENTIFIER = 'qwen3:4b'
+/**
+ * OLLAMA_SERVER
+ * Model list: qwen3:4b (x2); lexi; qwen3:1.7b
+ * Ollama servers: main; action-router
+ */
+
+// ollama create "qwen3:4b-skillrouter" -f ./qwen3-4b
+// const MODEL_IDENTIFIER = 'qwen3:4b-q4_k_m'
+const SKILL_ROUTER_MODEL_IDENTIFIER = 'qwen3:4b-leon'
+// ollama create "qwen3:4b-actionrouter" -f ./qwen3-4b
+const ACTION_ROUTER_MODEL_IDENTIFIER = 'qwen3:4b-leon'
+
+const OLLAMA_CLIENT_1 = new OllamaServer({
+  host: 'http://127.0.0.1:11435'
+})
+const OLLAMA_CLIENT_2 = new OllamaServer({
+  host: 'http://127.0.0.1:11436'
+})
 
 export default class Ollama {
   private static instance: Ollama
@@ -58,10 +75,15 @@ Instructions:
     console.log('System Prompt:', systemPrompt)
     console.log('Prompt:', prompt)
 
-    const completionResult = await ollama.generate({
-      model: MODEL_IDENTIFIER,
+    console.time('skill router')
+    const completionResult = await OLLAMA_CLIENT_1.generate({
+      model: SKILL_ROUTER_MODEL_IDENTIFIER,
       system: systemPrompt,
       prompt,
+      /*messages: [
+        { 'role': 'system', 'content': systemPrompt },
+        { 'role': 'user', 'content': prompt }
+      ],*/
       // Always keep the model loaded in memory
       keep_alive: -1,
       stream: false,
@@ -74,14 +96,111 @@ Instructions:
         num_predict: 12
       }
     })
+    console.timeEnd('skill router')
 
-    console.log('response', completionResult.response)
+    console.log('response', JSON.stringify(completionResult, null, 2))
   }
 
   /**
    * TODO: function calling
+   * @see https://ollama.com/blog/functions-as-tools
    * @see https://ollama.com/blog/tool-support
    * @see https://qwen.readthedocs.io/en/latest/framework/function_call.html
    * @see https://platform.openai.com/docs/guides/function-calling?api-mode=responses&lang=javascript
    */
+
+  public async callFunction(utterance: NLPUtterance): Promise<void> {
+    /*const systemPrompt = `SYSTEM: You are a function caller. Your task is to call the function with the provided name and arguments.`
+    const prompt = `Function Name: ${functionName}\nFunction Arguments: ${JSON.stringify(
+      functionArgs,
+      null,
+      2
+    )}`
+    */
+
+    // TODO: this needs to be another model to enable KV cache
+
+    // TODO: skill devs can injects notes at the skill level
+    const notes = ["E.g. shopping list, 'shopping' is the list name."]
+    const userPrompt = `/no_think\nNotes: ${notes.join(
+      '; '
+    )}\nUser Prompt: "${utterance}"`
+
+    console.log('User Prompt:', userPrompt)
+
+    console.time('action router')
+    const completionResult = await OLLAMA_CLIENT_2.chat({
+      model: ACTION_ROUTER_MODEL_IDENTIFIER,
+      messages: [{ role: 'user', content: userPrompt }],
+      // Always keep the model loaded in memory
+      keep_alive: -1,
+      stream: false,
+      options: {
+        // num_ctx: 8_192,
+        /**
+         * An action may have ~128 tokens,
+         * a skill may contain 10 actions,
+         * we double that
+         */
+        num_ctx: 2_048,
+        temperature: 0,
+        // Max tokens
+        // num_predict: 12
+        num_predict: 512
+      },
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'create_list',
+            description:
+              'Create a new to-do list based on the given list name.',
+            parameters: {
+              properties: {
+                list_name: {
+                  type: 'string',
+                  description: 'The name of the to-do list to create.'
+                }
+              },
+              required: ['list_name']
+            }
+          }
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'add_todos',
+            description: 'Add items to a specific to-do list.',
+            parameters: {
+              properties: {
+                list_name: {
+                  type: 'string',
+                  description: 'The name of the to-do list to add items to.'
+                },
+                items: {
+                  type: 'array',
+                  items: {
+                    type: 'string'
+                  },
+                  description: 'The items to add to the list.'
+                }
+              },
+              required: ['list_name', 'items']
+            }
+          }
+        }
+      ]
+    })
+    console.timeEnd('action router')
+
+    const answer = completionResult.message
+
+    if (answer.tool_calls) {
+      console.log('Tool found')
+      console.log(answer.content)
+      console.log('Tool name:', JSON.stringify(answer.tool_calls[0], null, 2))
+    } else {
+      console.log('No tool found:', answer.content)
+    }
+  }
 }

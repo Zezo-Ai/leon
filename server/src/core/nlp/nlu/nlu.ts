@@ -491,6 +491,7 @@ export default class NLU {
         console.log('this._nluResult', JSON.stringify(this._nluResult, null, 2))
 
         await OLLAMA.chooseSkill(utterance)
+        await OLLAMA.callFunction(utterance)
 
         try {
           const processedData = await BRAIN.execute(this._nluResult)
