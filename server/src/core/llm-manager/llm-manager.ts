@@ -115,7 +115,7 @@ export default class LLMManager {
   }
 
   /**
-   * Post checking after loading the LLM to
+   * Post checking after loading the LLM
    */
   private async postCheck(): Promise<void> {
     if (this._isLLMActionRecognitionEnabled) {

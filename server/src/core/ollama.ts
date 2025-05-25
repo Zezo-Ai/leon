@@ -8,6 +8,11 @@ import { NLPUtterance } from '@/core/nlp/types'
  * OLLAMA_SERVER
  * Model list: qwen3:4b (x2); lexi; qwen3:1.7b
  * Ollama servers: main; action-router
+ * (toolkit hint)
+ * Qwen 7b: skill router
+ * Qwen 4b: action router
+ * Lexi: persona, paraphraser, nlg
+ * Qwen 1.7b: resolver and extra tools
  */
 
 // ollama create "qwen3:4b-skillrouter" -f ./qwen3-4b
@@ -89,7 +94,7 @@ Instructions:
       stream: false,
       options: {
         // num_ctx: 8_192,
-        // TODO: dynamic allocation according to total number of tokens for the classification duty
+        // TODO: dynamic allocation according to total number of tokens for the classification duty (according to saved skill list)
         num_ctx: 1_024,
         temperature: 0,
         // Max tokens
