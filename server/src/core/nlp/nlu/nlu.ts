@@ -19,8 +19,7 @@ import {
   SOCKET_SERVER,
   MODEL_LOADER,
   NER,
-  LLM_MANAGER,
-  OLLAMA
+  LLM_MANAGER
 } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { LangHelper } from '@/helpers/lang-helper'
@@ -33,6 +32,8 @@ import {
   ActionRecognitionLLMDuty,
   type ActionRecognitionLLMDutyParams
 } from '@/core/llm-manager/llm-duties/action-recognition-llm-duty'
+import { SkillRouterLLMDuty } from '@/core/llm-manager/llm-duties/skill-router-llm-duty'
+import { ActionCallingLLMDuty } from '@/core/llm-manager/llm-duties/action-calling-llm-duty'
 
 type MatchActionResult = Pick<
   NLPJSProcessResult,
@@ -320,6 +321,30 @@ export default class NLU {
         LogHelper.title('NLU')
         LogHelper.info('Processing...')
 
+        const skillRouterDuty = new SkillRouterLLMDuty({
+          input: utterance
+        })
+        await skillRouterDuty.init()
+        const skillRouterResult = await skillRouterDuty.execute()
+
+        const skillResult = skillRouterResult?.output
+
+        console.log('SELECTED SKILL', skillResult)
+
+        const notes = [
+          'A list name should never contain the "list" suffix. E.g. device list, "device" is the list name.'
+        ]
+        const userPrompt = `You must pay attention to these notes: ${notes.join(
+          '; '
+        )}\nUser Prompt: "${utterance}"`
+        const actionCallingDuty = new ActionCallingLLMDuty({
+          input: userPrompt
+        })
+        await actionCallingDuty.init()
+        const actionCallingResult = await actionCallingDuty.execute()
+
+        console.log('ACTION CALLING RESULT', actionCallingResult)
+
         if (!MODEL_LOADER.hasNlpModels()) {
           if (!BRAIN.isMuted) {
             await BRAIN.talk(`${BRAIN.wernicke('random_errors')}!`)
@@ -487,11 +512,6 @@ export default class NLU {
           this.conversation.activeContext.currentEntities
         // Pass context entities to the NLU result object
         this._nluResult.entities = this.conversation.activeContext.entities
-
-        console.log('this._nluResult', JSON.stringify(this._nluResult, null, 2))
-
-        await OLLAMA.chooseSkill(utterance)
-        await OLLAMA.callFunction(utterance)
 
         try {
           const processedData = await BRAIN.execute(this._nluResult)

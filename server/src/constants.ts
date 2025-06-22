@@ -243,6 +243,10 @@ export const LLM_ACTIONS_CLASSIFIER_PATH = path.join(
   MODELS_PATH,
   'leon-llm-actions-classifier.json'
 )
+export const LLM_SKILL_ROUTER_DUTY_SKILL_LIST_PATH = path.join(
+  MODELS_PATH,
+  'leon-skill-list.nlp'
+)
 
 /**
  * LLMs
@@ -261,7 +265,8 @@ export const LLM_PROVIDER = process.env['LEON_LLM_PROVIDER']
 // export const LLM_VERSION = 'Q4_K_M'
 // export const LLM_VERSION = '4b-it-Q5_K_M'
 // export const LLM_VERSION = '3b-instruct-q5_k_m'
-export const LLM_VERSION = '8B-Lexi-Uncensored.i1-Q5_K_S'
+// export const LLM_VERSION = '8B-Lexi-Uncensored.i1-Q5_K_S'
+export const LLM_VERSION = '4B-Q4_K_M'
 // export const LLM_VERSION = '8B-Abliterated.i1-Q5_K_S'
 // export const LLM_VERSION = '3-mini-128k-instruct.Q5_K_S'
 // export const LLM_VERSION = '3-mini-4k-instruct-q4'
@@ -275,7 +280,8 @@ export const LLM_VERSION = '8B-Lexi-Uncensored.i1-Q5_K_S'
 // export const LLM_NAME = 'Gemma 3 12B IT Abliterated'
 // export const LLM_NAME = 'Gemma-3-4B-IT'
 // export const LLM_NAME = 'Qwen2.5-3B-Instruct'
-export const LLM_NAME = 'Lexi-Llama-3-8B-Uncensored'
+export const LLM_NAME = 'Qwen3-4B'
+// export const LLM_NAME = 'Lexi-Llama-3-8B-Uncensored'
 // export const LLM_NAME = 'Llama-3-8B-Lexi-Uncensored'
 // export const LLM_NAME = 'DeepSeek-R1-Distill-Llama'
 // export const LLM_NAME = 'Phi-3-Mini-128K-Instruct'
@@ -290,7 +296,8 @@ export const LLM_NAME = 'Lexi-Llama-3-8B-Uncensored'
 // export const LLM_FILE_NAME = `supernova-lite-v1-${LLM_VERSION}.gguf`
 // export const LLM_FILE_NAME = `gemma-3-${LLM_VERSION}.gguf`
 // export const LLM_FILE_NAME = `qwen2.5-${LLM_VERSION}.gguf`
-export const LLM_FILE_NAME = `Llama-3-${LLM_VERSION}.gguf`
+export const LLM_FILE_NAME = `Qwen3-${LLM_VERSION}.gguf`
+// export const LLM_FILE_NAME = `Llama-3-${LLM_VERSION}.gguf`
 // export const LLM_FILE_NAME = `DeepSeek-R1-Distill-Llama-${LLM_VERSION}.gguf`
 // export const LLM_FILE_NAME = `Phi-${LLM_VERSION}.gguf`
 // export const LLM_FILE_NAME = `gemma-${LLM_VERSION}.gguf`
@@ -319,7 +326,9 @@ export const LLM_MINIMUM_FREE_VRAM = 8
 /*export const LLM_HF_DOWNLOAD_URL =
   'https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q5_k_m.gguf?download=true'*/
 export const LLM_HF_DOWNLOAD_URL =
-  'https://huggingface.co/mradermacher/Llama-3-8B-Lexi-Uncensored-i1-GGUF/resolve/main/Llama-3-8B-Lexi-Uncensored.i1-Q5_K_S.gguf?download=true'
+  'https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf?download=true'
+/*export const LLM_HF_DOWNLOAD_URL =
+  'https://huggingface.co/mradermacher/Llama-3-8B-Lexi-Uncensored-i1-GGUF/resolve/main/Llama-3-8B-Lexi-Uncensored.i1-Q5_K_S.gguf?download=true'*/
 /*export const LLM_HF_DOWNLOAD_URL =
   'https://huggingface.co/mradermacher/DeepSeek-R1-Distill-Llama-8B-Abliterated-i1-GGUF/resolve/main/DeepSeek-R1-Distill-Llama-8B-Abliterated.i1-Q5_K_S.gguf?download=true'*/
 /*export const LLM_HF_DOWNLOAD_URL =

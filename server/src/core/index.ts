@@ -19,8 +19,6 @@ import NaturalLanguageUnderstanding from '@/core/nlp/nlu/nlu'
 import Brain from '@/core/brain/brain'
 import LLMManager from '@/core/llm-manager/llm-manager'
 import LLMProvider from '@/core/llm-manager/llm-provider'
-import Ollama from '@/core/ollama'
-import OllamaServer from '@/core/ollama-server'
 import Persona from '@/core/llm-manager/persona'
 import { ConversationLogger } from '@/conversation-logger'
 import { SystemHelper } from '@/helpers/system-helper'
@@ -54,15 +52,6 @@ export const EVENT_EMITTER = new EventEmitter()
 export const LLM_PROVIDER = new LLMProvider()
 
 export const LLM_MANAGER = new LLMManager()
-
-export const OLLAMA_SERVER_1 = new OllamaServer({
-  port: 11435
-})
-export const OLLAMA_SERVER_2 = new OllamaServer({
-  port: 11436
-})
-
-export const OLLAMA = new Ollama()
 
 export const CONVERSATION_LOGGER = new ConversationLogger({
   loggerName: 'Conversation Logger',

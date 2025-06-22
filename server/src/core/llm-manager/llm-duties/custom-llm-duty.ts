@@ -7,7 +7,6 @@ import {
 } from '@/core/llm-manager/llm-duty'
 import { LogHelper } from '@/helpers/log-helper'
 import { LLM_MANAGER, LLM_PROVIDER } from '@/core'
-import { LLM_THREADS } from '@/core/llm-manager/llm-manager'
 import { LLMProviders, LLMDuties } from '@/core/llm-manager/types'
 import { LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
 
@@ -65,9 +64,7 @@ export class CustomLLMDuty extends LLMDuty {
 
           this.systemPrompt = this.data.systemPrompt || ''
 
-          CustomLLMDuty.context = await LLM_MANAGER.model.createContext({
-            threads: LLM_THREADS
-          })
+          CustomLLMDuty.context = await LLM_MANAGER.model.createContext()
 
           const { LlamaChatSession } = await Function(
             'return import("node-llama-cpp")'

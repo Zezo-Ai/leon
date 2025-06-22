@@ -3,6 +3,7 @@ import { ActionRecognitionLLMDuty } from '@/core/llm-manager/llm-duties/action-r
 import { CustomNERLLMDuty } from '@/core/llm-manager/llm-duties/custom-ner-llm-duty'
 import { ParaphraseLLMDuty } from '@/core/llm-manager/llm-duties/paraphrase-llm-duty'
 import { LLMDuties } from '@/core/llm-manager/types'
+import { SkillRouterLLMDuty } from '@/core/llm-manager/llm-duties/skill-router-llm-duty'
 
 export default async (llmDutiesToWarmUp: LLMDuties[]): Promise<void> => {
   /**
@@ -13,6 +14,15 @@ export default async (llmDutiesToWarmUp: LLMDuties[]): Promise<void> => {
   await conversationDuty.execute({
     isWarmingUp: true
   })*/
+
+  /**
+   * Skill router LLM Duty warm-up
+   */
+  const skillRouterDuty = new SkillRouterLLMDuty({
+    input: 'I cannot think of a number now, please help'
+  })
+  await skillRouterDuty.init()
+  await skillRouterDuty.execute()
 
   /**
    * Custom NER LLM Duty warm-up

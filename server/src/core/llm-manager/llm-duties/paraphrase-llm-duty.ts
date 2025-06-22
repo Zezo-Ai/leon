@@ -33,6 +33,7 @@ Never indicate that it's a modified version.
 Do not interpret the text, just paraphrase it.
 You do not ask question if the original text does not contain any.
 If there are data in the original text, make sure to provide them.
+/no_think
 
 Examples:
 
@@ -113,10 +114,11 @@ The sun is a star, it is the closest star to Earth.`
 
     try {
       const prompt = `Modify the following text but do not say you modified it: ${this.input}`
+      const config = LLM_MANAGER.coreLLMDuties[LLMDuties.Paraphrase]
       const completionParams = {
         dutyType: LLMDuties.Paraphrase,
         systemPrompt: ParaphraseLLMDuty.finalSystemPrompt,
-        temperature: 0.8
+        temperature: config?.temperature
       }
       let completionResult
 
@@ -136,7 +138,6 @@ The sun is a star, it is the closest star to Earth.`
         completionResult = await LLM_PROVIDER.prompt(prompt, {
           ...completionParams,
           session: ParaphraseLLMDuty.session,
-          maxTokens: LLM_MANAGER.context.contextSize,
           onToken: (chunk) => {
             if (!params.isWarmingUp && !params.shouldEmitOnToken) {
               const detokenizedChunk = LLM_PROVIDER.cleanUpResult(

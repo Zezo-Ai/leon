@@ -4,6 +4,8 @@ import type { MessageLog } from '@/types'
 
 export enum LLMDuties {
   ActionRecognition = 'action-recognition',
+  SkillRouter = 'skill-router',
+  ActionCalling = 'action-calling',
   CustomNER = 'custom-ner',
   Paraphrase = 'paraphrase',
   Conversation = 'conversation',
@@ -24,9 +26,9 @@ export enum LLMProviders {
 export interface CompletionParams {
   dutyType: LLMDuties
   systemPrompt: string
-  maxTokens?: number
+  maxTokens?: number | undefined
   grammar?: string
-  temperature?: number
+  temperature?: number | undefined
   timeout?: number
   maxRetries?: number
   session?: LlamaChatSession | null

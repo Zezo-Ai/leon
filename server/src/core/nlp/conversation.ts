@@ -10,6 +10,11 @@ import type {
 import { LogHelper } from '@/helpers/log-helper'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
 
+interface ConversationState {
+  pendingAction: NLPAction | null
+  collectedParameters: Record<string, string>
+  missingParameters: string[]
+}
 interface ConversationContext {
   name: string | null
   domain: NLPDomain
@@ -30,6 +35,13 @@ interface ConversationContext {
 type ConversationPreviousContext = Record<string, ConversationContext> | null
 
 const MAX_CONTEXT_HISTORY = 5
+
+export const DEFAULT_ACTIVE_STATE: ConversationState = {
+  pendingAction: null,
+  collectedParameters: {},
+  missingParameters: []
+}
+
 export const DEFAULT_ACTIVE_CONTEXT = {
   name: null,
   domain: '',

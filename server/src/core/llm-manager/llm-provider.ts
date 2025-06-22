@@ -134,6 +134,9 @@ export default class LLMProvider {
     str = str.replace(/\*winks?\*/g, '😉')
     str = str.replace(/\*sigh\*/g, '😔')
 
+    // Remove all newlines at the beginning
+    str = str.replace(/^\n+/, '')
+
     return str
   }
 
@@ -144,8 +147,11 @@ export default class LLMProvider {
     prompt: string,
     completionParams: CompletionParams
   ): Promise<CompletionResult | null> {
+    const measureExecutionTimeLabel = `Inference time for "${completionParams.dutyType}" duty`
+
     LogHelper.title('LLM Provider')
     LogHelper.info(`Using "${LLM_PROVIDER}" provider for completion...`)
+    LogHelper.time(measureExecutionTimeLabel)
 
     if (!this.llmProvider) {
       LogHelper.error('LLM provider is not ready')
@@ -259,6 +265,9 @@ export default class LLMProvider {
         rawResultString += '}'
       }
     }
+
+    LogHelper.title('LLM Provider')
+    LogHelper.timeEnd(measureExecutionTimeLabel)
 
     return {
       dutyType: completionParams.dutyType,

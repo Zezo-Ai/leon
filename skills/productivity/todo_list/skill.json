@@ -43,5 +43,8 @@
         "required": ["list_name", "items"]
       }
     }
-  }
+  },
+  "action_notes": [
+    "A list name should never contain the \"list\" suffix. E.g. device list, \"device\" is the list name."
+  ]
 }
