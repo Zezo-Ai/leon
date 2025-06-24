@@ -19,6 +19,7 @@ interface CompletionResult {
   input: string
   output: string
   data: Record<string, unknown> | null
+  functions?: Record<string, unknown> | undefined
   maxTokens: number
   usedInputTokens: number
   usedOutputTokens: number
@@ -164,6 +165,7 @@ export default class LLMProvider {
     completionParams.maxRetries =
       completionParams.maxRetries || DEFAULT_MAX_EXECUTION_RETRIES
     completionParams.data = completionParams.data || null
+    completionParams.functions = completionParams.functions || undefined
     completionParams.temperature =
       completionParams.temperature || DEFAULT_TEMPERATURE
     completionParams.maxTokens =
@@ -276,6 +278,7 @@ export default class LLMProvider {
       input: prompt,
       output: isJSONMode ? JSON.parse(rawResultString) : rawResultString,
       data: completionParams.data,
+      functions: completionParams.functions,
       maxTokens: completionParams.maxTokens,
       // Current used context size
       usedInputTokens,

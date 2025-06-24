@@ -363,6 +363,7 @@ export default class LLMManager {
          *     Start to reorganize everything correctly:
          *      Fully implement the skill router and action calling duties
          *      Implement duties correctly with the NLU class
+         *      Create new structure tools in bridges with skills folder; remove domains
          *      Create the fake weather skill
          *      Implement config/{lang}.json in skills with new properties (cf. Trello card description)
          *      Implement slot filling duty > missing params > conversation state
@@ -370,6 +371,7 @@ export default class LLMManager {
          *      If action is not found, then fallback to a duty for chitchat/help with Leon's personality
          *      Implement toolkits and tools (E.g. weather toolkit (folder) > several providers (each provider is a tool class, they must contain the same methods between each other as most as possible). Cf. MVP. And create the toolkit finder duty logic when the Leon instance includes +64 skills
          *      After everything is confirmed, then migrate all skills with the new configs
+         *      Clean up NLU class, etc. if not used anymore
          *
          *     In DSL, at the same level as "type": "logic", need to add field: "optional_params": []
          *      If this param is missing, but is included in the optional_params array, then still execute the action and let the skill developer handles the logic

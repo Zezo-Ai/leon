@@ -168,6 +168,37 @@ export const skillSchemaObject = Type.Strict(
         description:
           'A person who has been involved in creating or maintaining this skill.'
       }
+    ),
+    actions: Type.Record(
+      Type.String(),
+      Type.Object(
+        {
+          type: Type.Union(skillActionTypes),
+          description: Type.String({
+            minLength: 16,
+            maxLength: 128,
+            description:
+              'This helps to understand what your action does. Also used by the LLM (Large Language Model) to match the action.'
+          })
+          /**
+           * TODO: add:
+           * parameters
+           * missing_param_follow_ups
+           * optional_params
+           */
+        },
+        { additionalProperties: false }
+      ),
+      {
+        description:
+          'Actions are the functions that are triggered within a skill, they define what Leon can do with this skill.'
+      }
+    ),
+    action_notes: Type.Optional(
+      Type.Array(Type.String(), {
+        description:
+          'Action notes are used to provide additional information about the action when prompting the LLM (Large Language Model).'
+      })
     )
   })
 )
@@ -179,12 +210,6 @@ export const skillConfigSchemaObject = Type.Strict(
       Type.Object(
         {
           type: Type.Union(skillActionTypes),
-          /*description: Type.String({
-            minLength: 5,
-            maxLength: 64,
-            description:
-              'This helps to understand what your action does. Also used by the LLM (Large Language Model) to match the action.'
-          }),*/
           disable_llm_nlg: Type.Optional(
             Type.Boolean({
               description:

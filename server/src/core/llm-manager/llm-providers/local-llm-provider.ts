@@ -24,17 +24,17 @@ export default class LocalLLMProvider {
 
         const isJSONMode = completionParams.data !== null
         let promptParams = {
+          functions: completionParams.functions,
           maxTokens: completionParams.maxTokens as number,
           temperature: completionParams.temperature as number,
           onToken: completionParams.onToken as (tokens: unknown) => void
         }
 
         if (isJSONMode) {
-          const { LlamaJsonSchemaGrammar } = await Function(
-            'return import("node-llama-cpp")'
-          )()
-          const grammar = new LlamaJsonSchemaGrammar(LLM_MANAGER.llama, {
+          const grammar = await LLM_MANAGER.llama.createGrammarForJsonSchema({
             type: 'object',
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-expect-error
             properties: completionParams.data
           })
 

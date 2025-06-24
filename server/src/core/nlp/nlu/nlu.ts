@@ -308,9 +308,38 @@ export default class NLU {
     return { locale, sentiment, answers, intent, domain, score }
   }
 
+  private async chooseSkill(utterance: NLPUtterance): Promise<NLPSkill | null> {
+    LogHelper.info('Choosing skill...')
+
+    try {
+      const skillRouterDuty = new SkillRouterLLMDuty({
+        input: utterance
+      })
+
+      await skillRouterDuty.init()
+
+      const skillRouterResult = await skillRouterDuty.execute()
+      const skillResult = skillRouterResult?.output as unknown as string
+
+      if (skillResult && skillResult !== 'None') {
+        LogHelper.success(`Chosen skill: ${skillResult}`)
+
+        return skillResult as NLPSkill
+      } else {
+        LogHelper.warning('Skill not found')
+
+        return null
+      }
+    } catch (e) {
+      LogHelper.error(`Failed to choose skill: ${e}`)
+    }
+
+    return null
+  }
+
   /**
    * Classify the utterance,
-   * pick-up the right classification
+   * pick up the right classification
    * and extract entities
    */
   public process(utterance: NLPUtterance): Promise<NLUProcessResult | null> {
@@ -321,24 +350,18 @@ export default class NLU {
         LogHelper.title('NLU')
         LogHelper.info('Processing...')
 
-        const skillRouterDuty = new SkillRouterLLMDuty({
-          input: utterance
-        })
-        await skillRouterDuty.init()
-        const skillRouterResult = await skillRouterDuty.execute()
+        const chosenSkill = await this.chooseSkill(utterance)
+        console.log('chosenSkill', chosenSkill)
 
-        const skillResult = skillRouterResult?.output
+        // TODO
+        /*const chosenAction = await this.chooseSkillAction(utterance, chosenSkill)
+        console.log('chosenAction', chosenAction)*/
 
-        console.log('SELECTED SKILL', skillResult)
-
-        const notes = [
-          'A list name should never contain the "list" suffix. E.g. device list, "device" is the list name.'
-        ]
-        const userPrompt = `You must pay attention to these notes: ${notes.join(
-          '; '
-        )}\nUser Prompt: "${utterance}"`
         const actionCallingDuty = new ActionCallingLLMDuty({
-          input: userPrompt
+          input: {
+            utterance,
+            skillName: chosenSkill
+          }
         })
         await actionCallingDuty.init()
         const actionCallingResult = await actionCallingDuty.execute()

@@ -8,11 +8,15 @@ import {
   type LLMDutyResult
 } from '@/core/llm-manager/llm-duty'
 import { LogHelper } from '@/helpers/log-helper'
-import { LLM_MANAGER /*LLM_PROVIDER*/ } from '@/core'
-import { /*LLMDuties*/ LLMProviders } from '@/core/llm-manager/types'
+import { LLM_MANAGER, LLM_PROVIDER } from '@/core'
+import { LLMDuties, LLMProviders } from '@/core/llm-manager/types'
 import { LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
+import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
 
-type ActionCallingLLMDutyParams = LLMDutyParams
+interface ActionCallingLLMDutyParams {
+  input: LLMDutyParams['input']
+  skillName: string
+}
 
 export class ActionCallingLLMDuty extends LLMDuty {
   private static instance: ActionCallingLLMDuty
@@ -45,6 +49,7 @@ You must adhere to the following rules without exception:
 /no_think`
   protected readonly name = 'Action Calling LLM Duty'
   protected input: LLMDutyParams['input'] = null
+  private skillName: string | null = null
 
   constructor(params: ActionCallingLLMDutyParams) {
     super()
@@ -57,6 +62,7 @@ You must adhere to the following rules without exception:
     }
 
     this.input = params.input
+    this.skillName = params.skillName
   }
 
   public async init(
@@ -102,28 +108,35 @@ You must adhere to the following rules without exception:
     LogHelper.info('Executing...')
 
     try {
-      const prompt = this.input
-      // const config = LLM_MANAGER.coreLLMDuties[LLMDuties.ActionCalling]
-      /*const completionParams = {
+      // TODO: get action notes + functions
+      const skillConfig = await SkillDomainHelper.getNewSkillConfig(
+        this.skillName as string
+      )
+      const { action_notes: actionNotes = [] } = skillConfig || {}
+      const promptSuffix = `User Query: "${this.input}"`
+      let prompt = ''
+
+      if (actionNotes.length > 0) {
+        prompt = `You must pay attention to these notes: ${actionNotes.join(
+          '; '
+        )}\n${promptSuffix}`
+      }
+
+      const config = LLM_MANAGER.coreLLMDuties[LLMDuties.ActionCalling]
+      const completionParams = {
+        functions: {},
         dutyType: LLMDuties.ActionCalling,
         systemPrompt: this.systemPrompt as string,
         temperature: config.temperature,
         maxTokens: config.maxTokens
-      }*/
+      }
       let completionResult
 
       if (LLM_PROVIDER_NAME === LLMProviders.Local) {
-        /*const history = await LLM_MANAGER.loadHistory(
-          CONVERSATION_LOGGER,
-          ActionCallingLLMDuty.session,
-          { nbOfLogsToLoad: 8 }
-        )*/
-
-        /**
-         * Only load the first item from the history (system prompt) to avoid
-         * overloading the context with too many messages
-         */
-        // ActionCallingLLMDuty.session.setChatHistory(history)
+        completionResult = await LLM_PROVIDER.prompt(prompt, {
+          ...completionParams,
+          session: ActionCallingLLMDuty.session
+        })
 
         // console.log('CURRENT CONTEXT', ActionCallingLLMDuty.session.
 

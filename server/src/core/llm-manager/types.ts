@@ -1,4 +1,8 @@
-import type { LlamaChatSession, Token } from 'node-llama-cpp'
+import type {
+  LlamaChatSession,
+  Token,
+  ChatSessionModelFunctions
+} from 'node-llama-cpp'
 
 import type { MessageLog } from '@/types'
 
@@ -32,6 +36,7 @@ export interface CompletionParams {
   timeout?: number
   maxRetries?: number
   session?: LlamaChatSession | null
+  functions?: ChatSessionModelFunctions | undefined
   data?: Record<string, unknown> | null
   history?: MessageLog[]
   onToken?: (tokens: Token[]) => void

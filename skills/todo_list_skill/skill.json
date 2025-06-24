@@ -1,0 +1,50 @@
+{
+  "$schema": "../../schemas/skill-schemas/skill.json",
+  "name": "Todo List",
+  "bridge": "python",
+  "version": "1.0.0",
+  "description": "Manage your lists and items they contain.",
+  "author": {
+    "name": "Louis Grenard",
+    "email": "louis@getleon.ai",
+    "url": "https://github.com/louistiti"
+  },
+  "actions": {
+    "create_list": {
+      "type": "logic",
+      "description": "Create a new to-do list based on the given list name.",
+      "parameters": {
+        "properties": {
+          "list_name": {
+            "type": "string",
+            "description": "The name of the to-do list to create."
+          }
+        },
+        "required": ["list_name"]
+      }
+    },
+    "add_todos": {
+      "type": "logic",
+      "description": "Add items to a specific to-do list.",
+      "parameters": {
+        "properties": {
+          "list_name": {
+            "type": "string",
+            "description": "The name of the to-do list to add items to."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The items to add to the list."
+          }
+        },
+        "required": ["list_name", "items"]
+      }
+    }
+  },
+  "action_notes": [
+    "A list name should never contain the \"list\" suffix. E.g. device list, \"device\" is the list name."
+  ]
+}

@@ -30,7 +30,7 @@ export interface LLMDutyExecuteParams {
   shouldEmitOnToken?: boolean
 }
 export interface LLMDutyParams {
-  input: string | null
+  input: string | object | null
   data?: Record<string, unknown>
   systemPrompt?: string | null
 }

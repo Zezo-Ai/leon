@@ -40,17 +40,54 @@ interface SkillActionObject {
 
 export class SkillDomainHelper {
   /**
+   * List all skill folders
+   */
+  public static async listSkillFolders(): Promise<string[]> {
+    const skillNames = (await fs.promises.readdir(SKILLS_PATH))
+      .filter((folder) => folder.endsWith('_skill'))
+      .sort()
+
+    return skillNames
+  }
+
+  /**
+   * TODO: rename this function when legacy getSkillConfig is removed
+   *
+   * Get skill configuration (skill.json)
+   * @param skillName Skill name to get configuration for
+   */
+  public static async getNewSkillConfig(
+    skillName: SkillSchema['name']
+  ): Promise<SkillSchema | null> {
+    const skillPath = path.join(SKILLS_PATH, skillName)
+    const skillConfigPath = path.join(skillPath, 'skill.json')
+
+    if (!fs.existsSync(skillConfigPath)) {
+      return null
+    }
+
+    return JSON.parse(
+      await fs.promises.readFile(skillConfigPath, 'utf8')
+    ) as SkillSchema
+  }
+
+  /**
    * List all skills friendly prompts
    */
   public static async listSkillFriendlyPrompts(): Promise<string[]> {
-    const skillDomains = await this.getSkillDomains()
-
+    // use listSkillFolders and getNewSkillConfig
+    const skillNames = await SkillDomainHelper.listSkillFolders()
     const skillFriendlyPrompts: string[] = []
-    skillDomains.forEach((skillDomain) => {
-      Object.values(skillDomain.skills).forEach((skill) => {
-        skillFriendlyPrompts.push(skill.friendlyPrompt)
+
+    await Promise.all(
+      skillNames.map(async (skillName) => {
+        const skillConfig = await SkillDomainHelper.getNewSkillConfig(skillName)
+
+        if (skillConfig && skillConfig.description) {
+          skillFriendlyPrompts.push(`${skillName}: ${skillConfig.description}`)
+        }
       })
-    })
+    )
 
     skillFriendlyPrompts.sort()
 
@@ -58,7 +95,7 @@ export class SkillDomainHelper {
   }
 
   /**
-   * List all skills domains with skills data inside
+   * List all skill domains with skill data inside
    */
   public static async getSkillDomains(): Promise<Map<string, SkillDomain>> {
     const skillDomains = new Map<string, SkillDomain>()
@@ -68,9 +105,14 @@ export class SkillDomainHelper {
         const domainPath = path.join(SKILLS_PATH, entity)
 
         if ((await fs.promises.stat(domainPath)).isDirectory()) {
+          const domainSchemaPath = path.join(domainPath, 'domain.json')
+          if (!fs.existsSync(domainSchemaPath)) {
+            return null
+          }
+
           const skills: SkillDomain['skills'] = {}
           const { name: domainName } = (await FileHelper.dynamicImportFromFile(
-            path.join(domainPath, 'domain.json'),
+            domainSchemaPath,
             { with: { type: 'json' } }
           )) as DomainSchema
           const skillFolders = await fs.promises.readdir(domainPath)
