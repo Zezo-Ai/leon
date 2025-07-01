@@ -12,6 +12,7 @@ import type {
   NLPUtterance,
   NLUResult
 } from '@/core/nlp/types'
+import type { ActionCallingOutput } from '@/core/llm-manager/types'
 import { LANG_CONFIGS, PYTHON_TCP_SERVER_BIN_PATH } from '@/constants'
 import {
   PYTHON_TCP_CLIENT,
@@ -325,11 +326,9 @@ export default class NLU {
         LogHelper.success(`Chosen skill: ${skillResult}`)
 
         return skillResult as NLPSkill
-      } else {
-        LogHelper.warning('Skill not found')
-
-        return null
       }
+
+      return null
     } catch (e) {
       LogHelper.error(`Failed to choose skill: ${e}`)
     }
@@ -353,18 +352,41 @@ export default class NLU {
         const chosenSkill = await this.chooseSkill(utterance)
         console.log('chosenSkill', chosenSkill)
 
-        // TODO
-        /*const chosenAction = await this.chooseSkillAction(utterance, chosenSkill)
-        console.log('chosenAction', chosenAction)*/
+        const isSkillFound = !!chosenSkill
+
+        if (!isSkillFound) {
+          // TODO: handle skill not found
+          LogHelper.warning('No skill found')
+          return
+        }
 
         const actionCallingDuty = new ActionCallingLLMDuty({
-          input: {
-            utterance,
-            skillName: chosenSkill
-          }
+          input: utterance,
+          skillName: chosenSkill
         })
         await actionCallingDuty.init()
         const actionCallingResult = await actionCallingDuty.execute()
+        const actionCallingOutput =
+          actionCallingResult?.output as unknown as string
+        const parsedActionCallingOutput: ActionCallingOutput =
+          JSON.parse(actionCallingOutput)
+
+        if ('status' in parsedActionCallingOutput) {
+          if (parsedActionCallingOutput.status === 'not_found') {
+            // TODO: handle skill action not found
+          } else if (parsedActionCallingOutput.status === 'missing_params') {
+            // TODO: handle missing params
+          }
+
+          return
+        }
+
+        console.log(
+          'parsedActionCallingOutput',
+          JSON.stringify(parsedActionCallingOutput, null, 2)
+        )
+
+        // TODO: handle success
 
         console.log('ACTION CALLING RESULT', actionCallingResult)
 

@@ -1,4 +1,9 @@
-import { LlamaChatSession, defineChatSessionFunction } from 'node-llama-cpp'
+import {
+  type ChatSessionModelFunctions,
+  type ChatHistoryItem,
+  LlamaChat,
+  defineChatSessionFunction
+} from 'node-llama-cpp'
 
 import {
   DEFAULT_INIT_PARAMS,
@@ -7,6 +12,7 @@ import {
   type LLMDutyParams,
   type LLMDutyResult
 } from '@/core/llm-manager/llm-duty'
+import { type SkillSchema } from '@/schemas/skill-schemas'
 import { LogHelper } from '@/helpers/log-helper'
 import { LLM_MANAGER, LLM_PROVIDER } from '@/core'
 import { LLMDuties, LLMProviders } from '@/core/llm-manager/types'
@@ -20,7 +26,12 @@ interface ActionCallingLLMDutyParams {
 
 export class ActionCallingLLMDuty extends LLMDuty {
   private static instance: ActionCallingLLMDuty
-  private static session: LlamaChatSession = null as unknown as LlamaChatSession
+  /**
+   * We use LlamaChat to have more control over the session (before function calling)
+   * @see https://github.com/withcatai/node-llama-cpp/issues/471
+   */
+  private static session: LlamaChat = null as unknown as LlamaChat
+  private static chatHistory: ChatHistoryItem[] = []
   /**
    * This system prompt is designed to enforce strict rules for function calling with a good balance between
    * context understanding and parameter resolution.
@@ -44,12 +55,10 @@ You must adhere to the following rules without exception:
   {"status": "not_found"}
   \`\`\`
 3. You must not invent, assume, create, or infer any value for a parameter that is not explicitly provided by the user.
-4. You must only return JSON format. Do not provide any explanations, apologies, greetings, or any other conversational text.
-
-/no_think`
+4. You must only return JSON format. Do not provide any explanations, apologies, greetings, or any other conversational text.`
   protected readonly name = 'Action Calling LLM Duty'
+  private readonly skillName: string | null = null
   protected input: LLMDutyParams['input'] = null
-  private skillName: string | null = null
 
   constructor(params: ActionCallingLLMDutyParams) {
     super()
@@ -63,6 +72,70 @@ You must adhere to the following rules without exception:
 
     this.input = params.input
     this.skillName = params.skillName
+  }
+
+  /**
+   * This method converts the action schema from the skill configuration
+   * to a function schema that can be used by the LLM provider
+   */
+  private actionsToFunctionsSchema(
+    actions: SkillSchema['actions']
+  ): ChatSessionModelFunctions {
+    const actionsEntries = Object.entries(actions)
+    const functions: ChatSessionModelFunctions = {}
+
+    actionsEntries.forEach(([actionName, action]) => {
+      if (!action || !action.type) {
+        LogHelper.error(
+          `Action "${actionName}" is not valid or does not have a type`
+        )
+        return
+      }
+
+      const { description, parameters } = action
+      let functionSchema = {
+        description,
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-expect-error
+        handler: async (params): Promise<boolean> => {
+          /**
+           * Sometimes the model will call the functions. It was more stable with the 3.8.1 version.
+           * It started to break since this change: https://github.com/withcatai/node-llama-cpp/issues/471
+           */
+          console.log(`function handler from "${actionName}"`, params)
+          console.log(
+            JSON.stringify(
+              {
+                name: actionName,
+                arguments: params
+              },
+              null,
+              2
+            )
+          )
+          return true
+        }
+      }
+
+      if (parameters) {
+        functionSchema = {
+          ...functionSchema,
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-expect-error
+          params: {
+            type: 'object',
+            properties: parameters
+          }
+        }
+      }
+
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-expect-error
+      // functions[actionName] = functionSchema
+      functions[actionName] = defineChatSessionFunction(functionSchema)
+    })
+
+    return functions
   }
 
   public async init(
@@ -83,11 +156,26 @@ You must adhere to the following rules without exception:
             LogHelper.info('Session disposed')
           }
 
-          ActionCallingLLMDuty.session = new LlamaChatSession({
+          /**
+           * We use LlamaChat to have more control over the session (before function calling)
+           * @see https://github.com/withcatai/node-llama-cpp/issues/471
+           */
+          ActionCallingLLMDuty.session = new LlamaChat({
+            contextSequence: LLM_MANAGER.context.getSequence(),
+            autoDisposeSequence: true
+          })
+          /*ActionCallingLLMDuty.session = new LlamaChatSession({
             contextSequence: LLM_MANAGER.context.getSequence(),
             autoDisposeSequence: true,
             systemPrompt: this.systemPrompt as string
-          })
+          })*/
+
+          ActionCallingLLMDuty.chatHistory =
+            ActionCallingLLMDuty.session.chatWrapper.generateInitialChatHistory(
+              {
+                systemPrompt: this.systemPrompt as string
+              }
+            )
 
           LogHelper.info(
             `System prompt size: ${
@@ -108,24 +196,48 @@ You must adhere to the following rules without exception:
     LogHelper.info('Executing...')
 
     try {
-      // TODO: get functions (actions) from the skill config
       const skillConfig = await SkillDomainHelper.getNewSkillConfig(
         this.skillName as string
       )
-      const { action_notes: actionNotes = [] } = skillConfig || {}
-      const promptSuffix = `User Query: "${this.input}"`
-      let prompt = ''
+      const { action_notes: actionNotes = [], actions } = skillConfig || {}
+
+      if (!actions || Object.keys(actions).length === 0) {
+        LogHelper.title(this.name)
+        LogHelper.error(
+          `No actions found in the "${this.skillName}" skill configuration`
+        )
+
+        return null
+      }
+
+      ActionCallingLLMDuty.chatHistory.push({
+        type: 'user',
+        text: ''
+      })
+      ActionCallingLLMDuty.chatHistory.push({
+        type: 'model',
+        response: []
+      })
+
+      // TODO: if function calling, then use ".generateResponse()" in the local-provider; set thinking budget to 0, etc.
+
+      // TODO: only get the last 8 messages from cleanHistory
+      // ActionCallingLLMDuty.chatHistory = response.lastEvaluation.cleanHistory
+
+      /////////////
+
+      const functionsSchema = this.actionsToFunctionsSchema(actions)
+      let prompt = `User Query: "${this.input}"`
 
       if (actionNotes.length > 0) {
         prompt = `You must pay attention to these notes: ${actionNotes.join(
           '; '
-        )}\n${promptSuffix}`
+        )}\n${prompt}`
       }
 
       const config = LLM_MANAGER.coreLLMDuties[LLMDuties.ActionCalling]
       const completionParams = {
-        // TODO: add functions
-        functions: {},
+        functions: functionsSchema,
         dutyType: LLMDuties.ActionCalling,
         systemPrompt: this.systemPrompt as string,
         temperature: config.temperature,
@@ -134,10 +246,13 @@ You must adhere to the following rules without exception:
       let completionResult
 
       if (LLM_PROVIDER_NAME === LLMProviders.Local) {
+        console.log('BEFORE PROMPT')
         completionResult = await LLM_PROVIDER.prompt(prompt, {
-          ...completionParams,
-          session: ActionCallingLLMDuty.session
+          ...completionParams
+          // TODO?
+          // session: ActionCallingLLMDuty.session
         })
+        console.log('AFTER PROMPT')
 
         // console.log('CURRENT CONTEXT', ActionCallingLLMDuty.session.
 
@@ -214,7 +329,7 @@ You must adhere to the following rules without exception:
             console.log('function handler', params)
           }
         })*/
-        const get_weather = defineChatSessionFunction({
+        /*const get_weather = defineChatSessionFunction({
           description: 'Get the current weather.',
           params: {
             type: 'object',
@@ -273,7 +388,7 @@ You must adhere to the following rules without exception:
           handler: async (params) => {
             console.log('function handler', params)
           }
-        })
+        })*/
 
         /**
          * @see https://node-llama-cpp.withcat.ai/api/type-aliases/GbnfJsonSchema
@@ -289,24 +404,24 @@ You must adhere to the following rules without exception:
          * @see https://qwen.readthedocs.io/en/latest/framework/function_call.html
          * @see https://platform.openai.com/docs/guides/function-calling?api-mode=responses&lang=javascript
          */
-        const res = await ActionCallingLLMDuty.session.prompt(
+        /*const res = await ActionCallingLLMDuty.session.prompt(
           prompt as string,
           {
             temperature: 0,
             // grammar,
             functions: {
-              /*create_list,
+              create_list,
             get_all_lists,
             get_list_items,
             add_todos,
-            delete_list,*/
-              get_weather,
+            delete_list
+              /!*get_weather,
               get_temperature,
               get_humidity,
-              get_wind_speed
+              get_wind_speed*!/
             }
           }
-        )
+        )*/
 
         /**
          * TODO
@@ -314,7 +429,7 @@ You must adhere to the following rules without exception:
          * then parse the action call
          */
 
-        console.log('res', res)
+        // console.log('res', res)
 
         /*completionResult = await LLM_PROVIDER.prompt(prompt, {
           ...completionParams,
@@ -324,18 +439,14 @@ You must adhere to the following rules without exception:
         // completionResult = await LLM_PROVIDER.prompt(prompt, completionParams)
       }
 
-      const { usedInputTokens, usedOutputTokens } =
-        ActionCallingLLMDuty.session.sequence.tokenMeter.getState()
-
-      console.log('usedInputTokens', usedInputTokens)
-      console.log('usedOutputTokens', usedOutputTokens)
+      // TODO: handle optional_params and structure output format
 
       LogHelper.title(this.name)
       LogHelper.success('Duty executed')
       LogHelper.success(`Prompt — ${prompt}`)
-      /*LogHelper.success(`Output — ${JSON.stringify(completionResult?.output)}
+      LogHelper.success(`Output — ${JSON.stringify(completionResult?.output)}
 usedInputTokens: ${completionResult?.usedInputTokens}
-usedOutputTokens: ${completionResult?.usedOutputTokens}`)*/
+usedOutputTokens: ${completionResult?.usedOutputTokens}`)
 
       return completionResult as unknown as LLMDutyResult
     } catch (e) {

@@ -219,15 +219,16 @@ export const skillSchemaObject = Type.Strict(
             description:
               'This helps to understand what your action does. Also used by the LLM (Large Language Model) to match the action.'
           }),
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-expect-error
-          parameters: Type.Record(Type.String(), actionParametersType, {
-            description:
-              'Parameters are used to define the data that the action expects to receive. They can be used to pass data from the utterance to the action code.'
-          })
+          parameters: Type.Optional(
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-expect-error
+            Type.Record(Type.String(), actionParametersType, {
+              description:
+                'Parameters are used to define the data that the action expects to receive. They can be used to pass data from the utterance to the action code.'
+            })
+          )
           /**
            * TODO: add:
-           * parameters
            * missing_param_follow_ups
            * optional_params
            */

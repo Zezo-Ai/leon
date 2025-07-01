@@ -41,3 +41,26 @@ export interface CompletionParams {
   history?: MessageLog[]
   onToken?: (tokens: Token[]) => void
 }
+
+/**
+ * Possible output:
+ * missing params: {"status": "missing_params", "required_params": ["<param_name_1>", "<param_name_2>"], "name": "<function_name>"}
+ * not found: {"status": "not_found"}
+ * success: {"name": "create_list", "arguments": {"list_name": "chore"}}
+ */
+interface ActionCallingMissingParamsOutput {
+  status: 'missing_params'
+  required_params: string[]
+  name: string
+}
+interface ActionCallingNotFoundOutput {
+  status: 'not_found'
+}
+interface ActionCallingSuccessOutput {
+  name: string
+  arguments: Record<string, unknown>
+}
+export type ActionCallingOutput =
+  | ActionCallingMissingParamsOutput
+  | ActionCallingNotFoundOutput
+  | ActionCallingSuccessOutput

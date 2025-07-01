@@ -362,15 +362,18 @@ export default class LLMManager {
          *   4.b. Handle missing params:
          *     Start to reorganize everything correctly:
          *      Fully implement the skill router and action calling duties
-         *      Implement duties correctly with the NLU class
-         *      Create new structure tools in bridges with skills folder; remove domains
-         *      Create the fake weather skill
+         *      Implement duties correctly with the NLU class (create dedicated methods in NLU class)
+         *      If a skill only has one action, then directly execute it after the skill router duty (no need to go through the action calling duty)
+         *      Create new structure tools in bridges with skills folder; remove domains (no need to implement tools for now)
+         *      Create the fake weather skill (implement tools)
          *      Implement locales/{lang}.json in skills with new properties, and dynamic translation %PLACEHOLDER%
          *      (PLAN CHANGED, DO NOT DO THIS) -> Implement config/{lang}.json in skills with new properties (cf. Trello card description)
          *      Implement slot filling duty > missing params > conversation state
          *      Research (redevelop next_action?) and create resolver duty / loop in skills (guess the number, rochambeau, MBTI test, etc.)
          *      If action is not found, then fallback to a duty for chitchat/help with Leon's personality
          *      Implement toolkits and tools (E.g. weather toolkit (folder) > several providers (each provider is a tool class, they must contain the same methods between each other as most as possible). Cf. MVP. And create the toolkit finder duty logic when the Leon instance includes +64 skills
+         *      Create real weather skill with tools (one tool for each provider, can choose provider in skill settings)
+         *      Pass NLP.js built-in entities (numbers, duration, etc.) to actions as well as the function calling arguments. Can merge them, so skill developers will have more data
          *      After everything is confirmed, then migrate all skills with the new configs
          *      Clean up NLU class, etc. if not used anymore
          *
