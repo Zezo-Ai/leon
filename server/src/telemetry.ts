@@ -5,10 +5,10 @@ import axios from 'axios'
 import osName from 'os-name'
 import getos from 'getos'
 
-import type {
+import {
   NEREntity,
   NLPUtterance,
-  NLUProcessResult,
+  NLUPartialProcessResult,
   NLUResult
 } from '@/core/nlp/types'
 import {
@@ -132,7 +132,7 @@ export class Telemetry {
   }
 
   public static async utterance(
-    processedData: NLUProcessResult | null
+    processedData: NLUPartialProcessResult | null
   ): Promise<void> {
     if (IS_TELEMETRY_ENABLED) {
       try {

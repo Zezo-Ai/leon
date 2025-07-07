@@ -1,5 +1,6 @@
 import type { ShortLanguageCode } from '@/types'
 import type { BrainProcessResult } from '@/core/brain/types'
+import type { ActionCallingSuccessOutput } from '@/core/llm-manager/types'
 import { SkillConfigSchema } from '@/schemas/skill-schemas'
 
 /**
@@ -11,7 +12,7 @@ export type NLPSkill = string
 export type NLPAction = string
 export type NLPUtterance = string
 
-export type NLUProcessResult = Partial<
+export type NLUPartialProcessResult = Partial<
   BrainProcessResult & {
     processingTime: number
     nluProcessingTime: number
@@ -79,6 +80,17 @@ export interface NLUResolver {
   value: string
 }
 
+export interface NLUProcessResult {
+  utterance: NLPUtterance
+  skillName: NLPSkill
+  actionName: NLPAction
+  actionArguments: ActionCallingSuccessOutput['arguments']
+  entities: NEREntity[]
+  sentiment: {
+    vote?: NLPJSProcessResult['sentiment']['vote']
+    score?: NLPJSProcessResult['sentiment']['score']
+  }
+}
 export interface NLUResult {
   currentEntities: NEREntity[]
   entities: NEREntity[]

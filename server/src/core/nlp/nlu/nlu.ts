@@ -4,20 +4,22 @@ import kill from 'tree-kill'
 
 import type { Language, ShortLanguageCode } from '@/types'
 import type {
+  NEREntity,
   NLPAction,
   NLPDomain,
   NLPJSProcessResult,
   NLPSkill,
   NLPUtterance,
+  NLUPartialProcessResult,
   NLUProcessResult,
   NLUResult
 } from '@/core/nlp/types'
 import {
   type ActionCallingMissingParamsOutput,
   type ActionCallingOutput,
-  ActionCallingStatus,
   type ActionCallingSuccessOutput,
   type SlotFillingOutput,
+  ActionCallingStatus,
   SlotFillingStatus
 } from '@/core/llm-manager/types'
 import { LANG_CONFIGS, PYTHON_TCP_SERVER_BIN_PATH } from '@/constants'
@@ -50,10 +52,13 @@ type MatchActionResult = Pick<
   'locale' | 'sentiment' | 'answers' | 'intent' | 'domain' | 'score'
 >
 
-const NLU_PROCESS_RESULT = {
+const DEFAULT_NLU_PROCESS_RESULT: NLUProcessResult = {
   utterance: '',
   skillName: '',
-  actionName: ''
+  actionName: '',
+  actionArguments: {},
+  entities: [],
+  sentiment: {}
 }
 
 // TODO: delete?
@@ -79,11 +84,10 @@ export const DEFAULT_NLU_RESULT = {
 
 export default class NLU {
   private static instance: NLU
-  private _nluProcessResult = NLU_PROCESS_RESULT
+  private _nluProcessResult = DEFAULT_NLU_PROCESS_RESULT
   private _nluResult: NLUResult = DEFAULT_NLU_RESULT
   public conversation = new Conversation('conv0')
 
-  // TODO: change return type
   get nluProcessResult(): NLUProcessResult {
     return this._nluProcessResult
   }
@@ -92,11 +96,23 @@ export default class NLU {
     return this._nluResult
   }
 
-  // TODO: change type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private updateNLUProcessResult(newResult: any): void {
+  private async updateNLUProcessResult(
+    newResult: Partial<NLUProcessResult>
+  ): Promise<void> {
+    const storedEntities = this._nluProcessResult.entities || []
+    let newEntities: NEREntity[] = []
+
+    // Every time we update the utterance, we need to extract built-in entities
+    if (newResult.utterance && newResult.utterance !== '') {
+      newEntities = await NER.extractBuiltInEntities(
+        BRAIN.lang,
+        newResult.utterance
+      )
+    }
+
     this._nluProcessResult = {
       ...this._nluProcessResult,
+      entities: [...storedEntities, ...newEntities],
       ...newResult
     }
   }
@@ -366,26 +382,34 @@ export default class NLU {
     return null
   }
 
-  private handleSkillOrActionNotFound(): void {
+  private async handleSkillOrActionNotFound(): Promise<void> {
     LogHelper.title('NLU')
     LogHelper.warning('Skill or action not found')
 
     this.conversation.cleanActiveState()
+    await this.updateNLUProcessResult(DEFAULT_NLU_PROCESS_RESULT)
+
     // TODO
   }
 
-  private handleActionSuccess(
+  private async handleActionSuccess(
     actionCallingOutput: ActionCallingSuccessOutput
-  ): void {
+  ): Promise<void> {
+    await this.updateNLUProcessResult({
+      actionArguments: actionCallingOutput.arguments
+    })
+
     LogHelper.title('NLU')
     LogHelper.success(
       `Action calling succeeded for: ${actionCallingOutput.name}`
     )
     LogHelper.success(
-      `Action params: ${JSON.stringify(actionCallingOutput.arguments)}`
+      `NLU process result: ${JSON.stringify(this._nluProcessResult)}`
     )
 
     this.conversation.cleanActiveState()
+    await this.updateNLUProcessResult(DEFAULT_NLU_PROCESS_RESULT)
+
     // TODO
   }
 
@@ -464,7 +488,7 @@ export default class NLU {
           const actionName = newActiveState.pendingAction?.split(':')[1] || ''
 
           if (areAllSlotsFilled) {
-            this.handleActionSuccess({
+            await this.handleActionSuccess({
               status: ActionCallingStatus.Success,
               name: actionName,
               arguments: newActiveState.collectedParameters
@@ -516,14 +540,18 @@ export default class NLU {
    * Route the action calling output based on its status
    * and handle the action calling result accordingly
    */
-  private postProcessRoute(actionCallingOutput: ActionCallingOutput): void {
+  private async postProcessRoute(
+    actionCallingOutput: ActionCallingOutput
+  ): Promise<void> {
     if ('name' in actionCallingOutput) {
-      this.updateNLUProcessResult({ actionName: actionCallingOutput.name })
+      await this.updateNLUProcessResult({
+        actionName: actionCallingOutput.name
+      })
     }
 
     const routeMap = {
-      [ActionCallingStatus.Success]: (): void => {
-        this.handleActionSuccess(
+      [ActionCallingStatus.Success]: async (): Promise<void> => {
+        await this.handleActionSuccess(
           actionCallingOutput as ActionCallingSuccessOutput
         )
       },
@@ -532,8 +560,8 @@ export default class NLU {
           actionCallingOutput as ActionCallingMissingParamsOutput
         )
       },
-      [ActionCallingStatus.NotFound]: (): void => {
-        this.handleSkillOrActionNotFound()
+      [ActionCallingStatus.NotFound]: async (): Promise<void> => {
+        await this.handleSkillOrActionNotFound()
       }
     }
 
@@ -554,7 +582,9 @@ export default class NLU {
    * pick up the right classification
    * and extract entities
    */
-  public process(utterance: NLPUtterance): Promise<NLUProcessResult | null> {
+  public process(
+    utterance: NLPUtterance
+  ): Promise<NLUPartialProcessResult | null> {
     const processingTimeStart = Date.now()
 
     return new Promise(async (resolve, reject) => {
@@ -567,7 +597,7 @@ export default class NLU {
           message: utterance
         })
 
-        this.updateNLUProcessResult({ utterance })
+        await this.updateNLUProcessResult({ utterance })
         this.conversation.setActiveState({
           ...this.conversation.activeState,
           currentUtterance: this._nluProcessResult.utterance
@@ -581,11 +611,11 @@ export default class NLU {
           const isSkillFound = !!chosenSkill
 
           if (!isSkillFound) {
-            this.handleSkillOrActionNotFound()
+            await this.handleSkillOrActionNotFound()
             return
           }
 
-          this.updateNLUProcessResult({ skillName: chosenSkill })
+          await this.updateNLUProcessResult({ skillName: chosenSkill })
 
           const actionCallingDuty = new ActionCallingLLMDuty({
             input: utterance,
@@ -599,7 +629,7 @@ export default class NLU {
             JSON.parse(actionCallingOutput)
 
           if ('status' in parsedActionCallingOutput) {
-            this.postProcessRoute(parsedActionCallingOutput)
+            await this.postProcessRoute(parsedActionCallingOutput)
 
             return
           }

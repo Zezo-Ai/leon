@@ -372,9 +372,13 @@ export default class LLMManager {
          *     Start to reorganize everything correctly:
          *      [ok] Fully implement the skill router and action calling duties
          *      [ok] Implement duties correctly with the NLU class (create dedicated methods in NLU class)
-         *      Pass NLP.js built-in entities (numbers, duration, etc.) to actions as well as the function calling arguments. Can merge them, so skill developers will have more data
+         *      [ok] Pass NLP.js built-in entities (numbers, duration, etc.) to actions as well as the function calling arguments. Can merge them, so skill developers will have more data
          *      Update NLU result object to pass to the brain execution
          *      Guess The Number skill: rework on loop logic (create "resolving" duty for very custom inputs, cf. MBTI?)
+         *      Rework the MBTI skill with resolver skill. Once done, from there we can consider the rewrite of the core as nearly completed
+         *      Check suggestions. Already done with widgets before? Need to check previous progress in Trello cards
+         *      Delete all legacy core code
+         *      Delete .extractEntities method from NER class to replace with new one (extractBuiltInEntities)
          *      Create new structure tools in bridges with skills folder; remove domains (no need to implement tools for now)
          *      Create the fake weather skill (implement tools)
          *      Implement locales/{lang}.json in skills with new properties, and dynamic translation %PLACEHOLDER%
