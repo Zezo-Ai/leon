@@ -12,6 +12,7 @@ export enum LLMDuties {
   ActionRecognition = 'action-recognition',
   SkillRouter = 'skill-router',
   ActionCalling = 'action-calling',
+  SlotFilling = 'slot-filling',
   CustomNER = 'custom-ner',
   Paraphrase = 'paraphrase',
   Conversation = 'conversation',
@@ -32,6 +33,10 @@ export enum LLMProviders {
 export enum ActionCallingStatus {
   Success = 'success',
   MissingParams = 'missing_params',
+  NotFound = 'not_found'
+}
+export enum SlotFillingStatus {
+  Success = 'success',
   NotFound = 'not_found'
 }
 
@@ -75,3 +80,15 @@ export type ActionCallingOutput =
   | ActionCallingMissingParamsOutput
   | ActionCallingNotFoundOutput
   | ActionCallingSuccessOutput
+
+export interface SlotFillingNotFoundOutput {
+  status: SlotFillingStatus.NotFound
+}
+export interface SlotFillingSuccessOutput {
+  status: SlotFillingStatus.Success
+  name: string
+  filled_slots: Record<string, string>
+}
+export type SlotFillingOutput =
+  | SlotFillingNotFoundOutput
+  | SlotFillingSuccessOutput

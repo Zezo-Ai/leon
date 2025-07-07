@@ -11,6 +11,8 @@ import { LogHelper } from '@/helpers/log-helper'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
 
 interface ConversationState {
+  startingUtterance: NLPUtterance | null
+  currentUtterance: NLPUtterance | null
   pendingAction: NLPAction | null
   collectedParameters: Record<string, string>
   missingParameters: string[]
@@ -37,6 +39,8 @@ type ConversationPreviousContext = Record<string, ConversationContext> | null
 const MAX_CONTEXT_HISTORY = 5
 
 export const DEFAULT_ACTIVE_STATE: ConversationState = {
+  startingUtterance: null,
+  currentUtterance: null,
   pendingAction: null,
   collectedParameters: {},
   missingParameters: []
@@ -62,6 +66,7 @@ export const DEFAULT_ACTIVE_CONTEXT = {
 export default class Conversation {
   // Identify conversations to allow more features in the future (multiple speakers, etc.)
   public id: string
+  private _activeState: ConversationState = DEFAULT_ACTIVE_STATE
   private _previousContexts: ConversationPreviousContext = {}
   private _activeContext: ConversationContext = DEFAULT_ACTIVE_CONTEXT
 
@@ -74,6 +79,30 @@ export default class Conversation {
 
   public get activeContext(): ConversationContext {
     return this._activeContext
+  }
+
+  public get activeState(): ConversationState {
+    return this._activeState
+  }
+
+  /**
+   * Set active state
+   */
+  public setActiveState(state: Partial<ConversationState>): void {
+    this._activeState = {
+      ...this._activeState,
+      ...state
+    }
+
+    LogHelper.title('Conversation')
+    LogHelper.info(`Active state updated: ${JSON.stringify(this._activeState)}`)
+  }
+
+  public cleanActiveState(): void {
+    LogHelper.title('Conversation')
+    LogHelper.info('Clean active state')
+
+    this._activeState = DEFAULT_ACTIVE_STATE
   }
 
   /**
@@ -175,6 +204,13 @@ export default class Conversation {
 
   public get previousContexts(): ConversationPreviousContext {
     return this._previousContexts
+  }
+
+  /**
+   * Check whether the state has a pending action
+   */
+  public hasPendingAction(): boolean {
+    return !!this._activeState.pendingAction
   }
 
   /**

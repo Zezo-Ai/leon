@@ -4,6 +4,7 @@ import { CustomNERLLMDuty } from '@/core/llm-manager/llm-duties/custom-ner-llm-d
 import { ParaphraseLLMDuty } from '@/core/llm-manager/llm-duties/paraphrase-llm-duty'
 import { SkillRouterLLMDuty } from '@/core/llm-manager/llm-duties/skill-router-llm-duty'
 import { ActionCallingLLMDuty } from '@/core/llm-manager/llm-duties/action-calling-llm-duty'
+import { SlotFillingLLMDuty } from '@/core/llm-manager/llm-duties/slot-filling-llm-duty'
 import { LLMDuties } from '@/core/llm-manager/types'
 
 export default async (llmDutiesToWarmUp: LLMDuties[]): Promise<void> => {
@@ -34,6 +35,18 @@ export default async (llmDutiesToWarmUp: LLMDuties[]): Promise<void> => {
   })
   await actionCallingDuty.init()
   await actionCallingDuty.execute()
+
+  /**
+   * Slot filling LLM Duty warm-up
+   */
+  const slotFillingDuty = new SlotFillingLLMDuty({
+    input: ['location'],
+    startingUtterance: 'I want to go somewhere'
+  })
+  await slotFillingDuty.init()
+  await slotFillingDuty.execute({
+    isWarmingUp: true
+  })
 
   /**
    * Custom NER LLM Duty warm-up

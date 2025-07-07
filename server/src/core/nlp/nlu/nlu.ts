@@ -4,28 +4,31 @@ import kill from 'tree-kill'
 
 import type { Language, ShortLanguageCode } from '@/types'
 import type {
-  NLUProcessResult,
   NLPAction,
   NLPDomain,
   NLPJSProcessResult,
   NLPSkill,
   NLPUtterance,
+  NLUProcessResult,
   NLUResult
 } from '@/core/nlp/types'
 import {
-  ActionCallingMissingParamsOutput,
-  ActionCallingOutput,
+  type ActionCallingMissingParamsOutput,
+  type ActionCallingOutput,
   ActionCallingStatus,
-  ActionCallingSuccessOutput
+  type ActionCallingSuccessOutput,
+  type SlotFillingOutput,
+  SlotFillingStatus
 } from '@/core/llm-manager/types'
 import { LANG_CONFIGS, PYTHON_TCP_SERVER_BIN_PATH } from '@/constants'
 import {
-  PYTHON_TCP_CLIENT,
   BRAIN,
-  SOCKET_SERVER,
+  CONVERSATION_LOGGER,
+  LLM_MANAGER,
   MODEL_LOADER,
   NER,
-  LLM_MANAGER
+  PYTHON_TCP_CLIENT,
+  SOCKET_SERVER
 } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { LangHelper } from '@/helpers/lang-helper'
@@ -40,12 +43,20 @@ import {
 } from '@/core/llm-manager/llm-duties/action-recognition-llm-duty'
 import { SkillRouterLLMDuty } from '@/core/llm-manager/llm-duties/skill-router-llm-duty'
 import { ActionCallingLLMDuty } from '@/core/llm-manager/llm-duties/action-calling-llm-duty'
+import { SlotFillingLLMDuty } from '@/core/llm-manager/llm-duties/slot-filling-llm-duty'
 
 type MatchActionResult = Pick<
   NLPJSProcessResult,
   'locale' | 'sentiment' | 'answers' | 'intent' | 'domain' | 'score'
 >
 
+const NLU_PROCESS_RESULT = {
+  utterance: '',
+  skillName: '',
+  actionName: ''
+}
+
+// TODO: delete?
 export const DEFAULT_NLU_RESULT = {
   utterance: '',
   newUtterance: '',
@@ -68,11 +79,26 @@ export const DEFAULT_NLU_RESULT = {
 
 export default class NLU {
   private static instance: NLU
+  private _nluProcessResult = NLU_PROCESS_RESULT
   private _nluResult: NLUResult = DEFAULT_NLU_RESULT
   public conversation = new Conversation('conv0')
 
+  // TODO: change return type
+  get nluProcessResult(): NLUProcessResult {
+    return this._nluProcessResult
+  }
+
   get nluResult(): NLUResult {
     return this._nluResult
+  }
+
+  // TODO: change type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private updateNLUProcessResult(newResult: any): void {
+    this._nluProcessResult = {
+      ...this._nluProcessResult,
+      ...newResult
+    }
   }
 
   async setNLUResult(newNLUResult: NLUResult): Promise<void> {
@@ -315,6 +341,7 @@ export default class NLU {
   }
 
   private async chooseSkill(utterance: NLPUtterance): Promise<NLPSkill | null> {
+    LogHelper.title('NLU')
     LogHelper.info('Choosing skill...')
 
     try {
@@ -328,8 +355,6 @@ export default class NLU {
       const skillResult = skillRouterResult?.output as unknown as string
 
       if (skillResult && skillResult !== 'None') {
-        LogHelper.success(`Chosen skill: ${skillResult}`)
-
         return skillResult as NLPSkill
       }
 
@@ -341,51 +366,174 @@ export default class NLU {
     return null
   }
 
+  private handleSkillOrActionNotFound(): void {
+    LogHelper.title('NLU')
+    LogHelper.warning('Skill or action not found')
+
+    this.conversation.cleanActiveState()
+    // TODO
+  }
+
   private handleActionSuccess(
     actionCallingOutput: ActionCallingSuccessOutput
   ): void {
     LogHelper.title('NLU')
-    LogHelper.success(`Action calling succeeded: ${actionCallingOutput.name}`)
-
-    // TODO
-  }
-
-  private handleActionMissingParams(
-    actionCallingOutput: ActionCallingMissingParamsOutput
-  ): void {
-    LogHelper.title('NLU')
-    LogHelper.warning(
-      `Action calling missing params: ${actionCallingOutput.name}`
+    LogHelper.success(
+      `Action calling succeeded for: ${actionCallingOutput.name}`
+    )
+    LogHelper.success(
+      `Action params: ${JSON.stringify(actionCallingOutput.arguments)}`
     )
 
+    this.conversation.cleanActiveState()
     // TODO
   }
 
-  private handleActionNotFound(): void {
+  private async handleActionMissingParams(
+    actionCallingOutput: ActionCallingMissingParamsOutput
+  ): Promise<void> {
     LogHelper.title('NLU')
-    LogHelper.warning('Action calling not found')
+    LogHelper.warning(
+      `Action calling missing params for: ${actionCallingOutput.name}`
+    )
 
-    // TODO
+    /**
+     * Ask owner to provide the missing parameters
+     */
+
+    this.conversation.setActiveState({
+      pendingAction: `${this._nluProcessResult.skillName}:${actionCallingOutput.name}`,
+      missingParameters: actionCallingOutput.required_params,
+      collectedParameters: this.conversation.activeState.collectedParameters
+    })
+
+    const [firstParam] = actionCallingOutput.required_params
+    const formattedFirstParam = firstParam?.replace(/_/g, ' ')
+
+    if (!BRAIN.isMuted) {
+      await BRAIN.talk(
+        `${BRAIN.wernicke('ask_for_action_missing_parameters', '', {
+          '%missing_param%': formattedFirstParam
+        })}.`,
+        true
+      )
+    }
+  }
+
+  /**
+   * Route before processing the utterance
+   */
+  private async preProcessRoute(): Promise<boolean> {
+    const hasPendingAction = this.conversation.hasPendingAction()
+
+    if (hasPendingAction) {
+      const slotFillingDuty = new SlotFillingLLMDuty({
+        // Only one slot at a time
+        input: this.conversation.activeState.missingParameters[0] as string,
+        startingUtterance: this.conversation.activeState
+          .startingUtterance as string
+      })
+
+      await slotFillingDuty.init()
+
+      const slotFillingResult = await slotFillingDuty.execute()
+      const slotFillingOutput =
+        slotFillingResult?.output as unknown as SlotFillingOutput
+
+      if ('status' in slotFillingOutput) {
+        if (slotFillingOutput.status === SlotFillingStatus.Success) {
+          // Update missing parameters and fill slots
+          const updatedMissingParams =
+            this.conversation.activeState.missingParameters.filter(
+              (param) =>
+                !Object.keys(slotFillingOutput.filled_slots).includes(param)
+            )
+          const newActiveState = {
+            ...this.conversation.activeState,
+            missingParameters: updatedMissingParams,
+            collectedParameters: {
+              ...this.conversation.activeState.collectedParameters,
+              ...slotFillingOutput.filled_slots
+            }
+          }
+          this.conversation.setActiveState(newActiveState)
+
+          const areAllSlotsFilled =
+            updatedMissingParams.length === 0 &&
+            Object.keys(newActiveState.collectedParameters).length > 0
+          const actionName = newActiveState.pendingAction?.split(':')[1] || ''
+
+          if (areAllSlotsFilled) {
+            this.handleActionSuccess({
+              status: ActionCallingStatus.Success,
+              name: actionName,
+              arguments: newActiveState.collectedParameters
+            })
+
+            return false
+          }
+
+          LogHelper.title('NLU')
+          LogHelper.info(
+            `Not all slots are filled, remaining: ${JSON.stringify(
+              updatedMissingParams
+            )}`
+          )
+
+          /**
+           * Not all slots are filled hence,
+           * we need to ask again the owner for the remaining missing parameters
+           */
+          await this.handleActionMissingParams({
+            status: ActionCallingStatus.MissingParams,
+            required_params: newActiveState.missingParameters,
+            name: actionName
+          })
+
+          return false
+        }
+
+        /**
+         * In case the owner does not provide the missing parameters/slots,
+         * then we continue the skill -> action calling process
+         */
+        return true
+      }
+
+      return false
+    }
+
+    // We are in a fresh state, hence, we can set the starting utterance
+    this.conversation.setActiveState({
+      ...this.conversation.activeState,
+      startingUtterance: this._nluProcessResult.utterance
+    })
+
+    return true
   }
 
   /**
    * Route the action calling output based on its status
    * and handle the action calling result accordingly
    */
-  private route(actionCallingOutput: ActionCallingOutput): void {
+  private postProcessRoute(actionCallingOutput: ActionCallingOutput): void {
+    if ('name' in actionCallingOutput) {
+      this.updateNLUProcessResult({ actionName: actionCallingOutput.name })
+    }
+
     const routeMap = {
       [ActionCallingStatus.Success]: (): void => {
         this.handleActionSuccess(
           actionCallingOutput as ActionCallingSuccessOutput
         )
       },
-      [ActionCallingStatus.MissingParams]: (): void => {
-        this.handleActionMissingParams(
+      [ActionCallingStatus.MissingParams]: async (): Promise<void> => {
+        await this.handleActionMissingParams(
           actionCallingOutput as ActionCallingMissingParamsOutput
         )
       },
       [ActionCallingStatus.NotFound]: (): void => {
-        this.handleActionNotFound()
+        this.handleSkillOrActionNotFound()
       }
     }
 
@@ -414,32 +562,47 @@ export default class NLU {
         LogHelper.title('NLU')
         LogHelper.info('Processing...')
 
-        const chosenSkill = await this.chooseSkill(utterance)
-        console.log('chosenSkill', chosenSkill)
-
-        const isSkillFound = !!chosenSkill
-
-        if (!isSkillFound) {
-          // TODO: handle skill not found
-          LogHelper.warning('No skill found')
-          return
-        }
-
-        const actionCallingDuty = new ActionCallingLLMDuty({
-          input: utterance,
-          skillName: chosenSkill
+        await CONVERSATION_LOGGER.push({
+          who: 'owner',
+          message: utterance
         })
-        await actionCallingDuty.init()
-        const actionCallingResult = await actionCallingDuty.execute()
-        const actionCallingOutput =
-          actionCallingResult?.output as unknown as string
-        const parsedActionCallingOutput: ActionCallingOutput =
-          JSON.parse(actionCallingOutput)
 
-        if ('status' in parsedActionCallingOutput) {
-          this.route(parsedActionCallingOutput)
+        this.updateNLUProcessResult({ utterance })
+        this.conversation.setActiveState({
+          ...this.conversation.activeState,
+          currentUtterance: this._nluProcessResult.utterance
+        })
 
-          return
+        const shouldPickSkillAction = await this.preProcessRoute()
+
+        if (shouldPickSkillAction) {
+          const chosenSkill = await this.chooseSkill(utterance)
+
+          const isSkillFound = !!chosenSkill
+
+          if (!isSkillFound) {
+            this.handleSkillOrActionNotFound()
+            return
+          }
+
+          this.updateNLUProcessResult({ skillName: chosenSkill })
+
+          const actionCallingDuty = new ActionCallingLLMDuty({
+            input: utterance,
+            skillName: chosenSkill
+          })
+          await actionCallingDuty.init()
+          const actionCallingResult = await actionCallingDuty.execute()
+          const actionCallingOutput =
+            actionCallingResult?.output as unknown as string
+          const parsedActionCallingOutput: ActionCallingOutput =
+            JSON.parse(actionCallingOutput)
+
+          if ('status' in parsedActionCallingOutput) {
+            this.postProcessRoute(parsedActionCallingOutput)
+
+            return
+          }
         }
 
         // TODO: handle error in action calling

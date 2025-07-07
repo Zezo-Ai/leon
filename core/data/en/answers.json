@@ -67,6 +67,11 @@
       "Alright, let me know what you need next",
       "Okay, let me know what I can do for you next",
       "Sure thing"
+    ],
+    "ask_for_action_missing_parameters": [
+      "Please provide me the %missing_param%",
+      "Sure thing! For that, I'll just need the %missing_param%",
+      "Absolutely. Please provide the %missing_param%"
     ]
   }
 }

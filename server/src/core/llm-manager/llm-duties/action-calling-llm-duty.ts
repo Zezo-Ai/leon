@@ -29,6 +29,8 @@ interface ActionCallingLLMDutyParams {
   skillName: string
 }
 
+const CHAT_HISTORY_SIZE = 8
+
 export class ActionCallingLLMDuty extends LLMDuty {
   private static instance: ActionCallingLLMDuty
   /**
@@ -52,12 +54,12 @@ You must adhere to the following rules without exception:
 
 1. If parameters are missing, you must return a JSON object indicating which parameters are required:
   \`\`\`json
-  {"status": "missing_params", "required_params": ["<param_name_1>", "<param_name_2>"], "name": "<function_name>"}
+  {"status": "${ActionCallingStatus.MissingParams}", "required_params": ["<param_name_1>", "<param_name_2>"], "name": "<function_name>"}
   \`\`\`
   Replace "<param_name>" with the name of the missing required parameter.
 2. If the function is not found, you must return the JSON object:
   \`\`\`json
-  {"status": "not_found"}
+  {"status": "${ActionCallingStatus.NotFound}"}
   \`\`\`
 3. You must not invent, assume, create, or infer any value for a parameter that is not explicitly provided by the user.
 4. You must only return JSON format. Do not provide any explanations, apologies, greetings, or any other conversational text.`
@@ -273,7 +275,7 @@ You must adhere to the following rules without exception:
 
         // Reset chat history to the last 8 messages
         ActionCallingLLMDuty.chatHistory =
-          response.lastEvaluation.cleanHistory.slice(-8)
+          response.lastEvaluation.cleanHistory.slice(-CHAT_HISTORY_SIZE)
 
         /**
          * The model decided to call a function
@@ -318,11 +320,7 @@ You must adhere to the following rules without exception:
           )
 
           /**
-           * The model did not call a function
-           *
-           * TODO:
-           * Maybe it did not call a function, but still returned a JSON object that can be usable.
-           * Need to see on the long-term if adjustments are needed
+           * The model did not call a function, hence we need to parse the response manually
            */
           try {
             // In case it returned a JSON object
