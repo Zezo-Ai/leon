@@ -1,5 +1,5 @@
 {
-  "$schema": "../../../schemas/skill-schemas/skill-action-locale-config.json",
+  "$schema": "../../../schemas/skill-schemas/skill-locale-config.json",
   "actions": {
     "greet": {
       "answers": {

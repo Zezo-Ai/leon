@@ -4,7 +4,8 @@ import type { ActionCallingSuccessOutput } from '@/core/llm-manager/types'
 import type {
   SkillConfigSchema,
   SkillSchema,
-  SkillActionConfig
+  SkillActionConfig,
+  SkillLocaleConfigSchema
 } from '@/schemas/skill-schemas'
 
 /**
@@ -97,6 +98,10 @@ export interface NLUProcessResult {
     bridge: SkillSchema['bridge']
     version: SkillSchema['version']
     flow: SkillSchema['flow']
+  }
+  localeSkillConfig: {
+    variables: SkillLocaleConfigSchema['variables']
+    widgetContents: SkillLocaleConfigSchema['widget_contents']
   }
   skillConfigPath: string
   actionConfig: SkillActionConfig | null

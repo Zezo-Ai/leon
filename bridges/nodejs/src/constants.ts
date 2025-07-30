@@ -1,9 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import type { SkillConfigSchema } from '@/schemas/skill-schemas'
+import type { SkillLocaleConfigSchema } from '@/schemas/skill-schemas'
 
-import type { IntentObject } from '@sdk/types'
+import { IntentObject, NLPAction } from '@sdk/types'
 
 const {
   argv: [, , INTENT_OBJ_FILE_PATH]
@@ -34,22 +34,15 @@ const SKILL_LOCALE_PATH = path.join(
   'locales',
   INTENT_OBJECT.extra_context.lang + '.json'
 )
-const SKILL_LOCALE_CONFIG = JSON.parse(
+const SKILL_LOCALE_CONFIG_CONTENT = JSON.parse(
   fs.existsSync(SKILL_LOCALE_PATH)
     ? fs.readFileSync(SKILL_LOCALE_PATH, 'utf8')
-    : `{"actions": {"${INTENT_OBJECT.action_name}": {}}}`
+    : `{"variables": {}, "widget_contents": {}, "actions": {"${INTENT_OBJECT.action_name}": {}}}`
 )
 
-export const SKILL_CONFIG: SkillConfigSchema = {
-  ...JSON.parse(
-    fs.readFileSync(
-      path.join(
-        SKILL_PATH,
-        'config',
-        INTENT_OBJECT.extra_context.lang + '.json'
-      ),
-      'utf8'
-    )
-  ),
-  ...SKILL_LOCALE_CONFIG.actions[INTENT_OBJECT.action_name]
+export const SKILL_LOCALE_CONFIG: SkillLocaleConfigSchema &
+  SkillLocaleConfigSchema['actions'][NLPAction] = {
+  variables: SKILL_LOCALE_CONFIG_CONTENT.variables,
+  widget_contents: SKILL_LOCALE_CONFIG_CONTENT.widget_contents,
+  ...SKILL_LOCALE_CONFIG_CONTENT.actions[INTENT_OBJECT.action_name]
 }

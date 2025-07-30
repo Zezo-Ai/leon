@@ -4,7 +4,7 @@ import type {
   AnswerOutput,
   AnswerConfig
 } from '@sdk/types'
-import { INTENT_OBJECT, SKILL_CONFIG } from '@bridge/constants'
+import { INTENT_OBJECT, SKILL_LOCALE_CONFIG } from '@bridge/constants'
 import { WidgetWrapper } from '@sdk/aurora'
 import { SUPPORTED_WIDGET_EVENTS } from '@sdk/widget-component'
 
@@ -29,11 +29,18 @@ class Leon {
   ): AnswerConfig {
     try {
       // In case the answer key is a raw answer
-      if (SKILL_CONFIG.answers == null || !SKILL_CONFIG.answers[answerKey]) {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-expect-error
+      if (
+        SKILL_LOCALE_CONFIG.answers == null ||
+        !SKILL_LOCALE_CONFIG.answers[answerKey]
+      ) {
         return answerKey
       }
 
-      const answers = SKILL_CONFIG.answers[answerKey] ?? ''
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-expect-error
+      const answers = SKILL_LOCALE_CONFIG.answers[answerKey] ?? ''
       let answer: AnswerConfig
 
       if (Array.isArray(answers)) {
@@ -68,8 +75,8 @@ class Leon {
         }
       }
 
-      if (SKILL_CONFIG.variables) {
-        const { variables } = SKILL_CONFIG
+      if (SKILL_LOCALE_CONFIG.variables) {
+        const { variables } = SKILL_LOCALE_CONFIG
 
         for (const key in variables) {
           if (typeof answer === 'string') {
@@ -98,7 +105,10 @@ class Leon {
 
       return answer
     } catch (e) {
-      console.error('Error while setting answer data:', e)
+      console.error(
+        `Error while setting answer data. Please verify that the answer key "${answerKey}" exists in the locale configuration. Details:`,
+        e
+      )
 
       throw e
     }

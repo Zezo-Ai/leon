@@ -180,8 +180,23 @@ export const domainSchemaObject = Type.Strict(
   })
 )
 
-export const skillActionLocaleConfigObject = Type.Strict(
+export const skillLocaleConfigObject = Type.Strict(
   Type.Object({
+    variables: Type.Optional(
+      Type.Record(Type.String(), Type.String(), {
+        description:
+          'Variables are used to define dynamic values that can be used in the locale configuration.'
+      })
+    ),
+    widget_contents: Type.Optional(
+      Type.Record(
+        Type.String(),
+        Type.Union([Type.String(), Type.Array(Type.String())], {
+          description:
+            'Widget contents are used to define the content of the widgets that will be displayed in the UI.'
+        })
+      )
+    ),
     actions: Type.Record(
       Type.String(),
       Type.Object({
@@ -443,11 +458,9 @@ export const skillConfigSchemaObject = Type.Strict(
 export type DomainSchema = Static<typeof domainSchemaObject>
 export type SkillSchema = Static<typeof skillSchemaObject>
 export type SkillConfigSchema = Static<typeof skillConfigSchemaObject>
-export type SkillActionLocaleConfigSchema = Static<
-  typeof skillActionLocaleConfigObject
->
+export type SkillLocaleConfigSchema = Static<typeof skillLocaleConfigObject>
 export type SkillActionConfig = SkillSchema['actions'][NLPAction] &
-  SkillActionLocaleConfigSchema['actions'][NLPAction]
+  SkillLocaleConfigSchema['actions'][NLPAction]
 export type SkillBridgeSchema = Static<typeof skillSchemaObject.bridge>
 export type SkillCustomTrimEntityTypeSchema = Static<
   typeof skillCustomTrimEntityType

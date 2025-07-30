@@ -6,7 +6,7 @@ import {
   domainSchemaObject,
   skillSchemaObject,
   skillConfigSchemaObject,
-  skillActionLocaleConfigObject
+  skillLocaleConfigObject
 } from '@/schemas/skill-schemas'
 import {
   globalEntitySchemaObject,
@@ -64,7 +64,7 @@ export default async () => {
         ['domain', domainSchemaObject],
         ['skill', skillSchemaObject],
         ['skill-config', skillConfigSchemaObject],
-        ['skill-action-locale-config', skillActionLocaleConfigObject]
+        ['skill-locale-config', skillLocaleConfigObject]
       ])
     ),
     generateSchemas(

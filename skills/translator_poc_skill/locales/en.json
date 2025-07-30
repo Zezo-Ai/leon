@@ -1,0 +1,29 @@
+{
+  "$schema": "../../../schemas/skill-schemas/skill-locale-config.json",
+  "actions": {
+    "set_up": {
+      "answers": [
+        "What language would you like to translate to?",
+        "Sure, what language are you translating to?"
+      ],
+      "missing_param_follow_ups": {
+        "target_language": [
+          "What language would you like to translate to?",
+          "Sure, what language are you translating to?"
+        ]
+      }
+    },
+    "confirm_ready_state": {
+      "answers": [
+        "Let's start translating to {{ target_language }}.",
+        "Okay, you can input the text you want to translate to {{ target_language }}.",
+        "Alright, let's start translating to {{ target_language }}."
+      ]
+    },
+    "translate": {
+      "answers": {
+        "translation": ["{{ output }}"]
+      }
+    }
+  }
+}

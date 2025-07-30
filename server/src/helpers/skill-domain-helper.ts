@@ -7,7 +7,8 @@ import type {
   DomainSchema,
   SkillSchema,
   SkillConfigSchema,
-  SkillBridgeSchema
+  SkillBridgeSchema,
+  SkillLocaleConfigSchema
 } from '@/schemas/skill-schemas'
 import { SKILLS_PATH } from '@/constants'
 import { FileHelper } from '@/helpers/file-helper'
@@ -357,14 +358,12 @@ export class SkillDomainHelper {
    * Get localized configuration of a skill action
    * @param lang Language short code
    * @param skillName Skill name to get configuration for
-   * @param actionName Action name to get configuration for
-   * @example getLocalizedValues('en', 'good_bye_skill', 'say_bye') // { "answers": ["Goodbye!", "See you later!"] }
+   * @example getSkillLocaleConfig('en', 'good_bye_skill')['actions'][actionName] // { "answers": ["Goodbye!", "See you later!"] }
    */
-  public static async getSkillActionLocaleConfig(
+  public static async getSkillLocaleConfig(
     lang: ShortLanguageCode,
-    skillName: SkillSchema['name'],
-    actionName: string
-  ): Promise<Record<string, unknown>> {
+    skillName: SkillSchema['name']
+  ): Promise<SkillLocaleConfigSchema | object> {
     const skillLocaleConfigPath = path.join(
       SKILLS_PATH,
       skillName,
@@ -379,7 +378,7 @@ export class SkillDomainHelper {
     try {
       const skillLocaleConfig = JSON.parse(
         await fs.promises.readFile(skillLocaleConfigPath, 'utf8')
-      )['actions'][actionName]
+      )
 
       return skillLocaleConfig
       // eslint-disable-next-line @typescript-eslint/no-unused-vars

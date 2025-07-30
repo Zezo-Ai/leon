@@ -5,7 +5,7 @@ import random
 import string
 
 from .widget_component import WidgetComponent
-from ..constants import SKILL_CONFIG, INTENT_OBJECT
+from ..constants import SKILL_LOCALE_CONFIG, INTENT_OBJECT
 
 T = TypeVar('T')
 
@@ -102,7 +102,7 @@ class Widget(ABC, Generic[T]):
         :param key: The key of the content
         :param data: The data to apply
         """
-        widget_contents = SKILL_CONFIG.get('widget_contents', {})
+        widget_contents = SKILL_LOCALE_CONFIG.get('widget_contents', {})
 
         if key not in widget_contents:
             return 'INVALID'
@@ -114,6 +114,6 @@ class Widget(ABC, Generic[T]):
 
         if data:
             for k, v in data.items():
-                content = content.replace(f'%{k}%', str(v))
+                content = content.replace(f"{{{{ {key} }}}}", str(v))
 
         return content

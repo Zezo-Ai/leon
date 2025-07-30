@@ -1,6 +1,6 @@
 import { type WidgetWrapperProps } from '@leon-ai/aurora'
 
-import { INTENT_OBJECT, SKILL_CONFIG } from '@bridge/constants'
+import { INTENT_OBJECT, SKILL_LOCALE_CONFIG } from '@bridge/constants'
 import { WidgetComponent } from '@sdk/widget-component'
 
 type UtteranceSender = 'leon' | 'owner'
@@ -115,7 +115,7 @@ export abstract class Widget<T = unknown> {
    * @example content('provider_selected', { provider: 'Spotify' }) // 'I chose the Spotify provider'
    */
   protected content(key: string, data?: Record<string, unknown>): string {
-    const { widget_contents: widgetContents } = SKILL_CONFIG
+    const { widget_contents: widgetContents } = SKILL_LOCALE_CONFIG
 
     if (!widgetContents || !widgetContents[key]) {
       return 'INVALID'
@@ -129,7 +129,7 @@ export abstract class Widget<T = unknown> {
 
     if (data) {
       for (const key in data) {
-        content = content.replaceAll(`%${key}%`, String(data[key]))
+        content = content.replaceAll(`{{ ${key} }}`, String(data[key]))
       }
     }
 

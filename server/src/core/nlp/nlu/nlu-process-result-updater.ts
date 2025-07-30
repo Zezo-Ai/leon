@@ -1,5 +1,8 @@
 import type { NLUProcessResult } from '@/core/nlp/types'
-import type { SkillSchema } from '@/schemas/skill-schemas'
+import type {
+  SkillLocaleConfigSchema,
+  SkillSchema
+} from '@/schemas/skill-schemas'
 import { BRAIN, NLU, NER, MODEL_LOADER } from '@/core'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
 import { LogHelper } from '@/helpers/log-helper'
@@ -18,6 +21,10 @@ export const DEFAULT_NLU_PROCESS_RESULT: NLUProcessResult = {
     bridge: SkillBridges.Python,
     version: '',
     flow: []
+  },
+  localeSkillConfig: {
+    variables: {},
+    widgetContents: {}
   },
   actionConfig: null,
   new: {
@@ -97,13 +104,15 @@ export class NLUProcessResultUpdater {
       const isNewContext = newContextName !== NLU.nluProcessResult.contextName
       const skillNameDepProperties: {
         skillName: string
-        skillConfig: Partial<SkillSchema> | null
         skillConfigPath: string
+        skillConfig: Partial<SkillSchema> | null
+        localeSkillConfig: Partial<SkillLocaleConfigSchema> | null
       } = {
         skillName: newResult.skillName,
-        skillConfig: null,
         skillConfigPath:
-          SkillDomainHelper.getNewSkillConfigPath(newResult.skillName) || ''
+          SkillDomainHelper.getNewSkillConfigPath(newResult.skillName) || '',
+        skillConfig: null,
+        localeSkillConfig: null
       }
       const newSkillConfig = await SkillDomainHelper.getNewSkillConfig(
         newResult.skillName
@@ -128,6 +137,19 @@ export class NLUProcessResultUpdater {
 
             return obj
           }, {} as Partial<SkillSchema>)
+
+        // Get the skill locale config for the new skill name
+        const newSkillLocaleConfig =
+          (await SkillDomainHelper.getSkillLocaleConfig(
+            BRAIN.lang,
+            newResult.skillName
+          )) as SkillLocaleConfigSchema
+        skillNameDepProperties.localeSkillConfig = {
+          variables: newSkillLocaleConfig.variables || {},
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-expect-error
+          widgetContents: newSkillLocaleConfig.widget_contents || {}
+        }
       }
 
       // New context detected, we need to reset and keep only the new data
@@ -167,12 +189,13 @@ export class NLUProcessResultUpdater {
       const skillConfig = await SkillDomainHelper.getNewSkillConfig(skillName)
       const newActionConfig =
         skillConfig?.actions?.[newResult.actionName] || null
-      const newActionLocaleConfig =
-        await SkillDomainHelper.getSkillActionLocaleConfig(
+      const newSkillLocaleConfig =
+        (await SkillDomainHelper.getSkillLocaleConfig(
           BRAIN.lang,
-          skillName,
-          newResult.actionName
-        )
+          skillName
+        )) as SkillLocaleConfigSchema
+      const newActionLocaleConfig =
+        newSkillLocaleConfig['actions'][newResult.actionName]
 
       if (!newActionLocaleConfig) {
         LogHelper.title('NLU')

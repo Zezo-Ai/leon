@@ -7,7 +7,7 @@ import json
 from .aurora.widget_wrapper import WidgetWrapper
 from .types import AnswerInput, AnswerData, AnswerConfig
 from .widget_component import SUPPORTED_WIDGET_EVENTS
-from ..constants import SKILL_CONFIG, INTENT_OBJECT
+from ..constants import SKILL_LOCALE_CONFIG, INTENT_OBJECT
 
 
 class Leon:
@@ -26,10 +26,10 @@ class Leon:
         """
         try:
             # In case the answer key is a raw answer
-            if SKILL_CONFIG.get('answers') is None or SKILL_CONFIG['answers'].get(answer_key) is None:
+            if SKILL_LOCALE_CONFIG.get('answers') is None or SKILL_LOCALE_CONFIG['answers'].get(answer_key) is None:
                 return answer_key
 
-            answers = SKILL_CONFIG['answers'].get(answer_key, '')
+            answers = SKILL_LOCALE_CONFIG['answers'].get(answer_key, '')
             if isinstance(answers, list):
                 answer = answers[random.randrange(len(answers))]
             else:
@@ -45,8 +45,8 @@ class Leon:
                         if 'speech' in answer:
                             answer['speech'] = answer['speech'].replace(f"{{{{ {key} }}}}", str(value))
 
-            if SKILL_CONFIG.get('variables'):
-                variables = SKILL_CONFIG['variables']
+            if SKILL_LOCALE_CONFIG.get('variables'):
+                variables = SKILL_LOCALE_CONFIG['variables']
 
                 for key, value in variables.items():
                     if isinstance(answer, str):
@@ -59,7 +59,7 @@ class Leon:
 
             return answer
         except Exception as e:
-            print('Error while setting answer data:', e)
+            print(f'Error while setting answer data. Please verify that the answer key "{answer_key}" exists in the locale configuration. Details:', e)
             raise e
 
     def answer(self, answer_input: AnswerInput) -> None:

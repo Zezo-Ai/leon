@@ -26,23 +26,21 @@ SKILL_LOCALE_PATH = os.path.join(
     'locales',
     f"{INTENT_OBJECT['extra_context']['lang']}.json"
 )
-SKILL_LOCALE_CONFIG = {}
 if os.path.exists(SKILL_LOCALE_PATH):
     with open(SKILL_LOCALE_PATH, 'r', encoding='utf-8') as f:
-        SKILL_LOCALE_CONFIG = json.load(f)
+        SKILL_LOCALE_CONFIG_CONTENT = json.load(f)
 else:
-    SKILL_LOCALE_CONFIG = {
-        "actions": {
+    SKILL_LOCALE_CONFIG_CONTENT = {
+        'variables': {},
+        'widget_contents': {},
+        'actions': {
             INTENT_OBJECT['action_name']: {}
         }
     }
 
-with open(os.path.join(SKILL_PATH, 'config', INTENT_OBJECT['extra_context']['lang'] + '.json'), 'r') as f:
-    SKILL_CONFIG = json.load(f)
-
-SKILL_CONFIG.update(
-    SKILL_LOCALE_CONFIG.get('actions', {}).get(INTENT_OBJECT['action_name'], {})
-)
+SKILL_LOCALE_CONFIG = SKILL_LOCALE_CONFIG_CONTENT.get('actions', {}).get(INTENT_OBJECT['action_name'], {}).copy()
+SKILL_LOCALE_CONFIG['variables'] = SKILL_LOCALE_CONFIG_CONTENT.get('variables', {})
+SKILL_LOCALE_CONFIG['widget_contents'] = SKILL_LOCALE_CONFIG_CONTENT.get('widget_contents', {})
 
 LEON_VERSION = os.getenv('npm_package_version')
 

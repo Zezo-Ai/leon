@@ -385,7 +385,12 @@ export default class LLMManager {
          *      [ok] Fix context duplicate data because of "await this.updateNLUProcessResult(...)"
          *      [ok] Copy the "good_bye" skill and implement the dialog type. Need to handle the "locales/{lang}.json" structure first since it's based on the answers
          *      [ok] In dialog skills answers, check from the context if there is any actionArgument or entities that would match any {{ PLACEHOLDER }} and replace it with the actual value
+         *      [ok] Refactor brain with logic/dialog static class handlers + cf. Copilot chat for how to split static methods within the dialog action handler class
+         *      [ok] Implement the locale to the timer skill. And verify all actions
+         *      [ok] In bridges/nodejs/src/constants.ts and bridges/python/src/constants.py, change the SKILL_CONFIG by removing the config/{lang}.json and only use the locale config. Need to add "variables" and "widget_contents" to the local config too. When implementing variables, check for dialog skill answers if it has conflict
+         *      TODO NEXT 2025-07-30: continue to rebuild the translator-poc skill. Need to implement the flow and think carefully about the whole set_up answers system, etc.
          *      TODO NEXT 2025-07-23: rebuild the "good_bye", "partner_assistant", "color" and "translator-poc" skills
+         *      TODO NEXT 2025-07-29: todo list skill does not work properly. E.g. "Please add a book to my shopping list". It does not do slot filling well anymore
          *      TODO NEXT 2025-07-18: copy translator-poc skill (do this later since it involves the loop concept), handle dialog action logic. Need to handle the "locales/{lang}.json" structure first since it's based on the answers
          *      In fetch-widget/get.ts, need to execute new brain method; and replace "currentEntities", "classification" with the new structure
          *      Delete or refactor the chunks where there are "TODO: core rewrite" comments
@@ -398,6 +403,7 @@ export default class LLMManager {
          *      Remove "next_action" and implement "flow" (skill schema, get first action of the flow and ignore all other actions within the flow)
          *      Replace "getSkillConfig", etc. helpers from SkillDomainHelper with new helpers + rename SkillDomainHelper to SkillHelper
          *      Handle "is_loop"
+         *      Delete all "config" folders in skills, and replace with "locales/{lang}.json" files
          *      Should delete legacy code?
          *      Make sure telemetry is working well with the new core
          *      Guess The Number skill: rework on loop logic (create "resolving" duty for very custom inputs, cf. MBTI?)

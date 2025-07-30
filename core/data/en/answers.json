@@ -12,10 +12,10 @@
       "Sorry, I cannot do that because I'm broken. Please check my logs for further details"
     ],
     "random_skill_errors": [
-      "Sorry, it seems I have a problem with the \"%skill_name%\" skill from the \"%domain_name%\" domain",
-      "Sorry, I have an issue with the \"%skill_name%\" skill from the \"%domain_name%\" domain",
-      "Sorry, I've got an error with the \"%skill_name%\" skill from the \"%domain_name%\" domain",
-      "Sorry, the \"%skill_name%\" skill from the \"%domain_name%\" domain is broken"
+      "Sorry, it seems I have a problem with the \"{{ skill_name }}\" skill",
+      "Sorry, I have an issue with the \"{{ skill_name }}\" skill",
+      "Sorry, I've got an error with the \"{{ skill_name }}\" skill",
+      "Sorry, the \"{{ skill_name }}\" skill is broken"
     ],
     "random_unknown_intents_legacy": [
       "Sorry, I still don't know this, but you can help me to understand by <a href=\"https://github.com/leon-ai/leon/blob/develop/.github/CONTRIBUTING.md\" target=\"_blank\">creating a pull request</a>",
