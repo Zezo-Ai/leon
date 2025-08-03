@@ -1,4 +1,5 @@
 import sys
+import inspect
 from traceback import print_exc
 from importlib import import_module
 
@@ -32,9 +33,25 @@ def main():
             + INTENT_OBJECT['action_name']
         )
 
-        params_helper = ParamsHelper(params)
+        run_function = getattr(skill_action_module, 'run')
+        # Get the function signature to determine accepted parameters
+        # to allow optional parameters in the function call
+        function_signature = inspect.signature(run_function)
+        accepted_params = function_signature.parameters.keys()
 
-        getattr(skill_action_module, 'run')(params, params_helper)
+        params_helper = ParamsHelper(params)
+        available_args = {
+            'params': params,
+            'params_helper': params_helper
+        }
+        # Filter available arguments to only those accepted by the function.
+        # This allows us to pass only the necessary parameters to the function
+        args_to_pass = {
+            name: value for name, value in available_args.items()
+            if name in accepted_params
+        }
+
+        run_function(**args_to_pass)
     except Exception as e:
         print(f"Error while running {INTENT_OBJECT['skill_name']} skill {INTENT_OBJECT['action_name']} action: {e}")
         print_exc()
