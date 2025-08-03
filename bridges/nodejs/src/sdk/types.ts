@@ -10,12 +10,16 @@ import type {
 import type { SkillAnswerConfigSchema } from '@/schemas/skill-schemas'
 
 import type { Widget } from '@sdk/widget'
+import { ParamsHelper } from '@bridge/params-helper'
 
 export type { ActionParams, IntentObject }
 
 export * from '@/core/nlp/types'
 
-export type ActionFunction = (params: ActionParams) => Promise<void>
+export type ActionFunction = (
+  params: ActionParams,
+  paramsHelper: ParamsHelper
+) => Promise<void>
 
 /**
  * Answer types

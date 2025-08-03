@@ -3,6 +3,7 @@ from traceback import print_exc
 from importlib import import_module
 
 from constants import INTENT_OBJECT
+from params_helper import ParamsHelper
 
 
 def main():
@@ -31,7 +32,9 @@ def main():
             + INTENT_OBJECT['action_name']
         )
 
-        getattr(skill_action_module, 'run')(params)
+        params_helper = ParamsHelper(params)
+
+        getattr(skill_action_module, 'run')(params, params_helper)
     except Exception as e:
         print(f"Error while running {INTENT_OBJECT['skill_name']} skill {INTENT_OBJECT['action_name']} action: {e}")
         print_exc()

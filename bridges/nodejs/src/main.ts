@@ -4,6 +4,7 @@ import { FileHelper } from '@/helpers/file-helper'
 
 import type { ActionFunction, ActionParams } from '@sdk/types'
 import { INTENT_OBJECT } from '@bridge/constants'
+import { ParamsHelper } from '@bridge/params-helper'
 ;(async (): Promise<void> => {
   const {
     lang,
@@ -43,8 +44,9 @@ import { INTENT_OBJECT } from '@bridge/constants'
       )
     )
     const actionFunction: ActionFunction = actionModule.run
+    const paramsHelper = new ParamsHelper(params)
 
-    await actionFunction(params)
+    await actionFunction(params, paramsHelper)
   } catch (e) {
     console.error(
       `Error while running "${skill_name}" skill "${action_name}" action:`,

@@ -2,11 +2,9 @@ import type { ActionFunction } from '@sdk/types'
 import { leon } from '@sdk/leon'
 import { Network } from '@sdk/network'
 
-export const run: ActionFunction = async function (params) {
-  const targetLanguage = params.entities.find(
-    (entity) => entity.entity === 'language'
-  )?.resolution?.value
-  const textToTranslate = params.action_arguments?.text_to_translate
+export const run: ActionFunction = async function (_params, paramsHelper) {
+  const targetLanguage = paramsHelper.getActionArgument('target_language')
+  const textToTranslate = paramsHelper.getActionArgument('text_to_translate')
   const network = new Network({
     baseURL: `${process.env['LEON_HOST']}:${process.env['LEON_PORT']}/api/v1`
   })

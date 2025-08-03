@@ -1,12 +1,13 @@
 from bridges.python.src.sdk.leon import leon
 from bridges.python.src.sdk.types import ActionParams
+from bridges.python.src.params_helper import ParamsHelper
 
 
-def run(params: ActionParams) -> None:
+def run(_params: ActionParams, params_helper: ParamsHelper) -> None:
     """Leon tells about partner assistants"""
 
     try:
-        assistant_name = params['action_arguments']['assistant_name'].lower()
+        assistant_name = params_helper.get_action_argument('assistant_name').lower()
         leon.answer({
             'key': assistant_name
         })

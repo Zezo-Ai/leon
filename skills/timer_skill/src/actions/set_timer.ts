@@ -4,12 +4,15 @@ import { leon } from '@sdk/leon'
 import { TimerWidget } from '../widgets/timer-widget'
 import { createTimerMemory } from '../lib/memory'
 
-export const run: ActionFunction = async function (params) {
+export const run: ActionFunction = async function (_params, paramsHelper) {
   const supportedUnits = ['hours', 'minutes', 'seconds']
-  const [duration] = (
-    params.context.entities.find((entity) => entity.type === 'duration')
-      ?.resolution as BuiltInDurationEntity['resolution']
-  ).values
+  const durationEntity = paramsHelper.findLastEntity('duration')
+  const [duration] =
+    (
+      durationEntity?.resolution as
+        | BuiltInDurationEntity['resolution']
+        | undefined
+    )?.values ?? []
 
   if (!duration) {
     return leon.answer({ key: 'cannot_get_duration' })

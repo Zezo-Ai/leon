@@ -9,26 +9,15 @@
     "email": "louis@getleon.ai",
     "url": "https://twitter.com/grenlouis"
   },
-  "flow": ["set_up", "confirm_ready_state", "translate"],
   "actions": {
-    "set_up": {
-      "type": "dialog",
-      "description": "Set up the translation skill.",
-      "parameters": {
-        "target_language": {
-          "type": "string",
-          "description": "The language to translate to."
-        }
-      }
-    },
-    "confirm_ready_state": {
-      "type": "dialog",
-      "description": "Confirm that the skill is ready to translate."
-    },
     "translate": {
       "type": "logic",
       "description": "Translate the text provided by the owner.",
       "parameters": {
+        "target_language": {
+          "type": "string",
+          "description": "The language to translate to."
+        },
         "text_to_translate": {
           "type": "string",
           "description": "The text to translate."
