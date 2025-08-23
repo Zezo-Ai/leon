@@ -37,12 +37,13 @@ const SKILL_LOCALE_PATH = path.join(
 const SKILL_LOCALE_CONFIG_CONTENT = JSON.parse(
   fs.existsSync(SKILL_LOCALE_PATH)
     ? fs.readFileSync(SKILL_LOCALE_PATH, 'utf8')
-    : `{"variables": {}, "widget_contents": {}, "actions": {"${INTENT_OBJECT.action_name}": {}}}`
+    : `{"variables": {}, "common_answers": {}, "widget_contents": {}, "actions": {"${INTENT_OBJECT.action_name}": {}}}`
 )
 
 export const SKILL_LOCALE_CONFIG: SkillLocaleConfigSchema &
   SkillLocaleConfigSchema['actions'][NLPAction] = {
   variables: SKILL_LOCALE_CONFIG_CONTENT.variables,
+  common_answers: SKILL_LOCALE_CONFIG_CONTENT.common_answers,
   widget_contents: SKILL_LOCALE_CONFIG_CONTENT.widget_contents,
   ...SKILL_LOCALE_CONFIG_CONTENT.actions[INTENT_OBJECT.action_name]
 }

@@ -188,6 +188,12 @@ export const skillLocaleConfigObject = Type.Strict(
           'Variables are used to define dynamic values that can be used in the locale configuration.'
       })
     ),
+    common_answers: Type.Optional(
+      Type.Record(Type.String(), Type.Array(answerTypes), {
+        description:
+          'Common answers are used to avoid repeating the same answers across different actions. They can be used to define answers that can be reused in multiple actions.'
+      })
+    ),
     widget_contents: Type.Optional(
       Type.Record(
         Type.String(),

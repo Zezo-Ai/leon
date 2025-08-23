@@ -32,6 +32,7 @@ if os.path.exists(SKILL_LOCALE_PATH):
 else:
     SKILL_LOCALE_CONFIG_CONTENT = {
         'variables': {},
+        'common_answers': {},
         'widget_contents': {},
         'actions': {
             INTENT_OBJECT['action_name']: {}
@@ -40,6 +41,7 @@ else:
 
 SKILL_LOCALE_CONFIG = SKILL_LOCALE_CONFIG_CONTENT.get('actions', {}).get(INTENT_OBJECT['action_name'], {}).copy()
 SKILL_LOCALE_CONFIG['variables'] = SKILL_LOCALE_CONFIG_CONTENT.get('variables', {})
+SKILL_LOCALE_CONFIG['common_answers'] = SKILL_LOCALE_CONFIG_CONTENT.get('common_answers', {})
 SKILL_LOCALE_CONFIG['widget_contents'] = SKILL_LOCALE_CONFIG_CONTENT.get('widget_contents', {})
 
 LEON_VERSION = os.getenv('npm_package_version')

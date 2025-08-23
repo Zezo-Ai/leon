@@ -40,7 +40,10 @@ export default async (llmDutiesToWarmUp: LLMDuties[]): Promise<void> => {
    * Slot filling LLM Duty warm-up
    */
   const slotFillingDuty = new SlotFillingLLMDuty({
-    input: ['location'],
+    input: {
+      slotName: 'location',
+      slotDescription: 'A place where the user wants to go'
+    },
     startingUtterance: 'I want to go somewhere'
   })
   await slotFillingDuty.init()

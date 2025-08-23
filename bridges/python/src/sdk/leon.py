@@ -1,6 +1,6 @@
 import random
 import sys
-from typing import Union
+from typing import Union, Dict, Any
 from time import sleep
 import json
 
@@ -18,44 +18,43 @@ class Leon:
             Leon.instance = self
 
     @staticmethod
-    def set_answer_data(answer_key: str, data: Union[AnswerData, None] = None) -> Union[str, AnswerConfig]:
+    def _inject_variables(answer: AnswerConfig, data_to_inject: Union[Dict[str, Any], None]) -> AnswerConfig:
+        """A private helper to inject variables into an answer string or object"""
+        if not data_to_inject:
+            return answer
+
+        for key, value in data_to_inject.items():
+            if isinstance(answer, str):
+                answer = answer.replace(f"{{{{ {key} }}}}", str(value))
+            elif isinstance(answer, dict):
+                if 'text' in answer and answer['text']:
+                    answer['text'] = answer['text'].replace(f"{{{{ {key} }}}}", str(value))
+                if 'speech' in answer and answer['speech']:
+                    answer['speech'] = answer['speech'].replace(f"{{{{ {key} }}}}", str(value))
+
+        return answer
+
+    def set_answer_data(self, answer_key: str, data: Union[AnswerData, None] = None) -> Union[str, AnswerConfig]:
         """
         Apply data to the answer
         :param answer_key: The answer key
         :param data: The data to apply
         """
         try:
-            # In case the answer key is a raw answer
-            if SKILL_LOCALE_CONFIG.get('answers') is None or SKILL_LOCALE_CONFIG['answers'].get(answer_key) is None:
+            # Prioritize skill-specific answers, then fall back to common answers
+            answers_config = SKILL_LOCALE_CONFIG.get('answers', {}).get(answer_key) or \
+                             SKILL_LOCALE_CONFIG.get('common_answers', {}).get(answer_key)
+
+            # In case the answer key is not found or is a raw answer
+            if not answers_config:
                 return answer_key
 
-            answers = SKILL_LOCALE_CONFIG['answers'].get(answer_key, '')
-            if isinstance(answers, list):
-                answer = answers[random.randrange(len(answers))]
-            else:
-                answer = answers
+            # Pick a random answer if it's a list
+            answer = random.choice(answers_config) if isinstance(answers_config, list) else answers_config
 
-            if data:
-                for key, value in data.items():
-                    if isinstance(answer, str):
-                        answer = answer.replace(f"{{{{ {key} }}}}", str(value))
-                    else:
-                        if 'text' in answer:
-                            answer['text'] = answer['text'].replace(f"{{{{ {key} }}}}", str(value))
-                        if 'speech' in answer:
-                            answer['speech'] = answer['speech'].replace(f"{{{{ {key} }}}}", str(value))
-
-            if SKILL_LOCALE_CONFIG.get('variables'):
-                variables = SKILL_LOCALE_CONFIG['variables']
-
-                for key, value in variables.items():
-                    if isinstance(answer, str):
-                        answer = answer.replace(f"{{{{ {key} }}}}", str(value))
-                    else:
-                        if 'text' in answer:
-                            answer['text'] = answer['text'].replace(f"{{{{ {key} }}}}", str(value))
-                        if 'speech' in answer:
-                            answer['speech'] = answer['speech'].replace(f"{{{{ {key} }}}}", str(value))
+            # Inject variables from the data parameter and from the global variables config
+            answer = self._inject_variables(answer, data)
+            answer = self._inject_variables(answer, SKILL_LOCALE_CONFIG.get('variables'))
 
             return answer
         except Exception as e:

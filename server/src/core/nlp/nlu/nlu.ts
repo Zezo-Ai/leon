@@ -410,22 +410,43 @@ export default class NLU {
 
     if (hasFlow) {
       const currentAction = this._nluProcessResult.actionName
-      const isLastActionInFlow = flow[flow.length - 1] === currentAction
+      const currentActionIndex = flow.indexOf(currentAction)
+      const isLastActionInFlow = currentActionIndex === flow.length - 1
 
+      /**
+       * If the current action is not the last one in the flow,
+       * prepare the next action
+       */
       if (!isLastActionInFlow) {
-        const nextActionName = flow[flow.indexOf(currentAction) + 1] as string
+        const nextActionName = flow[currentActionIndex + 1] as string
 
         await NLUProcessResultUpdater.update({
           actionName: nextActionName
         })
 
+        const nextActionConfig = this._nluProcessResult.actionConfig
+
         this.conversation.setActiveState({
           pendingAction: `${this._nluProcessResult.skillName}:${nextActionName}`,
-          missingParameters: Object.keys(
-            this._nluProcessResult.actionConfig?.parameters || []
-          ),
+          missingParameters: Object.keys(nextActionConfig?.parameters || []),
           collectedParameters: this.conversation.activeState.collectedParameters
         })
+
+        console.log('nextActionName', nextActionName)
+
+        /**
+         * If the next action in the flow has no parameters, execute it immediately
+         * without waiting for another user input. E.g., the "set_up" action
+         */
+        if (Object.keys(nextActionConfig?.parameters || {}).length === 0) {
+          await this.handleActionSuccess({
+            status: ActionCallingStatus.Success,
+            name: nextActionName,
+            arguments: {}
+          })
+        }
+
+        return
 
         /*this.process()
 
@@ -435,6 +456,12 @@ export default class NLU {
           arguments: this._nluProcessResult.new.actionArguments as Record<string, unknown>
         })*/
       }
+
+      /**
+       * If there is no flow or the flow has ended, clean the state for the next utterance
+       */
+      this.conversation.cleanActiveState()
+      await NLUProcessResultUpdater.update(DEFAULT_NLU_PROCESS_RESULT)
     }
 
     // TODO: add if: clean up if the current action is the last one in the flow and it is not a loop
@@ -485,9 +512,20 @@ export default class NLU {
     const hasPendingAction = this.conversation.hasPendingAction()
 
     if (hasPendingAction) {
+      const [slotName] = this.conversation.activeState.missingParameters
+      const actionConfig = this._nluProcessResult.actionConfig
+      const param = actionConfig?.parameters?.[slotName as string]
+      let paramDescription = param.description || ''
+      // TODO: create a method to format the description for specific types
+      if (param.type === 'boolean') {
+        paramDescription = `${paramDescription} the value must be either true or false.`
+      }
       const slotFillingDuty = new SlotFillingLLMDuty({
         // Only one slot at a time
-        input: this.conversation.activeState.missingParameters[0] as string,
+        input: {
+          slotName: slotName as string,
+          slotDescription: paramDescription
+        },
         startingUtterance: this.conversation.activeState
           .startingUtterance as string
       })

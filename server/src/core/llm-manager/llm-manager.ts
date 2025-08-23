@@ -88,6 +88,7 @@ const CORE_LLM_DUTIES: CoreLLMDuties = {
   [LLMDuties.SlotFilling]: {
     contextSize: 1_024,
     maxTokens: 512,
+    thoughtTokensBudget: 128,
     temperature: 0.2
   },
   [LLMDuties.CustomNER]: {
@@ -406,7 +407,8 @@ export default class LLMManager {
          * </tool_call>
          *      [ok] (related to below issue 2025-08-19) when "clean active state", should we also clean action router duty and skill router duty? The action router duty seems to be overloaded after a while, cf. usedInputTokens
          *      [ok] "Add tomatoes, potatoes, 1kg of rice to the shopping list" -> issue, it will grab previous list. "Check potatoes from the shopping list" -> does not check because does not go through end data, only on data
-         *      TODO NEXT 2025-08-11: add "common_answers" to locale config for reusable answers across actions (leon.ts + leon.py); test it with the todo list skill (list_does_not_exist, list_already_exists, etc.)
+         *      [ok] Add "common_answers" to locale config for reusable answers across actions (leon.ts + leon.py); test it with the todo list skill (list_does_not_exist, list_already_exists, etc.)
+         *      TODO NEXT 2025-08-22: instead of creating a new multi-tasking duty, maybe we can use the next action arguments? E.g. for "replay" we could have a boolean. By using param description, should automatically set true or false when the param type is boolean so skill devs don't need to care about this. Or just use our global resolver?
          *      TODO NEXT 2025-08-03: maybe there is no need for a flow for the translator skill? A simple action should be enough with the 2 params (target_language and text_to_translate). Maybe I should just implement the loop concept for this case? Test the following cases: flow -> 1. "Can you please help me to translate some text into French?" > "The sky is blue"; 2. "Please help me to translate some text" > "Into French please" > "The sky is blue"; 3. "Please translate this text into French: the sky is blue"; 4. Please translate this text "the sky is blue" > "Into French"
          *      TODO NEXT 2025-07-30: continue to rebuild the translator-poc skill. Need to implement the flow and think carefully about the whole set_up answers system, etc.
          *      TODO NEXT 2025-07-23: rebuild the "good_bye", "partner_assistant", "color" and "translator-poc" skills
@@ -449,6 +451,7 @@ export default class LLMManager {
          *      Create real weather skill with tools (one tool for each provider, can choose provider in skill settings)
          *      After everything is confirmed, then migrate all skills with the new configs
          *      Clean up NLU class, etc. if not used anymore
+         *      Add this to do list to the Trello card description for history and future references (blog post, etc.)
          *
          *     [ok] In DSL, at the same level as "type": "logic", need to add field: "optional_params": []
          *      If this param is missing, but is included in the optional_params array, then still execute the action and let the skill developer handles the logic

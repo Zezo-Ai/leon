@@ -19,7 +19,10 @@ import {
 import { LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
 
 interface SlotFillingLLMDutyParams {
-  input: LLMDutyParams['input']
+  input: {
+    slotName: string
+    slotDescription: string
+  } | null
   startingUtterance: string
 }
 
@@ -76,7 +79,7 @@ export class SlotFillingLLMDuty extends LLMDuty {
   private readonly startingUtterance: string | null = null
   protected readonly systemPrompt: LLMDutyParams['systemPrompt'] = null
   protected readonly name = 'Slot Filling LLM Duty'
-  protected input: LLMDutyParams['input'] = null
+  protected input: SlotFillingLLMDutyParams['input'] = null
 
   constructor(params: SlotFillingLLMDutyParams) {
     super()
@@ -136,7 +139,8 @@ export class SlotFillingLLMDuty extends LLMDuty {
     try {
       const prompt = `INSTRUCTIONS:
 Analyze the last user message to find the following slot:
-"${this.input}"`
+- Slot name: "${this.input?.slotName}"
+- Slot description: "${this.input?.slotDescription}"`
       const config = LLM_MANAGER.coreLLMDuties[LLMDuties.SlotFilling]
       const completionParams = {
         dutyType: LLMDuties.SlotFilling,

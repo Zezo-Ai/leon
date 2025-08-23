@@ -24,6 +24,7 @@ export type NLUPartialProcessResult = Partial<
   }
 >
 
+// TODO: core rewrite delete?
 export interface NLPJSProcessResult {
   locale: ShortLanguageCode
   utterance: NLPUtterance
@@ -63,6 +64,7 @@ export interface NLPJSProcessResult {
  * NLU types
  */
 
+// TODO: core rewrite delete?
 export interface NLUSlot {
   name: string
   expectedEntity: string
@@ -73,6 +75,7 @@ export interface NLUSlot {
   locales?: Record<string, string[]> // From NLP.js
 }
 
+// TODO: core rewrite delete?
 export interface NLUClassification {
   domain: NLPDomain
   skill: NLPSkill
@@ -80,6 +83,7 @@ export interface NLUClassification {
   confidence: number
 }
 
+// TODO: core rewrite delete?
 export interface NLUResolver {
   name: string
   value: string
@@ -137,6 +141,7 @@ export interface NLUResult {
   actionConfig: SkillConfigSchema['actions'][NLPAction] | null
 }
 
+// TODO: core rewrite delete?
 export type NLUSlots = Record<string, NLUSlot>
 
 /**

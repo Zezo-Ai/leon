@@ -18,6 +18,50 @@ class Leon {
   }
 
   /**
+   * Injects variables into the answer string
+   * @param answer The answer to inject variables into
+   * @param data The data to apply
+   * @example injectVariables('Hello {{ name }}', { name: 'Leon' }) // 'Hello Leon'
+   */
+  private injectVariables(
+    answer: AnswerConfig,
+    data: AnswerData | null
+  ): AnswerConfig {
+    let finalAnswer = answer
+
+    const applyData = (obj: AnswerData): void => {
+      for (const key in obj) {
+        if (typeof finalAnswer === 'string') {
+          finalAnswer = finalAnswer.replaceAll(`{{ ${key} }}`, String(obj[key]))
+        } else {
+          if (finalAnswer.text) {
+            finalAnswer.text = finalAnswer.text.replaceAll(
+              `{{ ${key} }}`,
+              String(obj[key])
+            )
+          }
+          if (finalAnswer.speech) {
+            finalAnswer.speech = finalAnswer.speech.replaceAll(
+              `{{ ${key} }}`,
+              String(obj[key])
+            )
+          }
+        }
+      }
+    }
+
+    if (data) {
+      applyData(data)
+    }
+
+    if (SKILL_LOCALE_CONFIG.variables) {
+      applyData(SKILL_LOCALE_CONFIG.variables)
+    }
+
+    return finalAnswer
+  }
+
+  /**
    * Apply data to the answer
    * @param answerKey The answer key
    * @param data The data to apply
@@ -28,82 +72,21 @@ class Leon {
     data: AnswerData = null
   ): AnswerConfig {
     try {
-      // In case the answer key is a raw answer
-      if (
-        SKILL_LOCALE_CONFIG.answers == null ||
+      const answers =
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-expect-error
-        !SKILL_LOCALE_CONFIG.answers[answerKey]
-      ) {
+        SKILL_LOCALE_CONFIG.answers?.[answerKey] ??
+        SKILL_LOCALE_CONFIG.common_answers?.[answerKey]
+
+      if (!answers) {
         return answerKey
       }
 
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-expect-error
-      const answers = SKILL_LOCALE_CONFIG.answers[answerKey] ?? ''
-      let answer: AnswerConfig
+      const answer = Array.isArray(answers)
+        ? answers[Math.floor(Math.random() * answers.length)] ?? ''
+        : answers
 
-      if (Array.isArray(answers)) {
-        answer = answers[Math.floor(Math.random() * answers.length)] ?? ''
-      } else {
-        answer = answers
-      }
-
-      if (data != null) {
-        for (const key in data) {
-          if (typeof answer === 'string') {
-            answer = (answer as string).replaceAll(
-              `{{ ${key} }}`,
-              String(data[key])
-            )
-          } else {
-            // In case the answer needs speech and text differentiation
-
-            if (answer.text) {
-              answer.text = answer.text.replaceAll(
-                `{{ ${key} }}`,
-                String(data[key])
-              )
-            }
-            if (answer.speech) {
-              answer.speech = answer.speech.replaceAll(
-                `{{ ${key} }}`,
-                String(data[key])
-              )
-            }
-          }
-        }
-      }
-
-      if (SKILL_LOCALE_CONFIG.variables) {
-        const { variables } = SKILL_LOCALE_CONFIG
-
-        for (const key in variables) {
-          if (typeof answer === 'string') {
-            answer = (answer as string).replaceAll(
-              `{{ ${key} }}`,
-              String(variables[key])
-            )
-          } else {
-            // In case the answer needs speech and text differentiation
-
-            if (answer.text) {
-              answer.text = answer.text.replaceAll(
-                `{{ ${key} }}`,
-                String(variables[key])
-              )
-            }
-            if (answer.speech) {
-              answer.speech = answer.speech.replaceAll(
-                `{{ ${key} }}`,
-                String(variables[key])
-              )
-            }
-          }
-        }
-      }
-
-      return answer
+      return this.injectVariables(answer, data)
     } catch (e) {
       console.error(
         `Error while setting answer data. Please verify that the answer key "${answerKey}" exists in the locale configuration. Details:`,
