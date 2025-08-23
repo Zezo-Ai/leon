@@ -22,6 +22,7 @@ interface SlotFillingLLMDutyParams {
   input: {
     slotName: string
     slotDescription: string
+    slotType: string
   } | null
   startingUtterance: string
 }
@@ -135,6 +136,21 @@ export class SlotFillingLLMDuty extends LLMDuty {
   ): Promise<LLMDutyResult | null> {
     LogHelper.title(this.name)
     LogHelper.info('Executing...')
+
+    // If there is no dot at the end of the slot description, add one
+    if (this.input?.slotDescription) {
+      if (!this.input.slotDescription.trim().endsWith('.')) {
+        this.input.slotDescription = `${this.input.slotDescription.trim()}.`
+      }
+    }
+
+    /**
+     * Overriding the slot description to add more details
+     * according to the slot type
+     */
+    if (this.input?.slotType === 'boolean') {
+      this.input.slotDescription = `${this.input.slotDescription} The value must be either true or false.`
+    }
 
     try {
       const prompt = `INSTRUCTIONS:

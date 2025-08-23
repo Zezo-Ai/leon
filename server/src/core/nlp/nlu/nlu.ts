@@ -515,16 +515,13 @@ export default class NLU {
       const [slotName] = this.conversation.activeState.missingParameters
       const actionConfig = this._nluProcessResult.actionConfig
       const param = actionConfig?.parameters?.[slotName as string]
-      let paramDescription = param.description || ''
-      // TODO: create a method to format the description for specific types
-      if (param.type === 'boolean') {
-        paramDescription = `${paramDescription} the value must be either true or false.`
-      }
+      const paramDescription = param.description || ''
       const slotFillingDuty = new SlotFillingLLMDuty({
         // Only one slot at a time
         input: {
           slotName: slotName as string,
-          slotDescription: paramDescription
+          slotDescription: paramDescription,
+          slotType: param.type
         },
         startingUtterance: this.conversation.activeState
           .startingUtterance as string

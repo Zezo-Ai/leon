@@ -307,10 +307,6 @@ export const skillSchemaObject = Type.Strict(
               })
             )
           )
-          /**
-           * TODO: add:
-           * missing_parameter_follow_ups
-           */
         },
         { additionalProperties: false }
       ),
