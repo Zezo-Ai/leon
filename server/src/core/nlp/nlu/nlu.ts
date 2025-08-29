@@ -416,6 +416,37 @@ export default class NLU {
     }
   }
 
+  /**
+   * Checks for suggestions in the skill's locale data for the current action
+   * and sends them to the client
+   */
+  private async sendSuggestions(): Promise<void> {
+    try {
+      const { skillName, actionName } = this._nluProcessResult
+      const localeConfig = await SkillDomainHelper.getSkillLocaleConfig(
+        BRAIN.lang,
+        skillName
+      )
+
+      console.log('conf', skillName, actionName)
+      console.log('localeConfig', localeConfig)
+
+      if ('actions' in localeConfig) {
+        const suggestions = localeConfig?.actions?.[actionName]?.suggestions
+
+        if (suggestions && suggestions.length > 0) {
+          LogHelper.title('NLU')
+          LogHelper.info(`Sending suggestions for action "${actionName}"`)
+
+          SOCKET_SERVER.socket?.emit('suggest', suggestions)
+        }
+      }
+    } catch (e) {
+      LogHelper.title('NLU')
+      LogHelper.error(`Failed to send suggestions: ${e}`)
+    }
+  }
+
   private async handleSkillFlow(flow: SkillSchema['flow']): Promise<boolean> {
     if (flow) {
       LogHelper.title('NLU')
@@ -455,6 +486,8 @@ export default class NLU {
               name: nextActionName,
               arguments: {}
             })
+          } else {
+            await this.sendSuggestions()
           }
 
           return true

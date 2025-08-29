@@ -41,7 +41,7 @@ def run(params: ActionParams) -> None:
 
     # Exit the loop if no handsign has been found
     if player['handsign'] is None:
-        leon.answer({'core': {'isInActionLoop': False}})
+        leon.answer({'core': {'is_in_action_loop': False}})
 
     leon_emoji = handsigns[leon_player['handsign']]['emoji']
     player_emoji = handsigns[player['handsign']]['emoji']
@@ -73,7 +73,6 @@ def run(params: ActionParams) -> None:
     leon.answer({
         'key': 'ask_for_rematch',
         'core': {
-            'isInActionLoop': False,
-            'showNextActionSuggestions': True
+            'is_in_action_loop': False
         }
     })

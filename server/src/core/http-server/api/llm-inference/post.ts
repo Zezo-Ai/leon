@@ -15,7 +15,6 @@ import { LLM_MANAGER } from '@/core'
 interface PostLLMInferenceSchema {
   body: {
     dutyType: LLMDuties
-    systemPrompt: string
     input: string
     data: Record<string, unknown>
   }

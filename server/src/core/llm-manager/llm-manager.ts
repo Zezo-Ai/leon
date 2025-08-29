@@ -411,13 +411,22 @@ export default class LLMManager {
          *      [ok] (finally no need for query_resolver for now, action args are enough) instead of creating a new multi-tasking duty, maybe we can use the next action arguments? E.g. for "replay" we could have a boolean. By using param description, should automatically set true or false when the param type is boolean so skill devs don't need to care about this. Or just use our global resolver?
          *      [ok] Flow implementation
          *      [ok] Action loop -> fix nlu.ts with conv state / description from undefined param (param.description)
-         *      TODO NEXT 2025-08-24: handle suggestions (Aurora component)
+         *      [ok] Try: if in loop and send not-relevant utterance, see what happens, need to clean up?
+         *      [ok] Handle suggestions (Aurora component)
+         *      [ok] In action calling, if there is a flow and the first action of the flow does not need any argument then directly return the response without going through the LLM inference
+                [ok] If a skill only has one action that require no parameters, then directly execute it after the skill router duty (no need to go through the action calling duty)
+         *      [ok] MBTI skill: don't use config.json for questions, use answers + fix disposable timer
+         *      [ok] For custom duties in skills, optimize the memory so it won't always reload the context, etc. Cf. MBTI skill and translation. To optimize: provide default disposeTimeout and as param too, once timed out, it will clean up the context and dispose the sequence. In this way, actions hitting the same custom duty within the time window will hit the same context and sequence so the inference will be faster.
+         *      [ok] Rebuild MBTI skill with custom LLM duty request to resolve form questions
+         *      TODO NEXT 2025-08-26: rebuild Akinator https://github.com/Ombucha/akinator.py
          *      TODO NEXT 2025-08-03: maybe there is no need for a flow for the translator skill? A simple action should be enough with the 2 params (target_language and text_to_translate). Maybe I should just implement the loop concept for this case? Test the following cases: flow -> 1. "Can you please help me to translate some text into French?" > "The sky is blue"; 2. "Please help me to translate some text" > "Into French please" > "The sky is blue"; 3. "Please translate this text into French: the sky is blue"; 4. Please translate this text "the sky is blue" > "Into French"
          *      TODO NEXT 2025-07-30: continue to rebuild the translator-poc skill. Need to implement the flow and think carefully about the whole set_up answers system, etc.
          *      TODO NEXT 2025-07-23: rebuild the "good_bye", "partner_assistant", "color" and "translator-poc" skills
-         *      TODO NEXT 2025-07-29: todo list skill does not work properly. E.g. "Please add a book to my shopping list". It does not do slot filling well anymore
          *      TODO NEXT 2025-07-18: copy translator-poc skill (do this later since it involves the loop concept), handle dialog action logic. Need to handle the "locales/{lang}.json" structure first since it's based on the answers
          *      TODO NEXT 2025-08-03: fix bridge main.py with optional params (params and params_helper), e.g. with partner assistant action
+         *      TODO NEXT 2025-08-25: when in a loop, waiting for arg, just send an utterance that cannot be recognized such as "blabla" -> handle this case
+         *      Delete global-resolvers since we rely on LLM action args and slot filling now
+         *      Implement personality via the paraphrase duty? Switch to another model?
          *      In fetch-widget/get.ts, need to execute new brain method; and replace "currentEntities", "classification" with the new structure
          *      Delete or refactor the chunks where there are "TODO: core rewrite" comments
          *      Rename all Python actions from "run.py" to actual action name, e.g. "greet.py", etc. Because with the LLM approach we need to provide better meaningful names for the actions
@@ -449,7 +458,6 @@ export default class LLMManager {
          *      [ok] Implement slot filling duty > missing params > conversation state
          *      Research (redevelop next_action?) and create resolver duty / loop in skills (guess the number, rochambeau, MBTI test, etc.)
          *      If action is not found, then fallback to a duty for chitchat/help with Leon's personality
-         *      If a skill only has one action, then directly execute it after the skill router duty (no need to go through the action calling duty)
          *      Implement toolkits and tools (E.g. weather toolkit (folder) > several providers (each provider is a tool class, they must contain the same methods between each other as most as possible). Cf. MVP. And create the toolkit finder duty logic when the Leon instance includes +64 skills
          *      Create real weather skill with tools (one tool for each provider, can choose provider in skill settings)
          *      After everything is confirmed, then migrate all skills with the new configs

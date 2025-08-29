@@ -3,6 +3,7 @@ import { type ChatHistoryItem, LlamaChatSession } from 'node-llama-cpp'
 import {
   DEFAULT_EXECUTE_PARAMS,
   DEFAULT_INIT_PARAMS,
+  formatParameterDescription,
   LLMDuty,
   type LLMDutyExecuteParams,
   type LLMDutyInitParams,
@@ -137,19 +138,11 @@ export class SlotFillingLLMDuty extends LLMDuty {
     LogHelper.title(this.name)
     LogHelper.info('Executing...')
 
-    // If there is no dot at the end of the slot description, add one
-    if (this.input?.slotDescription) {
-      if (!this.input.slotDescription.trim().endsWith('.')) {
-        this.input.slotDescription = `${this.input.slotDescription.trim()}.`
-      }
-    }
-
-    /**
-     * Overriding the slot description to add more details
-     * according to the slot type
-     */
-    if (this.input?.slotType === 'boolean') {
-      this.input.slotDescription = `${this.input.slotDescription} The value must be either true or false.`
+    if (this.input?.slotType && this.input?.slotDescription) {
+      this.input.slotDescription = formatParameterDescription({
+        type: this.input?.slotType as string,
+        description: this.input?.slotDescription as string
+      })
     }
 
     try {

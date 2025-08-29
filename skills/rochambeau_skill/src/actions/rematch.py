@@ -1,23 +1,19 @@
 from bridges.python.src.sdk.leon import leon
 from bridges.python.src.sdk.types import ActionParams
+from bridges.python.src.sdk.params_helper import ParamsHelper
 
 
-def run(params: ActionParams) -> None:
+def run(_params: ActionParams, params_helper: ParamsHelper) -> None:
     """Take decision whether to do a rematch"""
 
-    resolvers = params['resolvers']
-    decision = False
+    confirmation = params_helper.get_action_argument('confirmation')
 
-    for resolver in resolvers:
-        if resolver['name'] == 'affirmation_denial':
-            decision = resolver['value']
-
-    if decision:
+    if confirmation is not None and confirmation.lower() == 'true':
         leon.answer({
             'key': 'confirm_rematch',
             'core': {
-                'isInActionLoop': False,
-                'restart': True
+                'is_in_action_loop': False,
+                'next_action': 'rochambeau_skill:set_up'
             }
         })
         return
@@ -25,6 +21,6 @@ def run(params: ActionParams) -> None:
     leon.answer({
         'key': 'deny_rematch',
         'core': {
-            'isInActionLoop': False
+            'is_in_action_loop': False
         }
     })

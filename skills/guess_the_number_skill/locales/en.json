@@ -18,6 +18,7 @@
       }
     },
     "replay": {
+      "suggestions": ["Yes please", "No thanks"],
       "answers": {
         "replay": [
           "Let's gooo!",

@@ -23,7 +23,9 @@ export const run: ActionFunction = async function (_params, paramsHelper) {
       dutyType: 'custom',
       input: prompt,
       data: {
-        systemPrompt
+        system_prompt: systemPrompt,
+        thought_tokens_budget: 0,
+        temperature: 0.2
       }
     }
   })

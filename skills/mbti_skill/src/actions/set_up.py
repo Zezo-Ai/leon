@@ -9,6 +9,7 @@ def run(params: ActionParams) -> None:
     current_question = 1
     memory.upsert_session(current_question)
 
+    leon.answer({'key': 'ready'})
     return leon.answer({
         'key': str(current_question),
         'data': {

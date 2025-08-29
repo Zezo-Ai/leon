@@ -8,6 +8,7 @@ import {
 import {
   DEFAULT_INIT_PARAMS,
   LLMDuty,
+  formatParameterDescription,
   type LLMDutyInitParams,
   type LLMDutyParams,
   type LLMDutyResult
@@ -199,13 +200,26 @@ Follow these rules exactly:
       }
 
       if (parameters) {
+        let parsedParameters = {}
+
+        // Browse all parameters to format the description
+        Object.entries(parameters).forEach(([paramName, param]) => {
+          parsedParameters = {
+            ...parsedParameters,
+            [paramName]: {
+              type: param.type,
+              description: formatParameterDescription(param)
+            }
+          }
+        })
+
         functionSchema = {
           ...functionSchema,
           // eslint-disable-next-line @typescript-eslint/ban-ts-comment
           // @ts-expect-error
           params: {
             type: 'object',
-            properties: parameters
+            properties: parsedParameters
           }
         }
       }
@@ -217,6 +231,70 @@ Follow these rules exactly:
     })
 
     return functions
+  }
+
+  /**
+   * Checks pre-LLM inference shortcuts:
+   * - If skill only has one action, and it has no parameter, returns LLMDutyResult and skips LLM inference.
+   * - If flow exists and the first action needs no parameter, returns LLMDutyResult and skips LLM inference.
+   * If none of these apply, returns true to continue with LLM inference.
+   */
+  private handlePreLLMInference(
+    actions: SkillSchema['actions'],
+    flow: SkillSchema['flow']
+  ): LLMDutyResult | true {
+    // Single action, no parameters
+    const actionNames = Object.keys(actions)
+    if (actionNames.length === 1) {
+      const [singleActionName] = actionNames
+      const singleAction = actions[singleActionName as string]
+      const hasParameters =
+        singleAction?.parameters &&
+        Object.keys(singleAction.parameters).length > 0
+
+      if (!hasParameters) {
+        // Directly return this single action as success, no arguments needed
+        return {
+          output: JSON.stringify([
+            {
+              status: ActionCallingStatus.Success,
+              name: singleActionName,
+              arguments: {}
+            }
+          ]),
+          usedInputTokens: 0,
+          usedOutputTokens: 0
+        } as unknown as LLMDutyResult
+      }
+    }
+
+    // Flow first action, no parameters
+    if (flow && Array.isArray(flow) && flow.length > 0) {
+      const [firstActionName] = flow
+      const firstAction = actions[firstActionName as string]
+
+      if (firstAction) {
+        const hasParameters =
+          firstAction.parameters &&
+          Object.keys(firstAction.parameters).length > 0
+        if (!hasParameters) {
+          return {
+            output: JSON.stringify([
+              {
+                status: ActionCallingStatus.Success,
+                name: firstActionName,
+                arguments: {}
+              }
+            ]),
+            usedInputTokens: 0,
+            usedOutputTokens: 0
+          } as unknown as LLMDutyResult
+        }
+      }
+    }
+
+    // None apply: continue with LLM inference
+    return true
   }
 
   public async init(
@@ -290,6 +368,15 @@ Follow these rules exactly:
         return null
       }
 
+      // Call pre-LLM shortcuts
+      const maybeResult = this.handlePreLLMInference(actions, flow)
+      if (maybeResult !== true) {
+        LogHelper.title(this.name)
+        LogHelper.success('Duty executed (pre-inference LLM shortcut hit)')
+        LogHelper.success(`Output — ${(maybeResult as LLMDutyResult).output}`)
+
+        return maybeResult as LLMDutyResult
+      }
       let prompt = `User Query: "${this.input}"`
 
       if (actionNotes.length > 0) {

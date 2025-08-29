@@ -32,8 +32,7 @@ def run(params: ActionParams) -> None:
                 'counter': counter
             },
             'core': {
-                'is_in_action_loop': False,
-                'showNextActionSuggestions': True
+                'is_in_action_loop': False
             }
         })
     elif number_to_guess < given_number:

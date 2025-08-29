@@ -222,15 +222,15 @@ export const skillLocaleConfigObject = Type.Strict(
                 'Missing parameter follow-ups are used to ask the owner for more information when a required parameter is missing. They are used to be customized and to guide the owner to provide the necessary information to complete the action.'
             })
           )
-        )
-        // unknown_answers: Type.Optional(Type.Array(answerTypes)),
+        ),
         // TODO: core rewrite
-        /*suggestions: Type.Optional(
+        // unknown_answers: Type.Optional(Type.Array(answerTypes)),
+        suggestions: Type.Optional(
           Type.Array(Type.String(), {
             description:
-              'Suggestions are a simple way to suggest Leon owners what can be answered next.'
+              'Suggestions are a simple way to suggest owners what can be answered next.'
           })
-        )*/
+        )
       })
     )
   })

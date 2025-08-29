@@ -129,13 +129,8 @@ export interface IntentObject {
 }
 
 export interface SkillAnswerCoreData {
-  // TODO: core rewrite - remove unused properties
-  // restart?: boolean
   is_in_action_loop?: boolean
   next_action?: string
-  // TODO: core rewrite - remove or transform to snake_case
-  showNextActionSuggestions?: boolean
-  showSuggestions?: boolean
 }
 export interface SkillAnswerOutput extends IntentObject {
   output: {

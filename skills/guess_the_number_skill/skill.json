@@ -35,8 +35,7 @@
           "description": "Whether the owner wants to play again or not."
         }
       },
-      "is_loop": true,
-      "suggestions": ["%REPLAY_YES%", "%REPLAY_NO%"]
+      "is_loop": true
     }
   }
 }
