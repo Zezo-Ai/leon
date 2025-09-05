@@ -168,13 +168,18 @@ export default class Chatbot {
       string,
       save = true,
       bubbleId,
-      isCreatingFromLoadingFeed = false
+      isCreatingFromLoadingFeed = false,
+      messageId
     } = params
     const container = document.createElement('div')
     const bubble = document.createElement('p')
 
     container.className = `bubble-container ${who}`
     bubble.className = 'bubble'
+
+    if (messageId) {
+      container.setAttribute('data-message-id', messageId)
+    }
 
     const formattedString = this.formatMessage(string)
 
@@ -221,7 +226,7 @@ export default class Chatbot {
           onFetch: parsedWidget.onFetch
         })
 
-        return
+        return container
       }
 
       widgetComponentTree = parsedWidget.componentTree
@@ -242,13 +247,13 @@ export default class Chatbot {
     }
 
     if (save) {
-      this.saveBubble(who, formattedString)
+      this.saveBubble(who, formattedString, messageId)
     }
 
     return container
   }
 
-  saveBubble(who, string) {
+  saveBubble(who, string, messageId) {
     if (!this.noBubbleMessage.classList.contains('hide')) {
       this.noBubbleMessage.classList.add('hide')
     }
@@ -257,7 +262,7 @@ export default class Chatbot {
       this.parsedBubbles.shift()
     }
 
-    this.parsedBubbles.push({ who, string })
+    this.parsedBubbles.push({ who, string, messageId })
     localStorage.setItem('bubbles', JSON.stringify(this.parsedBubbles))
     this.scrollDown()
   }
@@ -268,5 +273,32 @@ export default class Chatbot {
     }
 
     return message
+  }
+
+  replaceMessage(replaceMessageId, newData) {
+    const existingBubble = document.querySelector(
+      `[data-message-id="${replaceMessageId}"]`
+    )
+
+    if (existingBubble) {
+      existingBubble.remove()
+
+      const bubbleIndex = this.parsedBubbles.findIndex(
+        (bubble) => bubble.messageId === replaceMessageId
+      )
+      if (bubbleIndex !== -1) {
+        this.parsedBubbles.splice(bubbleIndex, 1)
+      }
+    }
+
+    const widgetString =
+      typeof newData === 'string' ? newData : JSON.stringify(newData)
+
+    this.createBubble({
+      who: 'leon',
+      string: widgetString,
+      save: false,
+      messageId: replaceMessageId
+    })
   }
 }

@@ -127,26 +127,37 @@ export class LogicActionSkillHandler {
     LogHelper.info(JSON.stringify(skillAnswer))
 
     /**
+     * Handle widget answers
+     *
      * Verify the brain is not muted since when we fetch widgets we should
      * not speak the answers
      */
     if (skillAnswer.output.widget && !BRAIN.isMuted) {
       try {
-        SOCKET_SERVER.socket?.emit(
-          'widget',
-          JSON.stringify(skillAnswer.output.widget)
-        )
+        /**
+         * Send widget data with replaceMessageId (to target the same message id for the client).
+         * Useful for a progress report, etc.
+         */
+        const answerData = {
+          ...skillAnswer.output.widget,
+          replaceMessageId: skillAnswer.output.replaceMessageId || null
+        }
+
+        SOCKET_SERVER.socket?.emit('answer', answerData)
       } catch (e) {
         LogHelper.title('Brain')
         LogHelper.error(
           `Failed to send widget. Widget output is not well formatted: ${e}`
         )
       }
-    }
-
-    const { answer } = skillAnswer.output
-    if (answer && !BRAIN.isMuted) {
-      BRAIN.talk(answer, true)
+    } else {
+      /**
+       * Handle non-widget answers
+       */
+      const { answer } = skillAnswer.output
+      if (answer && !BRAIN.isMuted) {
+        BRAIN.talk(answer, true)
+      }
     }
   }
 

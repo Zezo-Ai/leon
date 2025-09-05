@@ -23,8 +23,10 @@ debug.log
 .last-skill-npm-install
 leon.json
 bridges/python/src/Pipfile.lock
+bridges/toolkits/**/*
 tcp_server/src/Pipfile.lock
 !tcp_server/**/.gitkeep
+!bridges/toolkits/**/.gitkeep
 !bridges/python/**/.gitkeep
 !bridges/nodejs/**/.gitkeep
 !**/*.sample*

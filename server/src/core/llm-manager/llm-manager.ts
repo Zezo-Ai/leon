@@ -366,6 +366,53 @@ export default class LLMManager {
 
         /**
          * TODO now:
+         *
+         * TODO NEXT: A. Create Video Translator Skill to validate the toolkits -> tools architecture
+         *  - Create tools architecture (cf. https://aistudio.google.com/prompts/1bwCCE3G247Ja3cR18vdd-K9Sji9F6-xY):
+         *    - [ok] For toolkit binaries, make sure to download a fix version
+         *    - [ok] No need for HTTP service for tools because it adds too much complexity
+         *    - [ok] Create ffmpeg tool -> extract_audio
+         *    - [ok] Create yt-dlp tool -> download_video
+         *    - 2025-09-04: find a way to make tools report progress to actions without they become error messages for the brain child process
+         *      - Also, implement built-in functions, such as when executing child process: also automatically report which command is being executed (leon.answer())
+         *      - Since we spawn new processes, we need to make sure to kill them properly once done, otherwise we'll have zombie processes
+         *      - Instead of console.log() in base-tool, make use of leon.answer()
+         *      - Once done for TypeScript, rewrite it for the Python SDK (base-tool.ts, leon.ts (for replaceMessageId)
+         *    - Create whisper_faster -> transcribe
+         *    - Create pyannote tool -> diarize
+         *    - Create gladia tool -> transcribe; diarize
+         *    - E.g. Summarize the keypoints of this video... (yt-dlp download subtitles, llm gemini 2.5 pro summarize): Create openrouter, localllm tools (use HTTP to request core, hence need to implement openrouter in core) -> prompt (for general purpose)
+         *    - Create elevenlabs tool -> synthesize; transcribe; clone; diarize
+         *    - Rule: a tool cannot call another tool, otherwise this becomes a skill action
+         *    - Create Transcriber skill (allow provider selection from settings (asr; diarization))
+         *      - action 1: transcribe_without_diarization
+         *      - action 2: transcribe_with_diarization (call whisper_faster (or cloud tool according to given settings) + pyannote (or cloud tool according to given settings) tools)
+         *      - ...
+         *      - Does it means we need to allow to execute a skill action from another skill action? In the "flow" (skill.json) and "next_action" (action code)
+         *    - Create LearningVideoCreator (find a better name) skill (based on what I did for my YT channel)
+         *
+         *    - Create one pipenv project for each binary; one .spec file for each binary; one github workflow for each binary; common pyinstaller at the root for /tool_bins/
+         *    - For every binary, need to have another tool from cloud service (e.g. 11Labs, etc.) so owners that don't have powerful-enough hardware can use cloud services instead
+         *    - With auto binary/model download if it is a requirement and not downloaded yet; output to the owner that it is downloading the binary/model
+         *    - Cf. https://chatgpt.com/c/68b5c2c6-ec88-832f-aa44-3b7ada3171a3 -> For projects that aren't already compiled (Pyannote, WhisperX, etc.), need to compile them ourselves via GitHub Actions + Pyinstaller or cx_freeze. Keep compile setup files in /tool_bins/ folder. E.g. /tool_bins/whisperx/setup.py, /tool_bins/whisperx/whisperx, etc.
+         *    - Tool settings OR use skill settings? (OpenRouter API key, etc.)
+         * TODO NEXT: B. Then create a Skill Writer skill where Leon can write a skill > actions by himself based on examples and given owner query (e.g. to_do list, video translator, etc.) and current architecture. Leon can also write tools by himself. If a skill is not found, then we can fallback so Leon can suggest to develop a skill for the owner
+         * TODO NEXT: C. Create the autonomous mode where we give the tools directly to Leon (ReAct).
+         * TODO: main goal with A, B, C:
+         *  - A: we have a clear breakdown of the atomic structure: skills > actions > toolkits > tools > functions
+         *  - B: Leon can write skills and tools by himself (useful when it is a common scenario and that it just needs to be executed and needs to be reliable)
+         *  - C: Leon can use the tools directly to achieve the owner's goals and if the necessary tool isn't found, Leon can suggest to develop one for the owner (B.)
+         * Tools:
+         * - video_streaming
+         *  - yt-dlp
+         *  - ffmpeg
+         * - music_audio
+         *  - pyannote
+         *  - whisperx
+         * - communication (for LLM translation)
+         *  - openrouter
+         *
+         * ---
          * [ok] 1. Dynamic context size (min and max) according to every LLM duty. If LLM duty does not have a specific context size, use the default one.
          *  To do this, hold a contextSize manager state in LLM Manager for every duty and set it from LLM manager. e.g. SkillRouterLLMDuty.contextSize = xxx, because LLM Manager isn't initialized yet.
          *  Use CORE_LLM_DUTIES and loop in, create a "new Set"?
@@ -414,7 +461,7 @@ export default class LLMManager {
          *      [ok] Try: if in loop and send not-relevant utterance, see what happens, need to clean up?
          *      [ok] Handle suggestions (Aurora component)
          *      [ok] In action calling, if there is a flow and the first action of the flow does not need any argument then directly return the response without going through the LLM inference
-                [ok] If a skill only has one action that require no parameters, then directly execute it after the skill router duty (no need to go through the action calling duty)
+         [ok] If a skill only has one action that require no parameters, then directly execute it after the skill router duty (no need to go through the action calling duty)
          *      [ok] MBTI skill: don't use config.json for questions, use answers + fix disposable timer
          *      [ok] For custom duties in skills, optimize the memory so it won't always reload the context, etc. Cf. MBTI skill and translation. To optimize: provide default disposeTimeout and as param too, once timed out, it will clean up the context and dispose the sequence. In this way, actions hitting the same custom duty within the time window will hit the same context and sequence so the inference will be faster.
          *      [ok] Rebuild MBTI skill with custom LLM duty request to resolve form questions
@@ -427,7 +474,7 @@ export default class LLMManager {
          *      TODO NEXT 2025-08-25: when in a loop, waiting for arg, just send an utterance that cannot be recognized such as "blabla" -> handle this case
          *      Delete global-resolvers since we rely on LLM action args and slot filling now
          *      Implement personality via the paraphrase duty? Switch to another model?
-         *      In fetch-widget/get.ts, need to execute new brain method; and replace "currentEntities", "classification" with the new structure
+         *      [ok] In fetch-widget/get.ts, need to execute new brain method; and replace "currentEntities", "classification" with the new structure
          *      Delete or refactor the chunks where there are "TODO: core rewrite" comments
          *      Rename all Python actions from "run.py" to actual action name, e.g. "greet.py", etc. Because with the LLM approach we need to provide better meaningful names for the actions
          *      Replace "%owner_name%" placeholder with {{ owner_name }} syntax in skill answers and all generic answers (e.g. %skill_name%, etc.); check "wernicke(" calls
@@ -437,13 +484,13 @@ export default class LLMManager {
          *      Build bridges + rewrite all skills with the new params
          *      Remove "next_action" and implement "flow" (skill schema, get first action of the flow and ignore all other actions within the flow)
          *      Replace "getSkillConfig", etc. helpers from SkillDomainHelper with new helpers + rename SkillDomainHelper to SkillHelper
-         *      Handle "is_loop"
+         *      [ok] Handle "is_loop"
          *      Delete all "config" folders in skills, and replace with "locales/{lang}.json" files
          *      Should delete legacy code?
          *      Make sure telemetry is working well with the new core
          *      Guess The Number skill: rework on loop logic (create "resolving" duty for very custom inputs, cf. MBTI?)
          *      Rochambeau skill
-         *      Rework the MBTI skill with resolver skill. Once done, from there we can consider the rewrite of the core as nearly completed
+         *      [ok] Rework the MBTI skill with resolver skill. Once done, from there we can consider the rewrite of the core as nearly completed
          *      Check suggestions. Already done with widgets before? Need to check previous progress in Trello cards
          *        - Re-enable them from brain.ts, search for "// Send suggestions to the client"
          *      "dialog" skill type: rework it with new core. It is a good solution for Q&A. E.g. specific knowledge base, etc. Create a dialog skill for Leon itself about general questions (what it can do, why Leon has been created, who created Leon, when was the last update, how to develop new skill, how to contribute, some Easter eggs, etc.)
@@ -454,9 +501,9 @@ export default class LLMManager {
          *      Create new structure tools in bridges with skills folder; remove domains (no need to implement tools for now)
          *      Create the fake weather skill (implement tools)
          *      Implement locales/{lang}.json in skills with new properties, and dynamic translation %PLACEHOLDER%
-         *      (PLAN CHANGED, DO NOT DO THIS) -> Implement config/{lang}.json in skills with new properties (cf. Trello card description)
+         *      [ok] (PLAN CHANGED, DO NOT DO THIS) -> Implement config/{lang}.json in skills with new properties (cf. Trello card description)
          *      [ok] Implement slot filling duty > missing params > conversation state
-         *      Research (redevelop next_action?) and create resolver duty / loop in skills (guess the number, rochambeau, MBTI test, etc.)
+         *      [ok] Research (redevelop next_action?) and create resolver duty / loop in skills (guess the number, rochambeau, MBTI test, etc.)
          *      If action is not found, then fallback to a duty for chitchat/help with Leon's personality
          *      Implement toolkits and tools (E.g. weather toolkit (folder) > several providers (each provider is a tool class, they must contain the same methods between each other as most as possible). Cf. MVP. And create the toolkit finder duty logic when the Leon instance includes +64 skills
          *      Create real weather skill with tools (one tool for each provider, can choose provider in skill settings)

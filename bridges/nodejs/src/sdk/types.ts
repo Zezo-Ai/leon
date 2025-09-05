@@ -29,6 +29,7 @@ export interface Answer {
   widget?: Widget
   data?: AnswerData
   core?: SkillAnswerCoreData
+  replaceMessageId?: string | null
 }
 export interface TextAnswer extends Answer {
   key: string
@@ -38,6 +39,6 @@ export interface WidgetAnswer extends Answer {
   key?: string
 }
 export type AnswerData = Record<string, string | number> | null
-export type AnswerInput = TextAnswer | WidgetAnswer
+export type AnswerInput = TextAnswer | WidgetAnswer | Answer
 export type AnswerOutput = SkillAnswerOutput
 export type AnswerConfig = SkillAnswerConfigSchema

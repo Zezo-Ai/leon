@@ -29,6 +29,7 @@ export interface SkillResult {
     core: SkillAnswerCoreData | undefined
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     options: Record<string, any>
+    replaceMessageId?: string | null
     widget?: {
       componentTree: WidgetWrapper
       supportedEvents: typeof SUPPORTED_WIDGET_EVENTS
@@ -137,6 +138,7 @@ export interface SkillAnswerOutput extends IntentObject {
     codes: string
     answer: SkillAnswerConfigSchema
     core?: SkillAnswerCoreData
+    replaceMessageId?: string | null
     widget?: {
       actionName: string
       widget: string

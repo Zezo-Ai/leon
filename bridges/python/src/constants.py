@@ -13,6 +13,12 @@ SKILLS_ROOT_PATH = os.path.join(
     os.getcwd(),
     'skills'
 )
+BRIDGES_PATH = os.path.join(
+    os.getcwd(),
+    'bridges'
+)
+
+TOOLKITS_PATH = os.path.join(BRIDGES_PATH, 'toolkits')
 
 SKILL_PATH = os.path.join(
     SKILLS_ROOT_PATH,

@@ -141,6 +141,32 @@ export default class Client {
       this._isLeonGeneratingAnswer = false
 
       /**
+       * Handle message replacement if replaceMessageId is provided
+       */
+      if (data.replaceMessageId) {
+        this.chatbot.replaceMessage(data.replaceMessageId, data)
+
+        return
+      }
+
+      /**
+       * Handle widget data directly
+       */
+      if (data.widget || data.componentTree) {
+        // Pass the entire widget data as JSON string for chatbot.js to handle
+        const widgetString =
+          typeof data === 'string' ? data : JSON.stringify(data)
+
+        this.chatbot.createBubble({
+          who: 'leon',
+          string: widgetString,
+          messageId: data.widget?.id || data.id || `msg-${Date.now()}`
+        })
+
+        return
+      }
+
+      /**
        * Just save the bubble if the newest bubble is from the streaming.
        * Otherwise, create a new bubble
        */
@@ -186,13 +212,6 @@ export default class Client {
       this.send('utterance')
 
       cb('string-received')
-    })
-
-    this.socket.on('widget', (data) => {
-      this.chatbot.createBubble({
-        who: 'leon',
-        string: data
-      })
     })
 
     this.socket.on('widget-send-utterance', (utterance) => {

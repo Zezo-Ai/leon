@@ -103,8 +103,9 @@ class Leon {
    * @example answer({ key: 'greet' }) // 'Hello world'
    * @example answer({ key: 'welcome', data: { name: 'Louis' } }) // 'Welcome Louis'
    * @example answer({ key: 'confirm', core: { next_action: 'guess_the_number_skill:set_up' } }) // 'Would you like to retry?'
+   * @example answer({ key: 'progress', data: { percentage: 50 }, replaceMessageId: 'progress_msg_123' }) // Replace previous progress message
    */
-  public async answer(answerInput: AnswerInput): Promise<void> {
+  public async answer(answerInput: AnswerInput): Promise<string | null> {
     try {
       const answerObject: AnswerOutput = {
         ...INTENT_OBJECT,
@@ -117,7 +118,8 @@ class Leon {
             answerInput.key != null
               ? this.setAnswerData(answerInput.key, answerInput.data)
               : '',
-          core: answerInput.core
+          core: answerInput.core,
+          replaceMessageId: answerInput.replaceMessageId || null
         }
       }
 
@@ -140,8 +142,16 @@ class Leon {
 
       // Write the answer object to stdout as a JSON string with a newline for brain chunk-by-chunk parsing
       process.stdout.write(JSON.stringify(answerObject) + '\n')
+
+      // Return the message ID for future replacement
+      return (
+        answerInput.widget?.id ||
+        `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+      )
     } catch (e) {
       console.error('Error while creating answer:', e)
+
+      return null
     }
   }
 }

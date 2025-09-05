@@ -19,6 +19,8 @@ const NODEJS_BRIDGE_VERSION_FILE_PATH = path.join(
   'version.ts'
 )
 
+export const TOOLKITS_PATH = path.join(BRIDGES_PATH, 'toolkits')
+
 export const [, NODEJS_BRIDGE_VERSION] = fs
   .readFileSync(NODEJS_BRIDGE_VERSION_FILE_PATH, 'utf8')
   .split("'")

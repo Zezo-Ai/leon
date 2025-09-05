@@ -1,12 +1,11 @@
 import type { ActionFunction } from '@sdk/types'
 import { leon } from '@sdk/leon'
-import { getWidgetId } from '@sdk/toolbox'
 
 import { TimerWidget } from '../widgets/timer-widget'
 import { getTimerMemoryByWidgetId, getNewestTimerMemory } from '../lib/memory'
 
-export const run: ActionFunction = async function () {
-  const widgetId = getWidgetId()
+export const run: ActionFunction = async function (_params, paramsHelper) {
+  const widgetId = paramsHelper.getWidgetId()
   const timerMemory = widgetId
     ? await getTimerMemoryByWidgetId(widgetId)
     : await getNewestTimerMemory()

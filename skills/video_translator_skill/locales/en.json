@@ -1,0 +1,91 @@
+{
+  "$schema": "../../../schemas/skill-schemas/skill-locale-config.json",
+  "actions": {
+    "download_video": {
+      "missing_param_follow_ups": {
+        "video_url": [
+          "Please provide the URL of the video you want to translate.",
+          "What video URL would you like me to download for translation?"
+        ],
+        "target_language": [
+          "What language would you like to translate the video into?",
+          "Please specify the target language for translation (e.g., Chinese, Spanish, French)."
+        ]
+      },
+      "answers": {
+        "download_started": [
+          "I'm downloading the video from {{ video_url }} in {{ quality }} quality for translation to {{ target_language }}. This may take a moment...",
+          "Starting video download for {{ target_language }} translation..."
+        ],
+        "download_progress": [
+          "📥 Downloading... {{ percentage }}% complete{{ speed ? ' (' + speed + ')' : '' }}{{ eta ? ' - ETA: ' + eta : '' }}",
+          "⬇️ Download progress: {{ percentage }}%{{ size ? ' of ' + size : '' }}{{ speed ? ' at ' + speed : '' }}"
+        ],
+        "download_completed": [
+          "✅ Video downloaded successfully! File size: {{ file_size }}. Ready to process for {{ target_language }} translation.",
+          "Download complete! The video ({{ file_size }}) is ready for {{ target_language }} translation processing."
+        ],
+        "download_failed": [
+          "❌ Failed to download the video from {{ video_url }}. Error: {{ error }}",
+          "Sorry, I couldn't download the video. Please check if the URL is valid and accessible."
+        ],
+        "download_error": [
+          "❌ An error occurred while downloading: {{ error }}",
+          "There was a problem downloading the video from {{ video_url }}: {{ error }}"
+        ],
+        "ready_for_processing": [
+          "🎯 Video is ready! Next step: extract audio for {{ target_language }} translation. You can use the 'extract_audio' action.",
+          "The video is downloaded and ready. Use 'extract_audio' to prepare it for {{ target_language }} translation."
+        ]
+      }
+    },
+    "extract_audio": {
+      "missing_param_follow_ups": {
+        "video_path": [
+          "Please provide the path to the video file from which to extract audio.",
+          "What video file would you like me to extract audio from?"
+        ],
+        "target_language": [
+          "What language are you translating to?",
+          "Please specify the target language for translation (e.g., Chinese, Spanish, French)."
+        ]
+      },
+      "answers": {
+        "video_file_not_found": [
+          "❌ I couldn't find the video file at {{ video_path }}. Please check the file path.",
+          "The specified video file doesn't exist or is not accessible."
+        ],
+        "extraction_started": [
+          "🎵 Extracting audio from {{ video_path }} ({{ video_size }}) in {{ audio_format }} format for {{ target_language }} translation...",
+          "Starting audio extraction for {{ target_language }} translation processing..."
+        ],
+        "extraction_completed": [
+          "✅ Audio extracted successfully! Output: {{ audio_size }} {{ audio_format }} file ready for {{ target_language }} translation.",
+          "Audio extraction complete! The {{ audio_format }} file ({{ audio_size }}) is ready for {{ target_language }} translation."
+        ],
+        "extraction_failed": [
+          "❌ Failed to extract audio from {{ video_path }}. Error: {{ error }}",
+          "Sorry, I couldn't extract the audio. Please check if the video file is valid."
+        ],
+        "extraction_error": [
+          "❌ An error occurred during audio extraction: {{ error }}",
+          "There was a problem extracting audio from {{ video_path }}: {{ error }}"
+        ],
+        "ready_for_translation": [
+          "🌐 Audio extraction complete! The {{ audio_path }} file is ready for {{ target_language }} translation processing.",
+          "Audio is ready for {{ target_language }} translation. Next step: {{ next_step }}"
+        ]
+      }
+    }
+  },
+  "common_answers": {
+    "processing_started": [
+      "🚀 Starting video translation workflow for {{ target_language }}...",
+      "Beginning video translation process to {{ target_language }}."
+    ],
+    "workflow_info": [
+      "📋 Video Translation Workflow: 1) Download video → 2) Extract audio → 3) Translation processing",
+      "This skill prepares videos for translation by downloading and extracting audio content."
+    ]
+  }
+}
