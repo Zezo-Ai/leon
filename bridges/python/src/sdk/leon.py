@@ -4,6 +4,7 @@ from typing import Union, Dict, Any, Optional
 from time import sleep
 import json
 import time
+import os
 
 from .aurora.widget_wrapper import WidgetWrapper
 from .types import AnswerInput, AnswerData, AnswerConfig
@@ -13,10 +14,26 @@ from ..constants import SKILL_LOCALE_CONFIG, INTENT_OBJECT
 
 class Leon:
     instance: 'Leon' = None
+    global_answers: Dict[str, Any] = {}
 
     def __init__(self) -> None:
         if not Leon.instance:
             Leon.instance = self
+            self._load_global_answers()
+
+    def _load_global_answers(self) -> None:
+        """Load global answers from core data directory"""
+        try:
+            lang = INTENT_OBJECT.get('lang', 'en')
+            answers_path = os.path.join(os.getcwd(), 'core', 'data', lang, 'answers.json')
+
+            if os.path.exists(answers_path):
+                with open(answers_path, 'r', encoding='utf-8') as f:
+                    answers_data = json.load(f)
+                    Leon.global_answers = answers_data.get('answers', {})
+        except Exception as e:
+            print(f"Warning: Could not load global answers: {e}")
+            Leon.global_answers = {}
 
     @staticmethod
     def _inject_variables(answer: AnswerConfig, data_to_inject: Union[Dict[str, Any], None]) -> AnswerConfig:
@@ -42,9 +59,12 @@ class Leon:
         :param data: The data to apply
         """
         try:
-            # Prioritize skill-specific answers, then fall back to common answers
-            answers_config = SKILL_LOCALE_CONFIG.get('answers', {}).get(answer_key) or \
-                             SKILL_LOCALE_CONFIG.get('common_answers', {}).get(answer_key)
+            # Prioritize skill-specific answers, then fall back to common answers, then global answers
+            answers_config = (
+                SKILL_LOCALE_CONFIG.get('answers', {}).get(answer_key) or
+                SKILL_LOCALE_CONFIG.get('common_answers', {}).get(answer_key) or
+                Leon.global_answers.get(answer_key)
+            )
 
             # In case the answer key is not found or is a raw answer
             if not answers_config:

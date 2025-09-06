@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
 import type {
   AnswerData,
   AnswerInput,
@@ -10,6 +13,18 @@ import { SUPPORTED_WIDGET_EVENTS } from '@sdk/widget-component'
 
 class Leon {
   private static instance: Leon
+  private static globalAnswers = JSON.parse(
+    fs.readFileSync(
+      path.join(
+        process.cwd(),
+        'core',
+        'data',
+        INTENT_OBJECT.lang,
+        'answers.json'
+      ),
+      'utf8'
+    )
+  ).answers
 
   constructor() {
     if (!Leon.instance) {
@@ -76,7 +91,8 @@ class Leon {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-expect-error
         SKILL_LOCALE_CONFIG.answers?.[answerKey] ??
-        SKILL_LOCALE_CONFIG.common_answers?.[answerKey]
+        SKILL_LOCALE_CONFIG.common_answers?.[answerKey] ??
+        Leon.globalAnswers?.[answerKey]
 
       if (!answers) {
         return answerKey

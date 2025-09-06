@@ -7,6 +7,7 @@ import axios from 'axios'
 import { TOOLKITS_PATH } from '@bridge/constants'
 import { ToolkitConfig } from '@sdk/toolkit-config'
 import { isWindows, isMacOS } from '@sdk/utils'
+import { leon } from '@sdk/leon'
 
 // Progress callback type for reporting tool progress
 export type ProgressCallback = (progress: {
@@ -42,7 +43,20 @@ export abstract class Tool {
     const config = ToolkitConfig.load(this.toolkit, toolConfigName)
     const binaryUrl = ToolkitConfig.getBinaryUrl(config)
 
+    await leon.answer({
+      key: 'bridges.tools.checking_binary',
+      data: {
+        binary_name: binaryName
+      }
+    })
+
     if (!binaryUrl) {
+      await leon.answer({
+        key: 'bridges.tools.no_binary_url',
+        data: {
+          binary_name: binaryName
+        }
+      })
       throw new Error(`No download URL found for binary '${binaryName}'`)
     }
 
@@ -58,6 +72,12 @@ export abstract class Tool {
 
     // Ensure toolkit bins directory exists
     if (!fs.existsSync(binsPath)) {
+      await leon.answer({
+        key: 'bridges.tools.creating_bins_directory',
+        data: {
+          toolkit: this.toolkit
+        }
+      })
       fs.mkdirSync(binsPath, { recursive: true })
     }
 
@@ -73,8 +93,21 @@ export abstract class Tool {
      * so it could not chmod correctly earlier
      */
     if (!isWindows()) {
+      await leon.answer({
+        key: 'bridges.tools.applying_permissions',
+        data: {
+          binary_name: binaryName
+        }
+      })
       fs.chmodSync(binaryPath, 0o755)
     }
+
+    await leon.answer({
+      key: 'bridges.tools.binary_ready',
+      data: {
+        binary_name: binaryName
+      }
+    })
 
     return binaryPath
   }
@@ -91,12 +124,30 @@ export abstract class Tool {
       const binsPath = path.join(TOOLKITS_PATH, this.toolkit, 'bins')
       const binaryPath = path.join(binsPath, executable)
 
-      console.log(`${binaryName} binary not found. Downloading...`)
+      await leon.answer({
+        key: 'bridges.tools.binary_not_found',
+        data: {
+          binary_name: binaryName
+        }
+      })
+
       await this.downloadBinary(binaryUrl, binaryPath)
-      console.log(`${binaryName} binary downloaded successfully`)
+
+      await leon.answer({
+        key: 'bridges.tools.binary_downloaded',
+        data: {
+          binary_name: binaryName
+        }
+      })
 
       // Make binary executable (Unix systems)
       if (!isWindows()) {
+        await leon.answer({
+          key: 'bridges.tools.making_executable',
+          data: {
+            binary_name: binaryName
+          }
+        })
         fs.chmodSync(binaryPath, 0o755)
       }
 
@@ -105,6 +156,13 @@ export abstract class Tool {
         await this.removeQuarantineAttribute(binaryPath)
       }
     } catch (error) {
+      await leon.answer({
+        key: 'bridges.tools.download_failed',
+        data: {
+          binary_name: binaryName,
+          error: (error as Error).message
+        }
+      })
       throw new Error(
         `Failed to download binary '${binaryName}': ${(error as Error).message}`
       )
@@ -116,10 +174,20 @@ export abstract class Tool {
    */
   private async downloadBinary(url: string, outputPath: string): Promise<void> {
     try {
+      await leon.answer({
+        key: 'bridges.tools.downloading_from_url'
+      })
+
       const response = await axios.get(url, { responseType: 'arraybuffer' })
 
       fs.writeFileSync(outputPath, response.data)
     } catch (error) {
+      await leon.answer({
+        key: 'bridges.tools.download_url_failed',
+        data: {
+          error: (error as Error).message
+        }
+      })
       throw new Error(`Failed to download binary: ${(error as Error).message}`)
     }
   }
@@ -128,44 +196,64 @@ export abstract class Tool {
    * Remove macOS quarantine attribute to prevent Gatekeeper blocking
    */
   private async removeQuarantineAttribute(filePath: string): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
       try {
+        const command = `xattr -d com.apple.quarantine "${filePath}"`
+
+        await leon.answer({
+          key: 'bridges.tools.removing_quarantine',
+          data: {
+            command
+          }
+        })
         // Use xattr to remove the com.apple.quarantine extended attribute
         const xattr = spawn('xattr', ['-d', 'com.apple.quarantine', filePath])
 
-        xattr.on('close', (code) => {
+        xattr.on('close', async (code) => {
           if (code === 0) {
-            console.log(
-              `Removed quarantine attribute from ${path.basename(filePath)}`
-            )
+            await leon.answer({
+              key: 'bridges.tools.quarantine_removed',
+              data: {
+                file_name: path.basename(filePath)
+              }
+            })
           } else {
             // Don't fail the entire process if quarantine removal fails
-            console.log(
-              `Warning: Could not remove quarantine attribute from ${path.basename(
-                filePath
-              )} (exit code: ${code})`
-            )
+            await leon.answer({
+              key: 'bridges.tools.quarantine_warning',
+              data: {
+                file_name: path.basename(filePath),
+                exit_code: code?.toString() ?? 'unknown'
+              }
+            })
           }
+
           resolve()
         })
 
-        xattr.on('error', (error) => {
+        xattr.on('error', async (error) => {
           // Don't fail the entire process if quarantine removal fails
-          console.log(
-            `Warning: Could not remove quarantine attribute from ${path.basename(
-              filePath
-            )}: ${error.message}`
-          )
+          await leon.answer({
+            key: 'bridges.tools.quarantine_error',
+            data: {
+              file_name: path.basename(filePath),
+              error: error.message
+            }
+          })
+
           resolve()
         })
       } catch (error) {
         // Don't fail the entire process if quarantine removal fails
-        console.log(
-          `Warning: Could not remove quarantine attribute from ${path.basename(
-            filePath
-          )}: ${(error as Error).message}`
-        )
-        resolve()
+        leon
+          .answer({
+            key: 'bridges.tools.quarantine_exception',
+            data: {
+              file_name: path.basename(filePath),
+              error: (error as Error).message
+            }
+          })
+          .then(() => resolve())
       }
     })
   }

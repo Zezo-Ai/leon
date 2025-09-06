@@ -633,7 +633,7 @@ export default class NLU {
     if (!BRAIN.isMuted) {
       await BRAIN.talk(
         `${BRAIN.wernicke('ask_for_action_missing_parameters', '', {
-          '%missing_param%': formattedFirstParam
+          '{{ missing_param }}': formattedFirstParam
         })}.`,
         true
       )
