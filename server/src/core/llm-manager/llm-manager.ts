@@ -381,11 +381,11 @@ export default class LLMManager {
          *      - [ok] Instead of console.log() in base-tool, make use of leon.answer()
          *      - [ok] Once done for TypeScript, rewrite it for the Python SDK (base-tool.ts, leon.ts (for replaceMessageId)
          *    - [ok] Implement special UI for tools report (command outputs, etc.)
-         *    - In the report UI, be able to display output in real-time (e.g. ffmpeg command output)
          *    - [ok] Create bash tool -> execute_command (+ shell skill that can run commands on the host based on remote LLM)
          *    - Create whisper_faster -> transcribe
          *    - Create pyannote tool -> diarize
          *    - Create gladia tool -> transcribe; diarize
+         *    - Can create one skill per action we already use in previous skills (VideoDownloader, AudioExtractor, etc.) with only one action per skill. And reuse the widgets somehow from the VideoTranslator skill
          *    - E.g. Summarize the keypoints of this video... (yt-dlp download subtitles, llm gemini 2.5 pro summarize): Create openrouter, localllm tools (use HTTP to request core, hence need to implement openrouter in core) -> prompt (for general purpose)
          *    - Create elevenlabs tool -> synthesize; transcribe; clone; diarize
          *    - Rule: a tool cannot call another tool, otherwise this becomes a skill action
