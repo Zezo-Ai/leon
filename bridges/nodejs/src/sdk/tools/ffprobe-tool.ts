@@ -1,5 +1,3 @@
-import { execSync } from 'node:child_process'
-
 import { Tool } from '@sdk/base-tool'
 import { ToolkitConfig } from '@sdk/toolkit-config'
 
@@ -88,16 +86,20 @@ export default class FfprobeTool extends Tool {
    */
   async getMediaFormatInfo(filePath: string): Promise<MediaFormatInfo> {
     try {
-      const ffprobePath = await this.getBinaryPath('ffprobe') // Auto-downloads if needed
+      const result = await this.executeCommand({
+        binaryName: 'ffprobe',
+        args: [
+          '-v',
+          'quiet',
+          '-print_format',
+          'json',
+          '-show_format',
+          filePath
+        ],
+        options: { sync: true }
+      })
 
-      const result = execSync(
-        `"${ffprobePath}" -v quiet -print_format json -show_format "${filePath}"`,
-        {
-          encoding: 'utf8'
-        }
-      )
-
-      const data = JSON.parse(result as string)
+      const data = JSON.parse(result)
       const formatData = data.format || {}
 
       return {
@@ -126,16 +128,20 @@ export default class FfprobeTool extends Tool {
    */
   async listStreams(filePath: string): Promise<StreamInfo[]> {
     try {
-      const ffprobePath = await this.getBinaryPath('ffprobe') // Auto-downloads if needed
+      const result = await this.executeCommand({
+        binaryName: 'ffprobe',
+        args: [
+          '-v',
+          'quiet',
+          '-print_format',
+          'json',
+          '-show_streams',
+          filePath
+        ],
+        options: { sync: true }
+      })
 
-      const result = execSync(
-        `"${ffprobePath}" -v quiet -print_format json -show_streams "${filePath}"`,
-        {
-          encoding: 'utf8'
-        }
-      )
-
-      const data = JSON.parse(result as string)
+      const data = JSON.parse(result)
       const streamsData = data.streams || []
 
       return streamsData.map(
@@ -197,18 +203,26 @@ export default class FfprobeTool extends Tool {
    */
   async countFrames(filePath: string): Promise<number> {
     try {
-      const ffprobePath = await this.getBinaryPath('ffprobe') // Auto-downloads if needed
-
       try {
         // Try to get nb_frames first
-        const result = execSync(
-          `"${ffprobePath}" -v error -select_streams v:0 -count_frames -show_entries stream=nb_frames -of csv=p=0 "${filePath}"`,
-          {
-            encoding: 'utf8'
-          }
-        )
+        const result = await this.executeCommand({
+          binaryName: 'ffprobe',
+          args: [
+            '-v',
+            'error',
+            '-select_streams',
+            'v:0',
+            '-count_frames',
+            '-show_entries',
+            'stream=nb_frames',
+            '-of',
+            'csv=p=0',
+            filePath
+          ],
+          options: { sync: true }
+        })
 
-        const frameCountStr = (result as string).trim()
+        const frameCountStr = result.trim()
         if (frameCountStr && frameCountStr !== 'N/A') {
           return parseInt(frameCountStr, 10)
         }
@@ -217,14 +231,23 @@ export default class FfprobeTool extends Tool {
       }
 
       // Fallback: count frames manually if nb_frames is not available
-      const result = execSync(
-        `"${ffprobePath}" -v error -select_streams v:0 -show_entries frame=n -of csv=p=0 "${filePath}"`,
-        {
-          encoding: 'utf8'
-        }
-      )
+      const result = await this.executeCommand({
+        binaryName: 'ffprobe',
+        args: [
+          '-v',
+          'error',
+          '-select_streams',
+          'v:0',
+          '-show_entries',
+          'frame=n',
+          '-of',
+          'csv=p=0',
+          filePath
+        ],
+        options: { sync: true }
+      })
 
-      const lines = (result as string).trim().split('\n')
+      const lines = result.trim().split('\n')
       return lines.filter((line) => line.trim()).length
     } catch (error: unknown) {
       throw new Error(`Failed to count frames: ${(error as Error).message}`)
@@ -238,16 +261,22 @@ export default class FfprobeTool extends Tool {
    */
   async getFramesInfo(filePath: string): Promise<FrameInfo[]> {
     try {
-      const ffprobePath = await this.getBinaryPath('ffprobe') // Auto-downloads if needed
+      const result = await this.executeCommand({
+        binaryName: 'ffprobe',
+        args: [
+          '-v',
+          'quiet',
+          '-print_format',
+          'json',
+          '-show_frames',
+          '-select_streams',
+          'v:0',
+          filePath
+        ],
+        options: { sync: true }
+      })
 
-      const result = execSync(
-        `"${ffprobePath}" -v quiet -print_format json -show_frames -select_streams v:0 "${filePath}"`,
-        {
-          encoding: 'utf8'
-        }
-      )
-
-      const data = JSON.parse(result as string)
+      const data = JSON.parse(result)
       const framesData = data.frames || []
 
       return framesData.map(

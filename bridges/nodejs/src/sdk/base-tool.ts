@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { spawn } from 'node:child_process'
+import { spawn, execSync } from 'node:child_process'
 
 import axios from 'axios'
 
@@ -18,6 +18,20 @@ export type ProgressCallback = (progress: {
   size?: string
 }) => void
 
+// Command execution options
+export interface ExecuteCommandOptions {
+  binaryName: string
+  args: string[]
+  options?: {
+    cwd?: string
+    timeout?: number
+    encoding?: BufferEncoding
+    sync?: boolean
+  }
+  onProgress?: ProgressCallback
+  onOutput?: (data: string, isError?: boolean) => void
+}
+
 export abstract class Tool {
   /**
    * Tool name
@@ -33,6 +47,199 @@ export abstract class Tool {
    * Tool description
    */
   abstract get description(): string
+
+  /**
+   * Execute a command with proper Leon messaging and progress tracking
+   */
+  protected async executeCommand(
+    options: ExecuteCommandOptions
+  ): Promise<string> {
+    const {
+      binaryName,
+      args,
+      options: execOptions = {},
+      onProgress,
+      onOutput
+    } = options
+    const { sync = false } = execOptions
+
+    // Get binary path (auto-downloads if needed)
+    const binaryPath = await this.getBinaryPath(binaryName)
+    const commandString = `"${binaryPath}" ${args.join(' ')}`
+
+    await leon.answer({
+      key: 'bridges.tools.executing_command',
+      data: {
+        binary_name: binaryName,
+        command: commandString
+      }
+    })
+
+    if (sync) {
+      return this.executeSyncCommand(
+        binaryPath,
+        args,
+        commandString,
+        execOptions
+      )
+    } else {
+      return this.executeAsyncCommand(
+        binaryPath,
+        args,
+        commandString,
+        execOptions,
+        onProgress,
+        onOutput
+      )
+    }
+  }
+
+  /**
+   * Execute command synchronously
+   */
+  private executeSyncCommand(
+    binaryPath: string,
+    args: string[],
+    commandString: string,
+    execOptions: ExecuteCommandOptions['options'] = {}
+  ): string {
+    try {
+      const startTime = Date.now()
+
+      const result = execSync(`"${binaryPath}" ${args.join(' ')}`, {
+        encoding: execOptions.encoding || 'utf8',
+        timeout: execOptions.timeout,
+        cwd: execOptions.cwd
+      })
+
+      const executionTime = Date.now() - startTime
+
+      leon.answer({
+        key: 'bridges.tools.command_completed',
+        data: {
+          command: commandString,
+          execution_time: `${executionTime}ms`
+        }
+      })
+
+      return result as string
+    } catch (error: unknown) {
+      leon.answer({
+        key: 'bridges.tools.command_failed',
+        data: {
+          command: commandString,
+          error: (error as Error).message
+        }
+      })
+      throw error
+    }
+  }
+
+  /**
+   * Execute command asynchronously with progress tracking
+   */
+  private executeAsyncCommand(
+    binaryPath: string,
+    args: string[],
+    commandString: string,
+    execOptions: ExecuteCommandOptions['options'] = {},
+    onProgress?: ProgressCallback,
+    onOutput?: (data: string, isError?: boolean) => void
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const startTime = Date.now()
+      let outputBuffer = ''
+
+      const childProcess = spawn(binaryPath, args, {
+        cwd: execOptions.cwd
+      })
+
+      // Handle stdout
+      childProcess.stdout.on('data', (data) => {
+        const output = data.toString()
+        outputBuffer += output
+
+        if (onOutput) {
+          onOutput(output, false)
+        }
+
+        // Call progress callback if provided
+        if (onProgress) {
+          onProgress({ status: 'running' })
+        }
+      })
+
+      // Handle stderr
+      childProcess.stderr.on('data', (data) => {
+        const output = data.toString()
+        outputBuffer += output
+
+        if (onOutput) {
+          onOutput(output, true)
+        }
+      })
+
+      // Handle process completion
+      childProcess.on('close', async (code) => {
+        const executionTime = Date.now() - startTime
+
+        if (code === 0) {
+          await leon.answer({
+            key: 'bridges.tools.command_completed',
+            data: {
+              command: commandString,
+              execution_time: `${executionTime}ms`
+            }
+          })
+
+          if (onProgress) {
+            onProgress({ status: 'completed', percentage: 100 })
+          }
+
+          resolve(outputBuffer)
+        } else {
+          await leon.answer({
+            key: 'bridges.tools.command_failed',
+            data: {
+              command: commandString,
+              exit_code: code?.toString() || 'unknown',
+              execution_time: `${executionTime}ms`
+            }
+          })
+          reject(
+            new Error(`Command failed with exit code ${code}: ${outputBuffer}`)
+          )
+        }
+      })
+
+      // Handle process errors
+      childProcess.on('error', async (error) => {
+        await leon.answer({
+          key: 'bridges.tools.command_error',
+          data: {
+            command: commandString,
+            error: error.message
+          }
+        })
+        reject(error)
+      })
+
+      // Handle timeout
+      if (execOptions.timeout) {
+        setTimeout(() => {
+          childProcess.kill('SIGTERM')
+          leon.answer({
+            key: 'bridges.tools.command_timeout',
+            data: {
+              command: commandString,
+              timeout: `${execOptions.timeout}ms`
+            }
+          })
+          reject(new Error(`Command timed out after ${execOptions.timeout}ms`))
+        }, execOptions.timeout)
+      }
+    })
+  }
 
   /**
    * Get binary path and ensure it's downloaded
@@ -86,6 +293,13 @@ export abstract class Tool {
     // Ensure binary is available before returning path
     if (!fs.existsSync(binaryPath)) {
       await this.downloadBinaryOnDemand(binaryName, binaryUrl, executable)
+    } else {
+      await leon.answer({
+        key: 'bridges.tools.binary_found',
+        data: {
+          binary_name: binaryName
+        }
+      })
     }
 
     /**

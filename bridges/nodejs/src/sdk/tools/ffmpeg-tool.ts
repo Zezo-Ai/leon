@@ -1,5 +1,3 @@
-import { execSync } from 'node:child_process'
-
 import { Tool } from '@sdk/base-tool'
 import { ToolkitConfig } from '@sdk/toolkit-config'
 
@@ -41,9 +39,10 @@ export default class FfmpegTool extends Tool {
     outputPath: string
   ): Promise<string> {
     try {
-      const ffmpegPath = await this.getBinaryPath('ffmpeg') // Auto-downloads if needed
-      execSync(`"${ffmpegPath}" -i "${inputPath}" "${outputPath}"`, {
-        encoding: 'utf8'
+      await this.executeCommand({
+        binaryName: 'ffmpeg',
+        args: ['-i', inputPath, outputPath],
+        options: { sync: true }
       })
 
       return outputPath
@@ -60,13 +59,11 @@ export default class FfmpegTool extends Tool {
    */
   async extractAudio(videoPath: string, audioPath: string): Promise<string> {
     try {
-      const ffmpegPath = await this.getBinaryPath('ffmpeg') // Auto-downloads if needed
-      execSync(
-        `"${ffmpegPath}" -i "${videoPath}" -vn -acodec copy "${audioPath}"`,
-        {
-          encoding: 'utf8'
-        }
-      )
+      await this.executeCommand({
+        binaryName: 'ffmpeg',
+        args: ['-i', videoPath, '-vn', '-acodec', 'copy', audioPath],
+        options: { sync: true }
+      })
 
       return audioPath
     } catch (error: unknown) {
@@ -89,13 +86,21 @@ export default class FfmpegTool extends Tool {
     endTime: string
   ): Promise<string> {
     try {
-      const ffmpegPath = await this.getBinaryPath('ffmpeg') // Auto-downloads if needed
-      execSync(
-        `"${ffmpegPath}" -i "${inputPath}" -ss ${startTime} -to ${endTime} -c copy "${outputPath}"`,
-        {
-          encoding: 'utf8'
-        }
-      )
+      await this.executeCommand({
+        binaryName: 'ffmpeg',
+        args: [
+          '-i',
+          inputPath,
+          '-ss',
+          startTime,
+          '-to',
+          endTime,
+          '-c',
+          'copy',
+          outputPath
+        ],
+        options: { sync: true }
+      })
 
       return outputPath
     } catch (error: unknown) {
@@ -118,13 +123,11 @@ export default class FfmpegTool extends Tool {
     height: number
   ): Promise<string> {
     try {
-      const ffmpegPath = await this.getBinaryPath('ffmpeg') // Auto-downloads if needed
-      execSync(
-        `"${ffmpegPath}" -i "${inputPath}" -vf scale=${width}:${height} "${outputPath}"`,
-        {
-          encoding: 'utf8'
-        }
-      )
+      await this.executeCommand({
+        binaryName: 'ffmpeg',
+        args: ['-i', inputPath, '-vf', `scale=${width}:${height}`, outputPath],
+        options: { sync: true }
+      })
 
       return outputPath
     } catch (error: unknown) {
@@ -145,13 +148,23 @@ export default class FfmpegTool extends Tool {
     outputPath: string
   ): Promise<string> {
     try {
-      const ffmpegPath = await this.getBinaryPath('ffmpeg') // Auto-downloads if needed
-      execSync(
-        `"${ffmpegPath}" -i "${videoPath}" -i "${audioPath}" -c:v copy -c:a aac -strict experimental "${outputPath}"`,
-        {
-          encoding: 'utf8'
-        }
-      )
+      await this.executeCommand({
+        binaryName: 'ffmpeg',
+        args: [
+          '-i',
+          videoPath,
+          '-i',
+          audioPath,
+          '-c:v',
+          'copy',
+          '-c:a',
+          'aac',
+          '-strict',
+          'experimental',
+          outputPath
+        ],
+        options: { sync: true }
+      })
 
       return outputPath
     } catch (error: unknown) {
@@ -174,13 +187,11 @@ export default class FfmpegTool extends Tool {
     bitrate: string
   ): Promise<string> {
     try {
-      const ffmpegPath = await this.getBinaryPath('ffmpeg') // Auto-downloads if needed
-      execSync(
-        `"${ffmpegPath}" -i "${inputPath}" -b:v ${bitrate} "${outputPath}"`,
-        {
-          encoding: 'utf8'
-        }
-      )
+      await this.executeCommand({
+        binaryName: 'ffmpeg',
+        args: ['-i', inputPath, '-b:v', bitrate, outputPath],
+        options: { sync: true }
+      })
 
       return outputPath
     } catch (error: unknown) {

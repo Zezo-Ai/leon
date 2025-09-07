@@ -376,10 +376,11 @@ export default class LLMManager {
          *    - [ok] Fix logic-action-skill-handler, send message sync replaceMessageId
          *    - [ok] 2025-09-04: find a way to make tools report progress to actions without they become error messages for the brain child process
          *    - [ok] With leon.answer, when path are given in the answer, then we should be able to open the file explorer on the given path when we click on the path from the web app
-         *      - Also, implement built-in functions, such as when executing child process: also automatically report which command is being executed (leon.answer())
+         *      - [ok] Also, implement built-in functions, such as when executing child process: also automatically report which command is being executed (leon.answer())
          *      - Since we spawn new processes, we need to make sure to kill them properly once done, otherwise we'll have zombie processes
          *      - Instead of console.log() in base-tool, make use of leon.answer()
          *      - Once done for TypeScript, rewrite it for the Python SDK (base-tool.ts, leon.ts (for replaceMessageId)
+         *    - Implement special UI for tools report (command outputs, etc.)
          *    - Create bash tool -> execute_command (+ shell skill that can run commands on the host based on remote LLM)
          *    - Create whisper_faster -> transcribe
          *    - Create pyannote tool -> diarize

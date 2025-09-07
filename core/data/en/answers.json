@@ -144,11 +144,11 @@
       "Using \"{{ command }}\" to clear quarantine attributes from binary."
     ],
     "bridges.tools.download_failed": [
-      "Failed to download {{ binary_name }} binary: {{ error }}",
-      "Download error for {{ binary_name }}: {{ error }}",
-      "Could not download {{ binary_name }} binary: {{ error }}",
-      "{{ binary_name }} binary download failed: {{ error }}",
-      "Error downloading {{ binary_name }}: {{ error }}"
+      "Failed to download {{ binary_name }} binary: {{ error }}.",
+      "Download error for {{ binary_name }}: {{ error }}.",
+      "Could not download {{ binary_name }} binary: {{ error }}.",
+      "{{ binary_name }} binary download failed: {{ error }}.",
+      "Error downloading {{ binary_name }}: {{ error }}."
     ],
     "bridges.tools.downloading_from_url": [
       "Downloading binary from remote server...",
@@ -158,11 +158,11 @@
       "Getting binary file from server..."
     ],
     "bridges.tools.download_url_failed": [
-      "Download failed with error: {{ error }}",
-      "Could not download from URL: {{ error }}",
-      "Binary download error: {{ error }}",
-      "Failed to retrieve binary file: {{ error }}",
-      "Download process failed: {{ error }}"
+      "Download failed with error: {{ error }}.",
+      "Could not download from URL: {{ error }}.",
+      "Binary download error: {{ error }}.",
+      "Failed to retrieve binary file: {{ error }}.",
+      "Download process failed: {{ error }}."
     ],
     "bridges.tools.quarantine_removed": [
       "Removed quarantine attribute from {{ file_name }}.",
@@ -178,16 +178,51 @@
       "Partial quarantine removal for {{ file_name }} - exit code: {{ exit_code }}."
     ],
     "bridges.tools.quarantine_error": [
-      "Warning: Could not remove quarantine from {{ file_name }}: {{ error }}",
-      "Quarantine removal failed for {{ file_name }}: {{ error }}",
-      "Error removing quarantine attribute from {{ file_name }}: {{ error }}",
-      "Failed to clear quarantine for {{ file_name }}: {{ error }}"
+      "Warning: Could not remove quarantine from {{ file_name }}: {{ error }}.",
+      "Quarantine removal failed for {{ file_name }}: {{ error }}.",
+      "Error removing quarantine attribute from {{ file_name }}: {{ error }}.",
+      "Failed to clear quarantine for {{ file_name }}: {{ error }}."
     ],
     "bridges.tools.quarantine_exception": [
-      "Warning: Exception during quarantine removal for {{ file_name }}: {{ error }}",
-      "Quarantine process exception for {{ file_name }}: {{ error }}",
-      "Unexpected error during quarantine removal of {{ file_name }}: {{ error }}",
-      "Exception while processing {{ file_name }} quarantine: {{ error }}"
+      "Warning: Exception during quarantine removal for {{ file_name }}: {{ error }}.",
+      "Quarantine process exception for {{ file_name }}: {{ error }}.",
+      "Unexpected error during quarantine removal of {{ file_name }}: {{ error }}.",
+      "Exception while processing {{ file_name }} quarantine: {{ error }}."
+    ],
+    "bridges.tools.executing_command": [
+      "Executing {{ binary_name }}: {{ command }}...",
+      "Running {{ binary_name }} command: {{ command }}...",
+      "Starting {{ binary_name }}: {{ command }}...",
+      "Launching {{ binary_name }} with: {{ command }}...",
+      "Executing command: {{ command }}..."
+    ],
+    "bridges.tools.command_completed": [
+      "Command completed successfully in {{ execution_time }}.",
+      "{{ command }} finished in {{ execution_time }}.",
+      "Command execution completed ({{ execution_time }}).",
+      "Successfully executed command in {{ execution_time }}.",
+      "Command finished successfully after {{ execution_time }}."
+    ],
+    "bridges.tools.command_failed": [
+      "Command failed: {{ command }} ({{ error }}).",
+      "Execution failed: {{ command }} - {{ error }}.",
+      "Command error: {{ command }} failed with: {{ error }}.",
+      "Failed to execute {{ command }}: {{ error }}.",
+      "Command execution failed: {{ error }}."
+    ],
+    "bridges.tools.command_error": [
+      "Process error executing {{ command }}: {{ error }}.",
+      "Failed to start command {{ command }}: {{ error }}.",
+      "Command process error: {{ error }}.",
+      "Unable to execute {{ command }}: {{ error }}.",
+      "Process failed for {{ command }}: {{ error }}."
+    ],
+    "bridges.tools.command_timeout": [
+      "Command timed out after {{ timeout }}: {{ command }}.",
+      "Execution timeout ({{ timeout }}): {{ command }}.",
+      "Command {{ command }} exceeded timeout of {{ timeout }}.",
+      "Process timed out after {{ timeout }}: {{ command }}.",
+      "Command execution timeout ({{ timeout }}): {{ command }}."
     ]
   }
 }

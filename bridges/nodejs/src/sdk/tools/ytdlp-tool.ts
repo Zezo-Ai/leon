@@ -1,7 +1,5 @@
-import { execSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { spawn } from 'node:child_process'
 
 import { Tool, type ProgressCallback } from '@sdk/base-tool'
 import { ToolkitConfig } from '@sdk/toolkit-config'
@@ -41,22 +39,19 @@ export default class YtdlpTool extends Tool {
    */
   async downloadVideo(videoUrl: string, outputPath: string): Promise<string> {
     try {
-      const ytdlpPath = await this.getBinaryPath('yt-dlp') // Auto-downloads if needed
-
       // Ensure output directory exists
       mkdirSync(outputPath, { recursive: true })
 
       // Run yt-dlp with output template
       const outputTemplate = join(outputPath, '%(title)s.%(ext)s')
-      const result = execSync(
-        `"${ytdlpPath}" "${videoUrl}" -o "${outputTemplate}"`,
-        {
-          encoding: 'utf8'
-        }
-      )
+      const result = await this.executeCommand({
+        binaryName: 'yt-dlp',
+        args: [videoUrl, '-o', outputTemplate],
+        options: { sync: true }
+      })
 
       // Parse the output to get the actual filename
-      const lines = (result as string).split('\n')
+      const lines = result.split('\n')
       for (const line of lines) {
         if (
           line.includes('has already been downloaded') ||
@@ -87,22 +82,26 @@ export default class YtdlpTool extends Tool {
     audioFormat: string
   ): Promise<string> {
     try {
-      const ytdlpPath = await this.getBinaryPath('yt-dlp') // Auto-downloads if needed
-
       // Ensure output directory exists
       mkdirSync(outputPath, { recursive: true })
 
       // Run yt-dlp with audio extraction
       const outputTemplate = join(outputPath, `%(title)s.${audioFormat}`)
-      const result = execSync(
-        `"${ytdlpPath}" "${videoUrl}" -x --audio-format ${audioFormat} -o "${outputTemplate}"`,
-        {
-          encoding: 'utf8'
-        }
-      )
+      const result = await this.executeCommand({
+        binaryName: 'yt-dlp',
+        args: [
+          videoUrl,
+          '-x',
+          '--audio-format',
+          audioFormat,
+          '-o',
+          outputTemplate
+        ],
+        options: { sync: true }
+      })
 
       // Parse the output to get the actual filename
-      const lines = (result as string).split('\n')
+      const lines = result.split('\n')
       for (const line of lines) {
         if (
           line.includes('has already been downloaded') ||
@@ -130,8 +129,6 @@ export default class YtdlpTool extends Tool {
     outputPath: string
   ): Promise<string> {
     try {
-      const ytdlpPath = await this.getBinaryPath('yt-dlp') // Auto-downloads if needed
-
       // Ensure output directory exists
       mkdirSync(outputPath, { recursive: true })
 
@@ -140,8 +137,10 @@ export default class YtdlpTool extends Tool {
         outputPath,
         '%(playlist_index)s - %(title)s.%(ext)s'
       )
-      execSync(`"${ytdlpPath}" "${playlistUrl}" -o "${outputTemplate}"`, {
-        encoding: 'utf8'
+      await this.executeCommand({
+        binaryName: 'yt-dlp',
+        args: [playlistUrl, '-o', outputTemplate],
+        options: { sync: true }
       })
 
       return outputPath
@@ -165,8 +164,6 @@ export default class YtdlpTool extends Tool {
     onProgress?: ProgressCallback
   ): Promise<string> {
     try {
-      const ytdlpPath = await this.getBinaryPath('yt-dlp') // Auto-downloads if needed
-
       // Ensure output directory exists
       mkdirSync(outputPath, { recursive: true })
 
@@ -185,101 +182,74 @@ export default class YtdlpTool extends Tool {
       }
 
       const outputTemplate = join(outputPath, '%(title)s.%(ext)s')
+      let downloadedFilePath = outputTemplate
 
-      return new Promise((resolve, reject) => {
-        const childProcess = spawn(ytdlpPath, [
+      await this.executeCommand({
+        binaryName: 'yt-dlp',
+        args: [
           videoUrl,
           '-f',
           formatSelector,
           '-o',
           outputTemplate,
           '--newline'
-        ])
-
-        let downloadedFilePath = outputTemplate
-
-        childProcess.stdout.on('data', (data) => {
-          const output = data.toString()
-          const lines = output.split('\n')
-
-          for (const line of lines) {
-            // Parse download progress
-            if (line.includes('[download]')) {
-              const progressMatch = line.match(
-                /\[download\]\s+(\d+\.?\d*)%\s+of\s+([\d.]+\w+)\s+at\s+([\d.]+\w+\/s)\s+ETA\s+([\d:]+)/
-              )
-              if (progressMatch && onProgress) {
-                onProgress({
-                  percentage: parseFloat(progressMatch[1]),
-                  size: progressMatch[2],
-                  speed: progressMatch[3],
-                  eta: progressMatch[4],
-                  status: 'downloading'
-                })
-              }
-            }
-
-            // Check for completed download or destination file
-            if (
-              line.includes('[download] Destination:') ||
-              line.includes('has already been downloaded')
-            ) {
-              const pathMatch =
-                line.match(/Destination:\s+(.+)$/) ||
-                line.match(/(.+)\s+has already been downloaded/)
-              if (pathMatch) {
-                downloadedFilePath = pathMatch[1].trim()
-              }
-            }
-
-            // Check for download completion
-            if (line.includes('[download] 100%') && onProgress) {
-              onProgress({
-                percentage: 100,
-                status: 'completed'
-              })
-            }
-          }
-        })
-
-        childProcess.stderr.on('data', (data) => {
-          const output = data.toString()
-          // yt-dlp sometimes outputs progress to stderr as well
-          if (output.includes('[download]') && onProgress) {
+        ],
+        options: { sync: false },
+        onProgress,
+        onOutput: (output, isError) => {
+          if (!isError) {
             const lines = output.split('\n')
+
             for (const line of lines) {
-              const progressMatch = line.match(
-                /\[download\]\s+(\d+\.?\d*)%\s+of\s+([\d.]+\w+)\s+at\s+([\d.]+\w+\/s)\s+ETA\s+([\d:]+)/
-              )
-              if (progressMatch) {
+              // Parse download progress
+              if (line.includes('[download]')) {
+                const progressMatch = line.match(
+                  /\[download\]\s+(\d+\.?\d*)%\s+of\s+([\d.]+\w+)\s+at\s+([\d.]+\w+\/s)\s+ETA\s+([\d:]+)/
+                )
+                if (
+                  progressMatch &&
+                  progressMatch[1] &&
+                  progressMatch[2] &&
+                  progressMatch[3] &&
+                  progressMatch[4] &&
+                  onProgress
+                ) {
+                  onProgress({
+                    percentage: parseFloat(progressMatch[1]),
+                    size: progressMatch[2],
+                    speed: progressMatch[3],
+                    eta: progressMatch[4],
+                    status: 'downloading'
+                  })
+                }
+              }
+
+              // Check for completed download or destination file
+              if (
+                line.includes('[download] Destination:') ||
+                line.includes('has already been downloaded')
+              ) {
+                const pathMatch =
+                  line.match(/Destination:\s+(.+)$/) ||
+                  line.match(/(.+)\s+has already been downloaded/)
+                if (pathMatch && pathMatch[1]) {
+                  downloadedFilePath = pathMatch[1].trim()
+                }
+              }
+
+              // Check for download completion
+              if (line.includes('[download] 100%') && onProgress) {
                 onProgress({
-                  percentage: parseFloat(progressMatch[1]),
-                  size: progressMatch[2],
-                  speed: progressMatch[3],
-                  eta: progressMatch[4],
-                  status: 'downloading'
+                  percentage: 100,
+                  status: 'completed'
                 })
               }
             }
           }
-        })
-
-        childProcess.on('close', (code) => {
-          if (code === 0) {
-            resolve(downloadedFilePath)
-          } else {
-            reject(
-              new Error(
-                `Quality-specific video download failed with exit code ${code}`
-              )
-            )
-          }
-        })
-
-        childProcess.on('error', (error) => {
-          reject(new Error(`Failed to start yt-dlp process: ${error.message}`))
-        })
+        }
       })
+
+      return downloadedFilePath
     } catch (error: unknown) {
       throw new Error(
         `Quality-specific video download failed: ${(error as Error).message}`
@@ -300,19 +270,24 @@ export default class YtdlpTool extends Tool {
     languageCode: string
   ): Promise<string> {
     try {
-      const ytdlpPath = await this.getBinaryPath('yt-dlp') // Auto-downloads if needed
-
       // Ensure output directory exists
       mkdirSync(outputPath, { recursive: true })
 
       // Download subtitles only
       const outputTemplate = join(outputPath, '%(title)s.%(ext)s')
-      execSync(
-        `"${ytdlpPath}" "${videoUrl}" --write-subs --sub-langs ${languageCode} --skip-download -o "${outputTemplate}"`,
-        {
-          encoding: 'utf8'
-        }
-      )
+      await this.executeCommand({
+        binaryName: 'yt-dlp',
+        args: [
+          videoUrl,
+          '--write-subs',
+          '--sub-langs',
+          languageCode,
+          '--skip-download',
+          '-o',
+          outputTemplate
+        ],
+        options: { sync: true }
+      })
 
       // The subtitle file will have the same name but with .srt extension
       const subtitleFile = outputTemplate.replace(
@@ -336,22 +311,25 @@ export default class YtdlpTool extends Tool {
     outputPath: string
   ): Promise<string> {
     try {
-      const ytdlpPath = await this.getBinaryPath('yt-dlp') // Auto-downloads if needed
-
       // Ensure output directory exists
       mkdirSync(outputPath, { recursive: true })
 
       // Download with thumbnail embedding
       const outputTemplate = join(outputPath, '%(title)s.%(ext)s')
-      const result = execSync(
-        `"${ytdlpPath}" "${videoUrl}" --embed-thumbnail --write-thumbnail -o "${outputTemplate}"`,
-        {
-          encoding: 'utf8'
-        }
-      )
+      const result = await this.executeCommand({
+        binaryName: 'yt-dlp',
+        args: [
+          videoUrl,
+          '--embed-thumbnail',
+          '--write-thumbnail',
+          '-o',
+          outputTemplate
+        ],
+        options: { sync: true }
+      })
 
       // Parse the output to get the actual filename
-      const lines = (result as string).split('\n')
+      const lines = result.split('\n')
       for (const line of lines) {
         if (
           line.includes('has already been downloaded') ||

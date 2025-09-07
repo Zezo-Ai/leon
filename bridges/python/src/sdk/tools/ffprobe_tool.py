@@ -1,7 +1,6 @@
-import subprocess
 import json
-from typing import Dict, Any, List, Optional, Union
-from ..base_tool import BaseTool
+from typing import Dict, Any, List, Optional
+from ..base_tool import BaseTool, ExecuteCommandOptions
 from ..toolkit_config import ToolkitConfig
 
 
@@ -111,19 +110,18 @@ class FfprobeTool(BaseTool):
             The media's format information.
         """
         try:
-            ffprobe_path = self.get_binary_path('ffprobe')  # Auto-downloads if needed
+            result = self.execute_command(ExecuteCommandOptions(
+                binary_name='ffprobe',
+                args=['-v', 'quiet', '-print_format', 'json', '-show_format', file_path],
+                options={'sync': True}
+            ))
 
-            result = subprocess.run([
-                ffprobe_path, '-v', 'quiet', '-print_format', 'json',
-                '-show_format', file_path
-            ], capture_output=True, text=True, check=True)
-
-            data = json.loads(result.stdout)
+            data = json.loads(result)
             format_data = data.get('format', {})
 
             return MediaFormatInfo(format_data)
 
-        except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+        except Exception as e:
             raise Exception(f"Failed to get media format info: {str(e)}")
 
     def list_streams(self, file_path: str) -> List[StreamInfo]:
@@ -137,19 +135,18 @@ class FfprobeTool(BaseTool):
             An array of stream information objects.
         """
         try:
-            ffprobe_path = self.get_binary_path('ffprobe')  # Auto-downloads if needed
+            result = self.execute_command(ExecuteCommandOptions(
+                binary_name='ffprobe',
+                args=['-v', 'quiet', '-print_format', 'json', '-show_streams', file_path],
+                options={'sync': True}
+            ))
 
-            result = subprocess.run([
-                ffprobe_path, '-v', 'quiet', '-print_format', 'json',
-                '-show_streams', file_path
-            ], capture_output=True, text=True, check=True)
-
-            data = json.loads(result.stdout)
+            data = json.loads(result)
             streams_data = data.get('streams', [])
 
             return [StreamInfo(stream_data) for stream_data in streams_data]
 
-        except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+        except Exception as e:
             raise Exception(f"Failed to list streams: {str(e)}")
 
     def get_video_stream_info(self, file_path: str) -> List[StreamInfo]:
@@ -197,28 +194,33 @@ class FfprobeTool(BaseTool):
             The total frame count.
         """
         try:
-            ffprobe_path = self.get_binary_path('ffprobe')  # Auto-downloads if needed
+            try:
+                # Try to get nb_frames first
+                result = self.execute_command(ExecuteCommandOptions(
+                    binary_name='ffprobe',
+                    args=['-v', 'error', '-select_streams', 'v:0', '-count_frames', '-show_entries', 'stream=nb_frames',
+                          '-of', 'csv=p=0', file_path],
+                    options={'sync': True}
+                ))
 
-            result = subprocess.run([
-                ffprobe_path, '-v', 'error', '-select_streams', 'v:0',
-                '-count_frames', '-show_entries', 'stream=nb_frames',
-                '-of', 'csv=p=0', file_path
-            ], capture_output=True, text=True, check=True)
-
-            frame_count_str = result.stdout.strip()
-            if frame_count_str and frame_count_str != 'N/A':
-                return int(frame_count_str)
+                frame_count_str = result.strip()
+                if frame_count_str and frame_count_str != 'N/A':
+                    return int(frame_count_str)
+            except:
+                # Ignore error, fallback to manual counting
+                pass
 
             # Fallback: count frames manually if nb_frames is not available
-            result = subprocess.run([
-                ffprobe_path, '-v', 'error', '-select_streams', 'v:0',
-                '-show_entries', 'frame=n', '-of', 'csv=p=0', file_path
-            ], capture_output=True, text=True, check=True)
+            result = self.execute_command(ExecuteCommandOptions(
+                binary_name='ffprobe',
+                args=['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'frame=n', '-of', 'csv=p=0', file_path],
+                options={'sync': True}
+            ))
 
-            lines = result.stdout.strip().split('\n')
+            lines = result.strip().split('\n')
             return len([line for line in lines if line.strip()])
 
-        except (subprocess.CalledProcessError, ValueError) as e:
+        except Exception as e:
             raise Exception(f"Failed to count frames: {str(e)}")
 
     def get_frames_info(self, file_path: str) -> List[FrameInfo]:
@@ -232,17 +234,16 @@ class FfprobeTool(BaseTool):
             An array of frame information objects.
         """
         try:
-            ffprobe_path = self.get_binary_path('ffprobe')  # Auto-downloads if needed
+            result = self.execute_command(ExecuteCommandOptions(
+                binary_name='ffprobe',
+                args=['-v', 'quiet', '-print_format', 'json', '-show_frames', '-select_streams', 'v:0', file_path],
+                options={'sync': True}
+            ))
 
-            result = subprocess.run([
-                ffprobe_path, '-v', 'quiet', '-print_format', 'json',
-                '-show_frames', '-select_streams', 'v:0', file_path
-            ], capture_output=True, text=True, check=True)
-
-            data = json.loads(result.stdout)
+            data = json.loads(result)
             frames_data = data.get('frames', [])
 
             return [FrameInfo(frame_data) for frame_data in frames_data]
 
-        except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+        except Exception as e:
             raise Exception(f"Failed to get frames info: {str(e)}")

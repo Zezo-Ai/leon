@@ -1,6 +1,6 @@
-import subprocess
 import os
-from ..base_tool import BaseTool
+from typing import Optional
+from ..base_tool import BaseTool, ExecuteCommandOptions, ProgressCallback
 from ..toolkit_config import ToolkitConfig
 
 
@@ -39,19 +39,19 @@ class YtdlpTool(BaseTool):
             The file path of the downloaded video.
         """
         try:
-            ytdlp_path = self.get_binary_path('yt-dlp')  # Auto-downloads if needed
-
             # Ensure output directory exists
             os.makedirs(output_path, exist_ok=True)
 
             # Run yt-dlp with output template
             output_template = os.path.join(output_path, '%(title)s.%(ext)s')
-            result = subprocess.run([
-                ytdlp_path, video_url, '-o', output_template
-            ], capture_output=True, text=True, check=True)
+            result = self.execute_command(ExecuteCommandOptions(
+                binary_name='yt-dlp',
+                args=[video_url, '-o', output_template],
+                options={'sync': True}
+            ))
 
             # Parse the output to get the actual filename
-            lines = result.stdout.split('\n')
+            lines = result.split('\n')
             for line in lines:
                 if 'has already been downloaded' in line or 'Destination:' in line:
                     # Extract filename from the line
@@ -61,8 +61,8 @@ class YtdlpTool(BaseTool):
             # If we can't parse the exact filename, return the template path
             return output_template
 
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Video download failed: {e.stderr}")
+        except Exception as e:
+            raise Exception(f"Video download failed: {str(e)}")
 
     def download_audio_only(self, video_url: str, output_path: str, audio_format: str) -> str:
         """
@@ -77,20 +77,19 @@ class YtdlpTool(BaseTool):
             The file path of the extracted audio.
         """
         try:
-            ytdlp_path = self.get_binary_path('yt-dlp')  # Auto-downloads if needed
-
             # Ensure output directory exists
             os.makedirs(output_path, exist_ok=True)
 
             # Run yt-dlp with audio extraction
             output_template = os.path.join(output_path, f'%(title)s.{audio_format}')
-            result = subprocess.run([
-                ytdlp_path, video_url, '-x', '--audio-format', audio_format,
-                '-o', output_template
-            ], capture_output=True, text=True, check=True)
+            result = self.execute_command(ExecuteCommandOptions(
+                binary_name='yt-dlp',
+                args=[video_url, '-x', '--audio-format', audio_format, '-o', output_template],
+                options={'sync': True}
+            ))
 
             # Parse the output to get the actual filename
-            lines = result.stdout.split('\n')
+            lines = result.split('\n')
             for line in lines:
                 if 'has already been downloaded' in line or 'Destination:' in line:
                     filename = line.split()[-1]
@@ -98,8 +97,8 @@ class YtdlpTool(BaseTool):
 
             return output_template
 
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Audio download failed: {e.stderr}")
+        except Exception as e:
+            raise Exception(f"Audio download failed: {str(e)}")
 
     def download_playlist(self, playlist_url: str, output_path: str) -> str:
         """
@@ -113,23 +112,24 @@ class YtdlpTool(BaseTool):
             The path to the directory containing the downloaded videos.
         """
         try:
-            ytdlp_path = self.get_binary_path('yt-dlp')  # Auto-downloads if needed
-
             # Ensure output directory exists
             os.makedirs(output_path, exist_ok=True)
 
             # Run yt-dlp for playlist
             output_template = os.path.join(output_path, '%(playlist_index)s - %(title)s.%(ext)s')
-            subprocess.run([
-                ytdlp_path, playlist_url, '-o', output_template
-            ], capture_output=True, text=True, check=True)
+            self.execute_command(ExecuteCommandOptions(
+                binary_name='yt-dlp',
+                args=[playlist_url, '-o', output_template],
+                options={'sync': True}
+            ))
 
             return output_path
 
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Playlist download failed: {e.stderr}")
+        except Exception as e:
+            raise Exception(f"Playlist download failed: {str(e)}")
 
-    def download_video_by_quality(self, video_url: str, output_path: str, quality: str) -> str:
+    def download_video_by_quality(self, video_url: str, output_path: str, quality: str,
+                                  on_progress: Optional[ProgressCallback] = None) -> str:
         """
         Downloads a video in a specific quality or resolution.
         
@@ -137,13 +137,12 @@ class YtdlpTool(BaseTool):
             video_url: The URL of the video to download.
             output_path: The directory where the video will be saved.
             quality: The desired quality string (e.g., 'best', '720p', '1080p').
+            on_progress: The callback function for progress reporting.
             
         Returns:
             The file path of the downloaded video.
         """
         try:
-            ytdlp_path = self.get_binary_path('yt-dlp')  # Auto-downloads if needed
-
             # Ensure output directory exists
             os.makedirs(output_path, exist_ok=True)
 
@@ -160,21 +159,57 @@ class YtdlpTool(BaseTool):
                 format_selector = quality
 
             output_template = os.path.join(output_path, '%(title)s.%(ext)s')
-            result = subprocess.run([
-                ytdlp_path, video_url, '-f', format_selector, '-o', output_template
-            ], capture_output=True, text=True, check=True)
+            downloaded_file_path = output_template
 
-            # Parse the output to get the actual filename
-            lines = result.stdout.split('\n')
-            for line in lines:
-                if 'has already been downloaded' in line or 'Destination:' in line:
-                    filename = line.split()[-1]
-                    return filename
+            def handle_output(output: str, is_error: bool):
+                nonlocal downloaded_file_path
+                if not is_error:
+                    lines = output.split('\n')
 
-            return output_template
+                    for line in lines:
+                        # Parse download progress
+                        if '[download]' in line:
+                            import re
+                            progress_match = re.search(
+                                r'\[download\]\s+(\d+\.?\d*)%\s+of\s+([\d.]+\w+)\s+at\s+([\d.]+\w+/s)\s+ETA\s+([\d:]+)',
+                                line
+                            )
+                            if progress_match and on_progress:
+                                on_progress({
+                                    'percentage': float(progress_match.group(1)),
+                                    'size': progress_match.group(2),
+                                    'speed': progress_match.group(3),
+                                    'eta': progress_match.group(4),
+                                    'status': 'downloading'
+                                })
 
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Quality-specific video download failed: {e.stderr}")
+                        # Check for completed download or destination file
+                        if '[download] Destination:' in line or 'has already been downloaded' in line:
+                            import re
+                            path_match = re.search(r'Destination:\s+(.+)$', line) or re.search(
+                                r'(.+)\s+has already been downloaded', line)
+                            if path_match:
+                                downloaded_file_path = path_match.group(1).strip()
+
+                        # Check for download completion
+                        if '[download] 100%' in line and on_progress:
+                            on_progress({
+                                'percentage': 100,
+                                'status': 'completed'
+                            })
+
+            self.execute_command(ExecuteCommandOptions(
+                binary_name='yt-dlp',
+                args=[video_url, '-f', format_selector, '-o', output_template, '--newline'],
+                options={'sync': False},
+                on_progress=on_progress,
+                on_output=handle_output
+            ))
+
+            return downloaded_file_path
+
+        except Exception as e:
+            raise Exception(f"Quality-specific video download failed: {str(e)}")
 
     def download_subtitles(self, video_url: str, output_path: str, language_code: str) -> str:
         """
@@ -189,24 +224,24 @@ class YtdlpTool(BaseTool):
             The file path of the downloaded subtitle file.
         """
         try:
-            ytdlp_path = self.get_binary_path('yt-dlp')  # Auto-downloads if needed
-
             # Ensure output directory exists
             os.makedirs(output_path, exist_ok=True)
 
             # Download subtitles only
             output_template = os.path.join(output_path, '%(title)s.%(ext)s')
-            result = subprocess.run([
-                ytdlp_path, video_url, '--write-subs', '--sub-langs', language_code,
-                '--skip-download', '-o', output_template
-            ], capture_output=True, text=True, check=True)
+            self.execute_command(ExecuteCommandOptions(
+                binary_name='yt-dlp',
+                args=[video_url, '--write-subs', '--sub-langs', language_code, '--skip-download', '-o',
+                      output_template],
+                options={'sync': True}
+            ))
 
             # The subtitle file will have the same name but with .srt extension
             subtitle_file = output_template.replace('.%(ext)s', f'.{language_code}.srt')
             return subtitle_file
 
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Subtitle download failed: {e.stderr}")
+        except Exception as e:
+            raise Exception(f"Subtitle download failed: {str(e)}")
 
     def download_video_with_thumbnail(self, video_url: str, output_path: str) -> str:
         """
@@ -220,20 +255,19 @@ class YtdlpTool(BaseTool):
             The file path of the video with the embedded thumbnail.
         """
         try:
-            ytdlp_path = self.get_binary_path('yt-dlp')  # Auto-downloads if needed
-
             # Ensure output directory exists
             os.makedirs(output_path, exist_ok=True)
 
             # Download with thumbnail embedding
             output_template = os.path.join(output_path, '%(title)s.%(ext)s')
-            result = subprocess.run([
-                ytdlp_path, video_url, '--embed-thumbnail', '--write-thumbnail',
-                '-o', output_template
-            ], capture_output=True, text=True, check=True)
+            result = self.execute_command(ExecuteCommandOptions(
+                binary_name='yt-dlp',
+                args=[video_url, '--embed-thumbnail', '--write-thumbnail', '-o', output_template],
+                options={'sync': True}
+            ))
 
             # Parse the output to get the actual filename
-            lines = result.stdout.split('\n')
+            lines = result.split('\n')
             for line in lines:
                 if 'has already been downloaded' in line or 'Destination:' in line:
                     filename = line.split()[-1]
@@ -241,5 +275,5 @@ class YtdlpTool(BaseTool):
 
             return output_template
 
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Video with thumbnail download failed: {e.stderr}")
+        except Exception as e:
+            raise Exception(f"Video with thumbnail download failed: {str(e)}")

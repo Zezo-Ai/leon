@@ -1,5 +1,4 @@
-import subprocess
-from ..base_tool import BaseTool
+from ..base_tool import BaseTool, ExecuteCommandOptions
 from ..toolkit_config import ToolkitConfig
 
 
@@ -38,14 +37,15 @@ class FfmpegTool(BaseTool):
             The path to the converted video file.
         """
         try:
-            ffmpeg_path = self.get_binary_path('ffmpeg')  # Auto-downloads if needed
-            subprocess.run([
-                ffmpeg_path, '-i', input_path, output_path
-            ], capture_output=True, text=True, check=True)
+            self.execute_command(ExecuteCommandOptions(
+                binary_name='ffmpeg',
+                args=['-i', input_path, output_path],
+                options={'sync': True}
+            ))
 
             return output_path
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Video conversion failed: {e.stderr}")
+        except Exception as e:
+            raise Exception(f"Video conversion failed: {str(e)}")
 
     def extract_audio(self, video_path: str, audio_path: str) -> str:
         """
@@ -59,14 +59,15 @@ class FfmpegTool(BaseTool):
             The path to the extracted audio file.
         """
         try:
-            ffmpeg_path = self.get_binary_path('ffmpeg')  # Auto-downloads if needed
-            subprocess.run([
-                ffmpeg_path, '-i', video_path, '-vn', '-acodec', 'copy', audio_path
-            ], capture_output=True, text=True, check=True)
+            self.execute_command(ExecuteCommandOptions(
+                binary_name='ffmpeg',
+                args=['-i', video_path, '-vn', '-acodec', 'copy', audio_path],
+                options={'sync': True}
+            ))
 
             return audio_path
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Audio extraction failed: {e.stderr}")
+        except Exception as e:
+            raise Exception(f"Audio extraction failed: {str(e)}")
 
     def trim_video(self, input_path: str, output_path: str, start_time: str, end_time: str) -> str:
         """
@@ -82,15 +83,15 @@ class FfmpegTool(BaseTool):
             The path to the trimmed video file.
         """
         try:
-            ffmpeg_path = self.get_binary_path('ffmpeg')  # Auto-downloads if needed
-            subprocess.run([
-                ffmpeg_path, '-i', input_path, '-ss', start_time, '-to', end_time,
-                '-c', 'copy', output_path
-            ], capture_output=True, text=True, check=True)
+            self.execute_command(ExecuteCommandOptions(
+                binary_name='ffmpeg',
+                args=['-i', input_path, '-ss', start_time, '-to', end_time, '-c', 'copy', output_path],
+                options={'sync': True}
+            ))
 
             return output_path
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Video trimming failed: {e.stderr}")
+        except Exception as e:
+            raise Exception(f"Video trimming failed: {str(e)}")
 
     def resize_video(self, input_path: str, output_path: str, width: int, height: int) -> str:
         """
@@ -106,14 +107,15 @@ class FfmpegTool(BaseTool):
             The path to the resized video file.
         """
         try:
-            ffmpeg_path = self.get_binary_path('ffmpeg')  # Auto-downloads if needed
-            subprocess.run([
-                ffmpeg_path, '-i', input_path, '-vf', f'scale={width}:{height}', output_path
-            ], capture_output=True, text=True, check=True)
+            self.execute_command(ExecuteCommandOptions(
+                binary_name='ffmpeg',
+                args=['-i', input_path, '-vf', f'scale={width}:{height}', output_path],
+                options={'sync': True}
+            ))
 
             return output_path
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Video resizing failed: {e.stderr}")
+        except Exception as e:
+            raise Exception(f"Video resizing failed: {str(e)}")
 
     def combine_video_and_audio(self, video_path: str, audio_path: str, output_path: str) -> str:
         """
@@ -128,16 +130,16 @@ class FfmpegTool(BaseTool):
             The path to the merged video file.
         """
         try:
-            ffmpeg_path = self.get_binary_path('ffmpeg')  # Auto-downloads if needed
-            subprocess.run([
-                ffmpeg_path, '-i', video_path, '-i', audio_path,
-                '-c:v', 'copy', '-c:a', 'aac', '-strict', 'experimental',
-                output_path
-            ], capture_output=True, text=True, check=True)
+            self.execute_command(ExecuteCommandOptions(
+                binary_name='ffmpeg',
+                args=['-i', video_path, '-i', audio_path, '-c:v', 'copy', '-c:a', 'aac', '-strict', 'experimental',
+                      output_path],
+                options={'sync': True}
+            ))
 
             return output_path
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Video and audio combination failed: {e.stderr}")
+        except Exception as e:
+            raise Exception(f"Video and audio combination failed: {str(e)}")
 
     def compress_video(self, input_path: str, output_path: str, bitrate: str) -> str:
         """
@@ -152,11 +154,12 @@ class FfmpegTool(BaseTool):
             The path to the compressed video file.
         """
         try:
-            ffmpeg_path = self.get_binary_path('ffmpeg')  # Auto-downloads if needed
-            subprocess.run([
-                ffmpeg_path, '-i', input_path, '-b:v', bitrate, output_path
-            ], capture_output=True, text=True, check=True)
+            self.execute_command(ExecuteCommandOptions(
+                binary_name='ffmpeg',
+                args=['-i', input_path, '-b:v', bitrate, output_path],
+                options={'sync': True}
+            ))
 
             return output_path
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Video compression failed: {e.stderr}")
+        except Exception as e:
+            raise Exception(f"Video compression failed: {str(e)}")
