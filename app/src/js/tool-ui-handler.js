@@ -74,7 +74,7 @@ export default class ToolUIHandler {
     toolHeader.className = 'tool-header'
     toolHeader.innerHTML = `
       <i class="ri-terminal-line tool-icon"></i>
-      <span class="tool-name">${toolkitName} toolkit → ${toolName} tool → ${answerKey}</span>
+      <span class="tool-name">${toolkitName} toolkit → ${toolName} → ${answerKey}</span>
       <i class="ri-arrow-down-s-line expand-icon"></i>
     `
 

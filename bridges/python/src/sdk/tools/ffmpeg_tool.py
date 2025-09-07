@@ -59,9 +59,37 @@ class FfmpegTool(BaseTool):
             The path to the extracted audio file.
         """
         try:
+            # Determine output format and codec based on file extension
+            audio_extension = audio_path.split('.')[-1].lower() if '.' in audio_path else 'mp3'
+            audio_codec = 'mp3'
+            audio_bitrate = '192k'
+
+            if audio_extension == 'mp3':
+                audio_codec = 'mp3'
+            elif audio_extension == 'aac':
+                audio_codec = 'aac'
+            elif audio_extension == 'wav':
+                audio_codec = 'pcm_s16le'
+                audio_bitrate = ''  # WAV doesn't need bitrate
+            elif audio_extension == 'flac':
+                audio_codec = 'flac'
+                audio_bitrate = ''  # FLAC is lossless
+            else:
+                audio_codec = 'mp3'  # Default to MP3
+
+            # Build ffmpeg arguments
+            args = ['-i', video_path, '-vn', '-acodec', audio_codec]
+
+            # Add bitrate for lossy formats
+            if audio_bitrate:
+                args.extend(['-ab', audio_bitrate])
+
+            # Add output path
+            args.append(audio_path)
+
             self.execute_command(ExecuteCommandOptions(
                 binary_name='ffmpeg',
-                args=['-i', video_path, '-vn', '-acodec', 'copy', audio_path],
+                args=args,
                 options={'sync': True}
             ))
 

@@ -9,6 +9,7 @@
     "email": "louis@getleon.ai",
     "url": "https://twitter.com/grenlouis"
   },
+  "flow": ["download_video", "extract_audio"],
   "actions": {
     "download_video": {
       "type": "logic",

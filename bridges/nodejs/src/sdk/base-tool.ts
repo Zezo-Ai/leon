@@ -75,6 +75,38 @@ export abstract class Tool {
   }
 
   /**
+   * Escape shell argument by escaping special characters with backslashes
+   * This follows the Unix/Linux shell escaping convention
+   */
+  private escapeShellArg(arg: string): string {
+    // Don't escape URLs - they have their own structure
+    try {
+      new URL(arg)
+      // If URL constructor succeeds, it's a valid URL - don't escape it
+      return arg
+    } catch {
+      // Not a valid URL, continue with normal escaping
+    }
+
+    if (isWindows()) {
+      // Windows: wrap in double quotes and escape internal quotes
+      if (
+        arg.includes(' ') ||
+        arg.includes('"') ||
+        arg.includes('&') ||
+        arg.includes('|')
+      ) {
+        return `"${arg.replace(/"/g, '\\"')}"`
+      }
+
+      return arg
+    }
+
+    // Unix/Linux: escape special characters with backslashes
+    return arg.replace(/(["\s'$`\\(){}[\]|&;<>*?!])/g, '\\$1')
+  }
+
+  /**
    * Execute a command with proper Leon messaging and progress tracking
    */
   protected async executeCommand(
@@ -92,7 +124,9 @@ export abstract class Tool {
 
     // Get binary path (auto-downloads if needed)
     const binaryPath = await this.getBinaryPath(binaryName, skipBinaryDownload)
-    const commandString = `"${binaryPath}" ${args.join(' ')}`
+    const commandString = `"${binaryPath}" ${args
+      .map((arg) => this.escapeShellArg(arg))
+      .join(' ')}`
 
     // Generate a unique group ID for this command execution
     const toolGroupId = `${this.toolkit}_${this.toolName}_${Date.now()}`
@@ -140,11 +174,16 @@ export abstract class Tool {
     try {
       const startTime = Date.now()
 
-      const result = execSync(`"${binaryPath}" ${args.join(' ')}`, {
-        encoding: execOptions.encoding || 'utf8',
-        timeout: execOptions.timeout,
-        cwd: execOptions.cwd
-      })
+      const result = execSync(
+        `"${binaryPath}" ${args
+          .map((arg) => this.escapeShellArg(arg))
+          .join(' ')}`,
+        {
+          encoding: execOptions.encoding || 'utf8',
+          timeout: execOptions.timeout,
+          cwd: execOptions.cwd
+        }
+      )
 
       const executionTime = Date.now() - startTime
 

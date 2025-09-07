@@ -32,10 +32,6 @@
         "download_error": [
           "❌ An error occurred while downloading: {{ error }}",
           "There was a problem downloading the video from {{ video_url }}: {{ error }}"
-        ],
-        "ready_for_processing": [
-          "🎯 Video is ready! Next step: extract audio for {{ target_language }} translation. You can use the 'extract_audio' action.",
-          "The video is downloaded and ready. Use 'extract_audio' to prepare it for {{ target_language }} translation."
         ]
       }
     },
@@ -51,6 +47,10 @@
         ]
       },
       "answers": {
+        "no_video_info": [
+          "❌ No video information found in memory. Please download a video first using the 'download_video' action.",
+          "I couldn't find any video to process. Please download a video first before extracting audio."
+        ],
         "video_file_not_found": [
           "❌ I couldn't find the video file at {{ video_path }}. Please check the file path.",
           "The specified video file doesn't exist or is not accessible."
@@ -60,8 +60,8 @@
           "Starting audio extraction for {{ target_language }} translation processing..."
         ],
         "extraction_completed": [
-          "✅ Audio extracted successfully! Output: {{ audio_size }} {{ audio_format }} file ready for {{ target_language }} translation.",
-          "Audio extraction complete! The {{ audio_format }} file ({{ audio_size }}) is ready for {{ target_language }} translation."
+          "✅ Audio extracted successfully into: {{ folder_path }}! Output: {{ audio_size }} {{ audio_format }} file ready for {{ target_language }} translation.",
+          "Audio extraction complete and saved in {{ folder_path }}! The {{ audio_format }} file ({{ audio_size }}) is ready for {{ target_language }}."
         ],
         "extraction_failed": [
           "❌ Failed to extract audio from {{ video_path }}. Error: {{ error }}",
@@ -70,10 +70,6 @@
         "extraction_error": [
           "❌ An error occurred during audio extraction: {{ error }}",
           "There was a problem extracting audio from {{ video_path }}: {{ error }}"
-        ],
-        "ready_for_translation": [
-          "🌐 Audio extraction complete! The {{ audio_path }} file is ready for {{ target_language }} translation processing.",
-          "Audio is ready for {{ target_language }} translation. Next step: {{ next_step }}"
         ]
       }
     }

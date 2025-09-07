@@ -5,7 +5,7 @@ from ..toolkit_config import ToolkitConfig
 
 
 class BashTool(BaseTool):
-    TOOLKIT = 'system_execution'
+    TOOLKIT = 'operating_system_control'
 
     def __init__(self):
         super().__init__()

@@ -394,7 +394,7 @@ export default class LLMManager {
          *      - action 2: transcribe_with_diarization (call whisper_faster (or cloud tool according to given settings) + pyannote (or cloud tool according to given settings) tools)
          *      - ...
          *      - Does it means we need to allow to execute a skill action from another skill action? In the "flow" (skill.json) and "next_action" (action code)
-         *    - Create LearningVideoCreator (find a better name) skill (based on what I did for my YT channel)
+         *    - Create EducationalVideoCreator (find a better name) skill (based on what I did for my YT channel)
          *
          *    - Create one pipenv project for each binary; one .spec file for each binary; one github workflow for each binary; common pyinstaller at the root for /tool_bins/
          *    - For every binary, need to have another tool from cloud service (e.g. 11Labs, etc.) so owners that don't have powerful-enough hardware can use cloud services instead

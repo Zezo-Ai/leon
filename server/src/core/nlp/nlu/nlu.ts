@@ -428,9 +428,6 @@ export default class NLU {
         skillName
       )
 
-      console.log('conf', skillName, actionName)
-      console.log('localeConfig', localeConfig)
-
       if ('actions' in localeConfig) {
         const suggestions = localeConfig?.actions?.[actionName]?.suggestions
 

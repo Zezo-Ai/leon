@@ -91,7 +91,7 @@ IMPORTANT RULES:
             model=preferred_model,
             system_prompt=system_prompt,
             temperature=0.1,
-            max_tokens=500
+            max_tokens=512
         )
 
         print('OpenRouter response:', response)

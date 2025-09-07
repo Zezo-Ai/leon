@@ -16,7 +16,7 @@ interface ExecuteOptions {
 }
 
 export default class BashTool extends Tool {
-  private static readonly TOOLKIT = 'system_execution'
+  private static readonly TOOLKIT = 'operating_system_control'
   private readonly config: ReturnType<typeof ToolkitConfig.load>
 
   constructor() {

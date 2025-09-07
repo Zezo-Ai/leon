@@ -59,9 +59,44 @@ export default class FfmpegTool extends Tool {
    */
   async extractAudio(videoPath: string, audioPath: string): Promise<string> {
     try {
+      // Determine output format and codec based on file extension
+      const audioExtension = audioPath.split('.').pop()?.toLowerCase()
+      let audioCodec = 'mp3'
+      let audioBitrate = '192k'
+
+      switch (audioExtension) {
+        case 'mp3':
+          audioCodec = 'mp3'
+          break
+        case 'aac':
+          audioCodec = 'aac'
+          break
+        case 'wav':
+          audioCodec = 'pcm_s16le'
+          audioBitrate = '' // WAV doesn't need bitrate
+          break
+        case 'flac':
+          audioCodec = 'flac'
+          audioBitrate = '' // FLAC is lossless
+          break
+        default:
+          audioCodec = 'mp3' // Default to MP3
+      }
+
+      // Build ffmpeg arguments
+      const args = ['-i', videoPath, '-vn', '-acodec', audioCodec]
+
+      // Add bitrate for lossy formats
+      if (audioBitrate) {
+        args.push('-ab', audioBitrate)
+      }
+
+      // Add output path
+      args.push(audioPath)
+
       await this.executeCommand({
         binaryName: 'ffmpeg',
-        args: ['-i', videoPath, '-vn', '-acodec', 'copy', audioPath],
+        args,
         options: { sync: true }
       })
 

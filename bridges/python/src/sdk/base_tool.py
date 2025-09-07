@@ -1,14 +1,15 @@
 import os
 import urllib.request
+import re
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Dict, Optional, Union, List, Any
+from urllib.parse import urlparse
 from .toolkit_config import ToolkitConfig
 from .leon import leon
 from .utils import is_windows, is_macos
 from ..constants import TOOLKITS_PATH
 import subprocess
 import time
-from typing import List, Any
 
 # Progress callback type for reporting tool progress
 ProgressCallback = Callable[[Dict[str, Optional[Union[str, int, float]]]], None]
@@ -54,6 +55,30 @@ class BaseTool(ABC):
         """Tool description"""
         pass
 
+    def _escape_shell_arg(self, arg: str) -> str:
+        """
+        Escape shell argument by escaping special characters with backslashes
+        This follows the Unix/Linux shell escaping convention
+        """
+        # Don't escape URLs - they have their own structure
+        try:
+            parsed = urlparse(arg)
+            # If urlparse succeeds and has a scheme, it's likely a valid URL
+            if parsed.scheme:
+                return arg
+        except Exception:
+            # Not a valid URL, continue with normal escaping
+            pass
+
+        if is_windows():
+            # Windows: wrap in double quotes and escape internal quotes
+            if ' ' in arg or '"' in arg or '&' in arg or '|' in arg:
+                return f'"{arg.replace(chr(34), chr(92) + chr(34))}"'  # Replace " with \"
+            return arg
+        else:
+            # Unix/Linux: escape special characters with backslashes
+            return re.sub(r'(["\s\'$`\\(){}[\]|&;<>*?!])', r'\\\1', arg)
+
     def execute_command(self, options: ExecuteCommandOptions) -> str:
         """Execute a command with proper Leon messaging and progress tracking"""
 
@@ -68,7 +93,7 @@ class BaseTool(ABC):
 
         # Get binary path (auto-downloads if needed)
         binary_path = self.get_binary_path(binary_name, skip_binary_download)
-        command_string = f'"{binary_path}" {" ".join(args)}'
+        command_string = f'"{binary_path}" {" ".join([self._escape_shell_arg(arg) for arg in args])}'
 
         # Generate a unique group ID for this command execution
         tool_group_id = f"{self.toolkit}_{self.tool_name}_{int(time.time() * 1000)}"
@@ -98,9 +123,10 @@ class BaseTool(ABC):
             start_time = time.time()
 
             result = subprocess.run(
-                [binary_path] + args,
+                command_string,
                 capture_output=True,
                 text=True,
+                shell=True,
                 timeout=exec_options.get('timeout') if exec_options else None,
                 cwd=exec_options.get('cwd') if exec_options else None
             )

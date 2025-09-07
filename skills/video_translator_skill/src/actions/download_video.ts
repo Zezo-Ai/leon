@@ -9,6 +9,7 @@ import YtdlpTool from '@sdk/tools/ytdlp-tool'
 import { formatFilePath } from '@sdk/utils'
 
 import { DownloadProgressWidget } from '../widgets/download-progress-widget'
+import { saveVideoInfo } from '../lib/memory'
 
 export const run: ActionFunction = async function (
   _params: ActionParams,
@@ -158,13 +159,8 @@ export const run: ActionFunction = async function (
       }
     })
 
-    leon.answer({
-      key: 'ready_for_processing',
-      data: {
-        target_language: targetLanguage,
-        next_step: 'extract_audio'
-      }
-    })
+    // Save video information to memory for use in next action
+    await saveVideoInfo(downloadedVideoPath, targetLanguage, quality)
   } catch (error) {
     leon.answer({
       key: 'download_error',
