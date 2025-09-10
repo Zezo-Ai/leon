@@ -5,11 +5,11 @@
     "faster_whisper": {
       "description": "",
       "binaries": {
-        "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/faster-whisper_1.0.0/faster-whisper_1.0.0-linux-x86_64",
-        "linux-aarch64": "https://github.com/leon-ai/leon-binaries/releases/download/faster-whisper_1.0.0/faster-whisper_1.0.0-linux-aarch64",
-        "macosx-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/faster-whisper_1.0.0/faster-whisper_1.0.0-macosx-x86_64",
-        "macosx-arm64": "https://github.com/leon-ai/leon-binaries/releases/download/faster-whisper_1.0.0/faster-whisper_1.0.0-macosx-arm64",
-        "win-amd64": "https://github.com/leon-ai/leon-binaries/releases/download/faster-whisper_1.0.0/faster-whisper_1.0.0-win-amd64.exe"
+        "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/faster_whisper-v1.0.0/faster_whisper_1.0.0-linux-x86_64",
+        "linux-aarch64": "https://github.com/leon-ai/leon-binaries/releases/download/faster_whisper-v1.0.0/faster_whisper_1.0.0-linux-aarch64",
+        "macosx-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/faster_whisper-v1.0.0/faster_whisper_1.0.0-macosx-x86_64",
+        "macosx-arm64": "https://github.com/leon-ai/leon-binaries/releases/download/faster_whisper-v1.0.0/faster_whisper_1.0.0-macosx-arm64",
+        "win-amd64": "https://github.com/leon-ai/leon-binaries/releases/download/faster_whisper-v1.0.0/faster_whisper_1.0.0-win-amd64.exe"
       },
       "resources": {
         "faster-whisper-large-v3": [
