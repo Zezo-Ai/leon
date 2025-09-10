@@ -352,7 +352,17 @@ class BaseTool(ABC):
             })
 
             try:
+                # Ensure the directory exists before writing
+                file_dir = os.path.dirname(file_path)
+                if not os.path.exists(file_dir):
+                    os.makedirs(file_dir, exist_ok=True)
+
+                # Use urllib to download the file properly
                 urllib.request.urlretrieve(adjusted_url, file_path)
+
+                # Verify the file was downloaded correctly
+                if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+                    raise Exception(f"Downloaded file is empty or was not created properly")
 
                 self.report('bridges.tools.resource_file_downloaded', {
                     'resource_name': resource_name,
@@ -463,9 +473,19 @@ class BaseTool(ABC):
 
         try:
             self.report('bridges.tools.downloading_from_url', {})
-            with urllib.request.urlopen(url) as response:
-                with open(output_path, 'wb') as f:
-                    f.write(response.read())
+
+            # Ensure the directory exists before writing
+            file_dir = os.path.dirname(output_path)
+            if not os.path.exists(file_dir):
+                os.makedirs(file_dir, exist_ok=True)
+
+            # Use urllib to download the file
+            urllib.request.urlretrieve(url, output_path)
+
+            # Verify the file was downloaded correctly
+            if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                raise Exception(f"Downloaded binary is empty or was not created properly")
+
         except Exception as e:
             self.report('bridges.tools.download_url_failed', {
                 'error': str(e)

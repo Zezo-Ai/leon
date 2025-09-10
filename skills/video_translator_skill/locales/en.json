@@ -94,8 +94,8 @@
           "The specified audio file doesn't exist or is not accessible."
         ],
         "transcription_started": [
-          "🎤 Transcribing audio from {{ audio_path }} ({{ audio_size }}) using {{ model_size }} model for {{ target_language }} translation...",
-          "Starting audio transcription using {{ model_size }} model for {{ target_language }} translation processing..."
+          "🎤 Transcribing audio from {{ audio_path }} ({{ audio_size }}) for {{ target_language }} translation...",
+          "Starting audio transcription for {{ target_language }} translation processing..."
         ],
         "transcription_completed": [
           "✅ Audio transcribed successfully into: {{ folder_path }}! Output: {{ transcription_size }} text file ready for {{ target_language }} translation.",

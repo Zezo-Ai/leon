@@ -17,8 +17,6 @@ export const run: ActionFunction = async function (
   let targetLanguage = paramsHelper.getActionArgument(
     'target_language'
   ) as string
-  const modelSize =
-    (paramsHelper.getActionArgument('model_size') as string) || 'large-v3'
 
   try {
     // If audio_path is not provided as argument, try to get it from memory
@@ -63,7 +61,6 @@ export const run: ActionFunction = async function (
       data: {
         audio_path: formatFilePath(path.basename(audioPath)),
         target_language: targetLanguage,
-        model_size: modelSize,
         audio_size: `${audioSizeMB} MB`
       }
     })
@@ -79,8 +76,7 @@ export const run: ActionFunction = async function (
     // Transcribe audio using faster-whisper
     const transcribedPath = await whisperTool.transcribeToFile(
       audioPath,
-      transcriptionPath,
-      modelSize
+      transcriptionPath
     )
 
     // Verify the transcription file exists
@@ -100,7 +96,7 @@ export const run: ActionFunction = async function (
     const transcriptionSizeKB = Math.round(transcriptionStats.size / 1_024)
 
     // Update memory with transcription information
-    await updateTranscriptionInfo(transcribedPath, modelSize)
+    await updateTranscriptionInfo(transcribedPath)
 
     leon.answer({
       key: 'transcription_completed',
@@ -109,8 +105,7 @@ export const run: ActionFunction = async function (
         transcription_path: formatFilePath(transcribedPath),
         folder_path: formatFilePath(path.dirname(transcribedPath)),
         transcription_size: `${transcriptionSizeKB} KB`,
-        target_language: targetLanguage,
-        model_size: modelSize
+        target_language: targetLanguage
       }
     })
   } catch (error) {

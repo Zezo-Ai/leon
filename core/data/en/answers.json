@@ -262,11 +262,11 @@
       "Downloading {{ resource_name }} resource, this may take a moment..."
     ],
     "bridges.tools.downloading_resource_file": [
-      "Downloading {{ file_name }} for {{ resource_name }} from {{ url }}...",
-      "Fetching {{ file_name }} file for {{ resource_name }}...",
-      "Getting {{ file_name }} from {{ url }}...",
-      "Downloading resource file {{ file_name }}...",
-      "Retrieving {{ file_name }} for {{ resource_name }} resource..."
+      "Downloading {{ file_name }} for {{ resource_name }} from {{ url }} ...",
+      "Fetching {{ file_name }} file for {{ resource_name }} ...",
+      "Getting {{ file_name }} from {{ url }} ...",
+      "Downloading resource file {{ file_name }} ...",
+      "Retrieving {{ file_name }} for {{ resource_name }} resource ..."
     ],
     "bridges.tools.resource_file_downloaded": [
       "Downloaded {{ file_name }} for {{ resource_name }} to {{ file_path }}.",
@@ -276,11 +276,11 @@
       "Completed download of {{ file_name }} for {{ resource_name }}."
     ],
     "bridges.tools.resource_file_download_failed": [
-      "Failed to download {{ file_name }} for {{ resource_name }} from {{ url }}: {{ error }}.",
+      "Failed to download {{ file_name }} for {{ resource_name }} from {{ url }} : {{ error }}.",
       "Download error for {{ file_name }} ({{ resource_name }}): {{ error }}.",
       "Could not download {{ file_name }} for {{ resource_name }}: {{ error }}.",
       "{{ file_name }} download failed for {{ resource_name }}: {{ error }}.",
-      "Error downloading {{ file_name }} from {{ url }}: {{ error }}."
+      "Error downloading {{ file_name }} from {{ url }} : {{ error }}."
     ],
     "bridges.tools.resource_downloaded": [
       "{{ resource_name }} resource downloaded successfully to {{ resource_path }}.",

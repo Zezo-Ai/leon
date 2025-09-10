@@ -390,7 +390,7 @@ export default class LLMManager {
          *      - [ok] Fix base-tool.ts TSLint errors
          *      - [ok] Auto download whisper_faster binary from leon-binaries repo
          *      - [ok] Run my GitHub workflow via the GitHub action UI. Create GitHub action to compile binaries cross platforms (see how to use GitHub Action CLI directly)
-         *      - Try whisper_faster end to end
+         *      - Try whisper_faster end to end -> see if when download model.bin it still returns error
          *    - Create pyannote tool -> diarize
          *    - Create openai_audio (then openai_image, openai_video, etc.) tool (openai provides many APIs, hence, we can have a tool for each toolkit) -> transcribe; translate; synthesize, etc.
          *    - Create gladia tool -> transcribe; diarize

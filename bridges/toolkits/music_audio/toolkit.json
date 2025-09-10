@@ -3,7 +3,7 @@
   "description": "Tools for music and audio processing.",
   "tools": {
     "faster_whisper": {
-      "description": "",
+      "description": "A tool for speech recognition and audio transcription using the Faster Whisper model.",
       "binaries": {
         "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/faster_whisper-v1.0.0/faster_whisper_1.0.0-linux-x86_64",
         "linux-aarch64": "https://github.com/leon-ai/leon-binaries/releases/download/faster_whisper-v1.0.0/faster_whisper_1.0.0-linux-aarch64",

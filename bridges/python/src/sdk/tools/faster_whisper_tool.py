@@ -11,14 +11,12 @@ class FasterWhisperTool(BaseTool):
     def __init__(self):
         super().__init__()
         # Load configuration from central toolkits directory
-        # Use class name for tool config name
-        tool_config_name = 'faster_whisper'
-        self.config = ToolkitConfig.load(self.TOOLKIT, tool_config_name)
+        self.config = ToolkitConfig.load(self.TOOLKIT, self.tool_name)
 
     @property
     def tool_name(self) -> str:
-        # Dynamic tool name based on class name
-        return self.__class__.__name__
+        # Use the actual config name for toolkit lookup
+        return 'faster_whisper'
 
     @property
     def toolkit(self) -> str:
@@ -32,7 +30,6 @@ class FasterWhisperTool(BaseTool):
         self,
         input_path: str,
         output_path: str,
-        model_size_or_path: Optional[str] = None,
         device: str = 'auto',
         cpu_threads: Optional[int] = None,
         download_root: Optional[str] = None,
@@ -44,7 +41,6 @@ class FasterWhisperTool(BaseTool):
         Args:
             input_path: The file path of the audio to be transcribed
             output_path: The desired file path for the transcription output
-            model_size_or_path: Optional model size or path (default: auto-downloaded large-v3)
             device: Device to use for processing (cpu, cuda, auto)
             cpu_threads: Number of CPU threads to use
             download_root: Root directory for model downloads
@@ -55,7 +51,7 @@ class FasterWhisperTool(BaseTool):
         """
         try:
             # Get model path using the generic resource system
-            model_path = model_size_or_path or self.get_resource_path(MODEL_NAME)
+            model_path = self.get_resource_path(MODEL_NAME)
 
             args = [
                 '--function', 'transcribe_to_file',

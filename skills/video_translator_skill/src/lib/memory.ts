@@ -59,8 +59,7 @@ export async function updateAudioInfo(
 }
 
 export async function updateTranscriptionInfo(
-  transcriptionPath: string,
-  modelSize: string
+  transcriptionPath: string
 ): Promise<VideoTranslatorMemory | null> {
   const currentMemory = await VIDEO_TRANSLATOR_MEMORY.read()
 
@@ -70,8 +69,7 @@ export async function updateTranscriptionInfo(
 
   const updatedMemory: VideoTranslatorMemory = {
     ...currentMemory,
-    transcriptionPath,
-    modelSize
+    transcriptionPath
   }
 
   await VIDEO_TRANSLATOR_MEMORY.write(updatedMemory)

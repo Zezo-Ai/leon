@@ -33,50 +33,11 @@
     },
     "extract_audio": {
       "type": "logic",
-      "description": "Extract audio from a downloaded video file for translation processing.",
-      "parameters": {
-        "video_path": {
-          "type": "string",
-          "description": "The path to the video file from which to extract audio."
-        },
-        "target_language": {
-          "type": "string",
-          "description": "The target language for translation (e.g., 'Chinese', 'Spanish', 'French')."
-        },
-        "audio_format": {
-          "type": "string",
-          "description": "The desired audio format (optional, defaults to 'mp3')."
-        }
-      },
-      "optional_parameters": ["audio_format"]
+      "description": "Extract audio from a downloaded video file for translation processing."
     },
     "transcribe_audio": {
       "type": "logic",
-      "description": "Transcribe audio to text using faster-whisper for translation purposes.",
-      "parameters": {
-        "audio_path": {
-          "type": "string",
-          "description": "The path to the audio file to transcribe."
-        },
-        "target_language": {
-          "type": "string",
-          "description": "The target language for translation (e.g., 'Chinese', 'Spanish', 'French')."
-        },
-        "model_size": {
-          "type": "string",
-          "enum": [
-            "tiny",
-            "base",
-            "small",
-            "medium",
-            "large-v1",
-            "large-v2",
-            "large-v3"
-          ],
-          "description": "The Whisper model size to use (optional, defaults to 'large-v3')."
-        }
-      },
-      "optional_parameters": ["model_size"]
+      "description": "Transcribe audio to text using faster-whisper for translation purposes."
     }
   }
 }

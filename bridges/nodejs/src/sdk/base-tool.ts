@@ -468,7 +468,15 @@ export abstract class Tool {
           timeout: 30_000 // 30 second timeout per file
         })
 
-        fs.writeFileSync(filePath, response.data)
+        // Ensure the directory exists before writing
+        const fileDir = path.dirname(filePath)
+        if (!fs.existsSync(fileDir)) {
+          fs.mkdirSync(fileDir, { recursive: true })
+        }
+
+        // Convert ArrayBuffer to Buffer for Node.js writeFileSync
+        const buffer = Buffer.from(response.data)
+        fs.writeFileSync(filePath, buffer)
 
         await this.report('bridges.tools.resource_file_downloaded', {
           resource_name: resourceName,
@@ -573,7 +581,15 @@ export abstract class Tool {
       await this.report('bridges.tools.downloading_from_url')
       const response = await axios.get(url, { responseType: 'arraybuffer' })
 
-      fs.writeFileSync(outputPath, response.data)
+      // Ensure the directory exists before writing
+      const fileDir = path.dirname(outputPath)
+      if (!fs.existsSync(fileDir)) {
+        fs.mkdirSync(fileDir, { recursive: true })
+      }
+
+      // Convert ArrayBuffer to Buffer for Node.js writeFileSync
+      const buffer = Buffer.from(response.data)
+      fs.writeFileSync(outputPath, buffer)
     } catch (error) {
       await this.report('bridges.tools.download_url_failed', {
         error: (error as Error).message
