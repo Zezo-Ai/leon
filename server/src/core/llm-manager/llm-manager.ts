@@ -395,14 +395,13 @@ export default class LLMManager {
          *      - [ok] Remove TODOs from run_faster_whisper.py in leon-binaries
          *      - [ok] In base-tool.ts: should be able to add cliProgress: true without it reports errors. Hence, for log, I think we need to wrap logs so the brain will not think it is an error
          *      - [ok] Same for base_tool.py with dl.start and display=True
-         *      - Clean up logs/report and overall skill flow to make it simpler and more understandable
-         *      - In yt-dlp tool, add tips from my personal notes
-         *      - Add option to download subtitles instead of doing transcription (create youtube tool, etc.)
+         *      - [ok] In yt-dlp tool, add tips from my personal notes
          *    - Create pyannote tool -> diarize -> create action to merge diarization with transcription (already done in PoC)
          *    - Create indextts2 tool for voice dubbing/cloning https://index-tts.github.io/index-tts2.github.io/
          *    - Create openai_audio (then openai_image, openai_video, etc.) tool (openai provides many APIs, hence, we can have a tool for each toolkit) -> transcribe; translate; synthesize, etc.
          *    - Create gladia tool -> transcribe; diarize
          *    - Rename VideoTranslator by "VideoDubbing"?
+         *    - Make VideoTranslator more appealing (download video widget must be prettier, etc.)
          *    - Can create one skill per action we already use in previous skills (VideoDownloader, AudioExtractor, etc.) with only one action per skill. And reuse the widgets somehow from the VideoTranslator skill
          *    - E.g. Summarize the keypoints of this video... (yt-dlp download subtitles, llm gemini 2.5 pro summarize): Create openrouter, localllm tools (use HTTP to request core, hence need to implement openrouter in core) -> prompt (for general purpose)
          *    - Summarize video -> then auto trim/cut video based on the summary (use ffmpeg to cut the video); need to get the timestamps from the summary
