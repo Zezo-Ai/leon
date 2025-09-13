@@ -32,6 +32,20 @@ export default class YtdlpTool extends Tool {
   }
 
   /**
+   * Build common yt-dlp arguments with retry and sleep options
+   */
+  private buildCommonArgs(): string[] {
+    return [
+      '--retries',
+      '3',
+      '--sleep-interval',
+      '3',
+      '--max-sleep-interval',
+      '25'
+    ]
+  }
+
+  /**
    * Downloads a single video from the provided URL.
    * @param videoUrl The URL of the video to download.
    * @param outputPath The directory where the video will be saved.
@@ -46,7 +60,7 @@ export default class YtdlpTool extends Tool {
       const outputTemplate = join(outputPath, '%(title)s.%(ext)s')
       const result = await this.executeCommand({
         binaryName: 'yt-dlp',
-        args: [videoUrl, '-o', outputTemplate],
+        args: [...this.buildCommonArgs(), videoUrl, '-o', outputTemplate],
         options: { sync: true }
       })
 
@@ -90,6 +104,7 @@ export default class YtdlpTool extends Tool {
       const result = await this.executeCommand({
         binaryName: 'yt-dlp',
         args: [
+          ...this.buildCommonArgs(),
           videoUrl,
           '-x',
           '--audio-format',
@@ -139,7 +154,7 @@ export default class YtdlpTool extends Tool {
       )
       await this.executeCommand({
         binaryName: 'yt-dlp',
-        args: [playlistUrl, '-o', outputTemplate],
+        args: [...this.buildCommonArgs(), playlistUrl, '-o', outputTemplate],
         options: { sync: true }
       })
 
@@ -187,6 +202,7 @@ export default class YtdlpTool extends Tool {
       await this.executeCommand({
         binaryName: 'yt-dlp',
         args: [
+          ...this.buildCommonArgs(),
           videoUrl,
           '-f',
           formatSelector,
@@ -278,6 +294,7 @@ export default class YtdlpTool extends Tool {
       await this.executeCommand({
         binaryName: 'yt-dlp',
         args: [
+          ...this.buildCommonArgs(),
           videoUrl,
           '--write-subs',
           '--sub-langs',
@@ -319,6 +336,7 @@ export default class YtdlpTool extends Tool {
       const result = await this.executeCommand({
         binaryName: 'yt-dlp',
         args: [
+          ...this.buildCommonArgs(),
           videoUrl,
           '--embed-thumbnail',
           '--write-thumbnail',

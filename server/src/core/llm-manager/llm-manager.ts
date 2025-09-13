@@ -391,11 +391,12 @@ export default class LLMManager {
          *      - [ok] Auto download whisper_faster binary from leon-binaries repo
          *      - [ok] Run my GitHub workflow via the GitHub action UI. Create GitHub action to compile binaries cross platforms (see how to use GitHub Action CLI directly)
          *      - [ok] Remove pipfile package from faster_whisper in leon-binaries
-         *      - Try whisper_faster end to end -> see if when download model.bin it still returns error
+         *      - [ok] Try whisper_faster end to end -> see if when download model.bin it still returns error
          *      - [ok] Remove TODOs from run_faster_whisper.py in leon-binaries
          *      - [ok] In base-tool.ts: should be able to add cliProgress: true without it reports errors. Hence, for log, I think we need to wrap logs so the brain will not think it is an error
          *      - [ok] Same for base_tool.py with dl.start and display=True
          *      - Clean up logs/report and overall skill flow to make it simpler and more understandable
+         *      - In yt-dlp tool, add tips from my personal notes
          *      - Add option to download subtitles instead of doing transcription (create youtube tool, etc.)
          *    - Create pyannote tool -> diarize -> create action to merge diarization with transcription (already done in PoC)
          *    - Create indextts2 tool for voice dubbing/cloning https://index-tts.github.io/index-tts2.github.io/

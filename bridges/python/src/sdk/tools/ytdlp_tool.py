@@ -27,38 +27,47 @@ class YtdlpTool(BaseTool):
     def description(self) -> str:
         return self.config['description']
 
+    def _build_common_args(self):
+        """Build common yt-dlp arguments with retry and sleep options"""
+        return [
+            '--retries', '3',
+            '--sleep-interval', '3',
+            '--max-sleep-interval', '25'
+        ]
+
     def download_video(self, video_url: str, output_path: str) -> str:
         """
         Downloads a single video from the provided URL.
         
         Args:
-            video_url: The URL of the video to download.
-            output_path: The directory where the video will be saved.
+            video_url: The URL of the video to download
+            output_path: The directory where the video will be saved
             
         Returns:
-            The file path of the downloaded video.
+            The file path of the downloaded video
         """
         try:
             # Ensure output directory exists
             os.makedirs(output_path, exist_ok=True)
 
-            # Run yt-dlp with output template
             output_template = os.path.join(output_path, '%(title)s.%(ext)s')
+            args = self._build_common_args() + [video_url, '-o', output_template]
+
             result = self.execute_command(ExecuteCommandOptions(
                 binary_name='yt-dlp',
-                args=[video_url, '-o', output_template],
+                args=args,
                 options={'sync': True}
             ))
 
             # Parse the output to get the actual filename
             lines = result.split('\n')
             for line in lines:
-                if 'has already been downloaded' in line or 'Destination:' in line:
-                    # Extract filename from the line
-                    filename = line.split()[-1]
-                    return filename
+                if ('has already been downloaded' in line or
+                    'Destination:' in line):
+                    filename = line.split(' ')[-1]
+                    if filename:
+                        return filename
 
-            # If we can't parse the exact filename, return the template path
             return output_template
 
         except Exception as e:
@@ -80,20 +89,23 @@ class YtdlpTool(BaseTool):
             # Ensure output directory exists
             os.makedirs(output_path, exist_ok=True)
 
-            # Run yt-dlp with audio extraction
-            output_template = os.path.join(output_path, f'%(title)s.{audio_format}')
+            output_template = os.path.join(output_path, '%(title)s.%(ext)s')
+            args = self._build_common_args() + [video_url, '-x', '--audio-format', audio_format, '-o', output_template]
+
             result = self.execute_command(ExecuteCommandOptions(
                 binary_name='yt-dlp',
-                args=[video_url, '-x', '--audio-format', audio_format, '-o', output_template],
+                args=args,
                 options={'sync': True}
             ))
 
             # Parse the output to get the actual filename
             lines = result.split('\n')
             for line in lines:
-                if 'has already been downloaded' in line or 'Destination:' in line:
-                    filename = line.split()[-1]
-                    return filename
+                if ('has already been downloaded' in line or
+                    'Destination:' in line):
+                    filename = line.split(' ')[-1]
+                    if filename:
+                        return filename
 
             return output_template
 
@@ -115,11 +127,12 @@ class YtdlpTool(BaseTool):
             # Ensure output directory exists
             os.makedirs(output_path, exist_ok=True)
 
-            # Run yt-dlp for playlist
             output_template = os.path.join(output_path, '%(playlist_index)s - %(title)s.%(ext)s')
+            args = self._build_common_args() + [playlist_url, '-o', output_template]
+
             self.execute_command(ExecuteCommandOptions(
                 binary_name='yt-dlp',
-                args=[playlist_url, '-o', output_template],
+                args=args,
                 options={'sync': True}
             ))
 
@@ -198,9 +211,10 @@ class YtdlpTool(BaseTool):
                                 'status': 'completed'
                             })
 
+            args = self._build_common_args() + [video_url, '-f', format_selector, '-o', output_template]
             self.execute_command(ExecuteCommandOptions(
                 binary_name='yt-dlp',
-                args=[video_url, '-f', format_selector, '-o', output_template, '--newline'],
+                args=args,
                 options={'sync': False},
                 on_progress=on_progress,
                 on_output=handle_output
@@ -227,12 +241,13 @@ class YtdlpTool(BaseTool):
             # Ensure output directory exists
             os.makedirs(output_path, exist_ok=True)
 
-            # Download subtitles only
             output_template = os.path.join(output_path, '%(title)s.%(ext)s')
+            args = self._build_common_args() + [video_url, '--write-subs', '--sub-langs', language_code,
+                                                '--skip-download', '-o', output_template]
+
             self.execute_command(ExecuteCommandOptions(
                 binary_name='yt-dlp',
-                args=[video_url, '--write-subs', '--sub-langs', language_code, '--skip-download', '-o',
-                      output_template],
+                args=args,
                 options={'sync': True}
             ))
 
@@ -258,22 +273,26 @@ class YtdlpTool(BaseTool):
             # Ensure output directory exists
             os.makedirs(output_path, exist_ok=True)
 
-            # Download with thumbnail embedding
             output_template = os.path.join(output_path, '%(title)s.%(ext)s')
+            args = self._build_common_args() + [video_url, '--embed-thumbnail', '--write-thumbnail', '-o',
+                                                output_template]
+
             result = self.execute_command(ExecuteCommandOptions(
                 binary_name='yt-dlp',
-                args=[video_url, '--embed-thumbnail', '--write-thumbnail', '-o', output_template],
+                args=args,
                 options={'sync': True}
             ))
 
             # Parse the output to get the actual filename
             lines = result.split('\n')
             for line in lines:
-                if 'has already been downloaded' in line or 'Destination:' in line:
-                    filename = line.split()[-1]
-                    return filename
+                if ('has already been downloaded' in line or
+                    'Destination:' in line):
+                    filename = line.split(' ')[-1]
+                    if filename:
+                        return filename
 
             return output_template
 
         except Exception as e:
-            raise Exception(f"Video with thumbnail download failed: {str(e)}")
+            raise Exception(f"Video download with thumbnail failed: {str(e)}")
