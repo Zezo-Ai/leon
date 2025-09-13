@@ -53,15 +53,26 @@ export class LogicActionSkillHandler {
           buffer = buffer.substring(newlineIndex + 1)
 
           if (chunk) {
-            try {
-              const skillResult = JSON.parse(chunk) as SkillResult
+            // Check if this is a tool log first
+            if (chunk.includes('[LEON_TOOL_LOG]')) {
+              // Extract and log the tool message without treating it as skill response
+              const cleanedMessage = chunk.replace('[LEON_TOOL_LOG]', '').trim()
+              if (cleanedMessage) {
+                LogHelper.title(`${BRAIN.skillFriendlyName} skill (tool log)`)
+                LogHelper.info(cleanedMessage)
+              }
+            } else {
+              // Process as normal JSON skill response
+              try {
+                const skillResult = JSON.parse(chunk) as SkillResult
 
-              // Store the latest result
-              lastSkillResult = skillResult
-              this.handleLogicActionSkillProcessOutput(skillResult)
-            } catch (e) {
-              LogHelper.title('Brain')
-              LogHelper.error(`Error parsing chunk: ${chunk}. Details: ${e}`)
+                // Store the latest result
+                lastSkillResult = skillResult
+                this.handleLogicActionSkillProcessOutput(skillResult)
+              } catch (e) {
+                LogHelper.title('Brain')
+                LogHelper.error(`Error parsing chunk: ${chunk}. Details: ${e}`)
+              }
             }
           }
         }

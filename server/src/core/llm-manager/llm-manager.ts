@@ -393,8 +393,8 @@ export default class LLMManager {
          *      - [ok] Remove pipfile package from faster_whisper in leon-binaries
          *      - Try whisper_faster end to end -> see if when download model.bin it still returns error
          *      - [ok] Remove TODOs from run_faster_whisper.py in leon-binaries
-         *      - In base-tool.ts: should be able to add cliProgress: true without it reports errors. Hence, for log, I think we need to wrap logs so the brain will not think it is an error
-         *      - Same for base_tool.py with dl.start and display=True
+         *      - [ok] In base-tool.ts: should be able to add cliProgress: true without it reports errors. Hence, for log, I think we need to wrap logs so the brain will not think it is an error
+         *      - [ok] Same for base_tool.py with dl.start and display=True
          *      - Clean up logs/report and overall skill flow to make it simpler and more understandable
          *      - Add option to download subtitles instead of doing transcription (create youtube tool, etc.)
          *    - Create pyannote tool -> diarize -> create action to merge diarization with transcription (already done in PoC)

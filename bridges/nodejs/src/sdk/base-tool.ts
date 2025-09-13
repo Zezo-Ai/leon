@@ -6,7 +6,14 @@ import { downloadFile } from 'ipull'
 
 import { TOOLKITS_PATH } from '@bridge/constants'
 import { ToolkitConfig } from '@sdk/toolkit-config'
-import { isWindows, isMacOS, setHuggingFaceURL } from '@sdk/utils'
+import {
+  isWindows,
+  isMacOS,
+  setHuggingFaceURL,
+  formatBytes,
+  formatSpeed,
+  formatETA
+} from '@sdk/utils'
 import { leon } from '@sdk/leon'
 
 // Progress callback type for reporting tool progress
@@ -48,6 +55,11 @@ export abstract class Tool {
    * Tool description
    */
   abstract get description(): string
+
+  /**
+   * Enable CLI progress display for downloads (logs to stdout instead of stderr to avoid JSON interference)
+   */
+  protected cliProgress: boolean = true
 
   /**
    * Report tool status or information using leon.answer with automatic toolkit/tool context
@@ -479,6 +491,8 @@ export abstract class Tool {
           skipExisting: false
         })
 
+        this.listenDownloadProgress(engine, fileName)
+
         await engine.download()
 
         await this.report('bridges.tools.resource_file_downloaded', {
@@ -592,8 +606,13 @@ export abstract class Tool {
       // Download the file directly to the output path using ipull
       const engine = await downloadFile({
         url: url,
-        savePath: outputPath
+        savePath: outputPath,
+        cliProgress: false,
+        parallelStreams: 3,
+        skipExisting: false
       })
+
+      this.listenDownloadProgress(engine, path.basename(outputPath))
 
       // Actually start the download
       await engine.download()
@@ -602,6 +621,103 @@ export abstract class Tool {
         error: (error as Error).message
       })
       throw new Error(`Failed to download binary: ${(error as Error).message}`)
+    }
+  }
+
+  /**
+   * Log debug/progress information to stdout with special prefix to avoid being treated as JSON
+   * This allows logging without interfering with the JSON communication on stdout
+   */
+  protected log(message: string, ...args: unknown[]): void {
+    // Use a special prefix that the brain can filter out as non-JSON output
+    const logMessage = `[LEON_TOOL_LOG] ${message}${
+      args.length > 0 ? ' ' + args.join(' ') : ''
+    }`
+    process.stdout.write(logMessage + '\n')
+  }
+
+  /**
+   * Setup progress tracking for a download engine if cliProgress is enabled
+   * @param engine The download engine from ipull
+   * @param fileName The name of the file being downloaded
+   */
+  private listenDownloadProgress(
+    engine: {
+      on: (event: string, callback: (progress: unknown) => void) => void
+    },
+    fileName: string
+  ): void {
+    if (this.cliProgress) {
+      let lastLoggedPercentage = -1
+      let lastLogTime = 0
+      const LOG_INTERVAL_MS = 2_000 // Log every 2 seconds at most
+      const PERCENTAGE_THRESHOLD = 5 // Log every 5% progress
+
+      engine.on('progress', (progress: unknown) => {
+        if (progress && typeof progress === 'object' && progress !== null) {
+          const progressObj = progress as {
+            percentage?: number
+            speed?: string | number
+            eta?: string | number
+            size?: string | number
+            transferred?: string | number
+          }
+
+          const percentage = Math.round(progressObj.percentage || 0)
+          const currentTime = Date.now()
+
+          // Only log if we've made significant progress or enough time has passed
+          const shouldLog =
+            percentage >= lastLoggedPercentage + PERCENTAGE_THRESHOLD ||
+            currentTime - lastLogTime >= LOG_INTERVAL_MS ||
+            percentage === 100
+
+          if (shouldLog) {
+            const speed = progressObj.speed
+              ? formatSpeed(progressObj.speed)
+              : ''
+            const eta = progressObj.eta ? formatETA(progressObj.eta) : ''
+
+            // Build progress line
+            let progressLine = `Downloading ${fileName}: ${percentage}%`
+
+            if (speed) {
+              progressLine += ` at ${speed}`
+            }
+
+            if (eta && eta !== '∞') {
+              progressLine += ` (ETA: ${eta})`
+            }
+
+            if (progressObj.size && progressObj.transferred) {
+              const totalSize = formatBytes(
+                typeof progressObj.size === 'string'
+                  ? parseFloat(progressObj.size)
+                  : progressObj.size
+              )
+              const transferredSize = formatBytes(
+                typeof progressObj.transferred === 'string'
+                  ? parseFloat(progressObj.transferred)
+                  : progressObj.transferred
+              )
+              progressLine += ` [${transferredSize}/${totalSize}]`
+            }
+
+            this.log(progressLine)
+
+            lastLoggedPercentage = percentage
+            lastLogTime = currentTime
+          }
+        }
+      })
+
+      // Log completion
+      const logCompletion = (): void => {
+        this.log(`Download completed: ${fileName}`)
+      }
+
+      engine.on('finished', logCompletion)
+      engine.on('end', logCompletion)
     }
   }
 

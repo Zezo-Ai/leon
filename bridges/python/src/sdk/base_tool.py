@@ -6,9 +6,10 @@ from pypdl import Pypdl
 from urllib.parse import urlparse
 from .toolkit_config import ToolkitConfig
 from .leon import leon
-from .utils import is_windows, is_macos, set_hugging_face_url
+from .utils import is_windows, is_macos, set_hugging_face_url, format_bytes, format_speed, format_eta
 from ..constants import TOOLKITS_PATH
 import subprocess
+import sys
 import time
 
 # Progress callback type for reporting tool progress
@@ -36,6 +37,10 @@ class ExecuteCommandOptions:
 
 class BaseTool(ABC):
     """Base class for Python tools"""
+
+    def __init__(self):
+        """Initialize the tool with default settings"""
+        self.cli_progress = True
 
     @property
     @abstractmethod
@@ -359,7 +364,15 @@ class BaseTool(ABC):
 
                 # Use pypdl to download the file properly
                 dl = Pypdl()
-                dl.start(url=adjusted_url, file_path=file_path, display=False)
+
+                if self.cli_progress:
+                    # Start download without blocking and with custom progress tracking
+                    dl.start(url=adjusted_url, file_path=file_path, display=False, block=False)
+
+                    self._handle_download_progress(dl, file_name)
+                else:
+                    # Use standard download with display=False
+                    dl.start(url=adjusted_url, file_path=file_path, display=False)
 
                 # Verify the file was downloaded correctly
                 if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
@@ -482,7 +495,15 @@ class BaseTool(ABC):
 
             # Use pypdl to download the file
             dl = Pypdl()
-            dl.start(url=url, file_path=output_path, display=True)
+
+            if self.cli_progress:
+                # Start download without blocking and with custom progress tracking
+                dl.start(url=url, file_path=output_path, display=False, block=False)
+
+                self._handle_download_progress(dl, os.path.basename(output_path))
+            else:
+                # Use standard download with display=False
+                dl.start(url=url, file_path=output_path, display=False)
 
             # Verify the file was downloaded correctly
             if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
@@ -493,6 +514,78 @@ class BaseTool(ABC):
                 'error': str(e)
             })
             raise Exception(f"Failed to download binary: {str(e)}")
+
+    def log(self, message: str, *args: Any) -> None:
+        """
+        Log debug/progress information to stdout with special prefix to avoid being treated as JSON
+        This allows logging without interfering with the JSON communication on stdout
+        
+        Args:
+            message: The log message
+            *args: Additional arguments to log
+        """
+        # Use a special prefix that the brain can filter out as non-JSON output
+        log_message = f"[LEON_TOOL_LOG] {message}"
+        if args:
+            log_message += " " + " ".join(str(arg) for arg in args)
+        sys.stdout.write(log_message + '\n')
+        sys.stdout.flush()
+
+    def _handle_download_progress(self, dl: 'Pypdl', file_name: str) -> None:
+        """
+        Handle download progress tracking with custom logging
+        
+        Args:
+            dl: The Pypdl downloader instance
+            file_name: The name of the file being downloaded
+        """
+        last_logged_percentage = -1
+        last_log_time = 0
+        LOG_INTERVAL_MS = 2000  # Log every 2 seconds at most
+        PERCENTAGE_THRESHOLD = 5  # Log every 5% progress
+
+        while dl.progress < 100 and not dl.Failed:
+            current_progress = int(dl.progress)
+            current_time = int(time.time() * 1000)
+
+            # Only log if we've made significant progress or enough time has passed
+            should_log = (
+                current_progress >= last_logged_percentage + PERCENTAGE_THRESHOLD or
+                current_time - last_log_time >= LOG_INTERVAL_MS or
+                current_progress == 100
+            )
+
+            if should_log:
+                speed_info = ""
+                if dl.speed and dl.speed > 0:
+                    speed_info = f" at {format_speed(dl.speed)}"
+
+                eta_info = ""
+                if dl.eta:
+                    formatted_eta = format_eta(dl.eta)
+                    if formatted_eta != "∞":
+                        eta_info = f" (ETA: {formatted_eta})"
+
+                size_info = ""
+                if dl.totalMB and dl.doneMB:
+                    total_bytes = dl.totalMB * 1024 * 1024
+                    done_bytes = dl.doneMB * 1024 * 1024
+                    size_info = f" [{format_bytes(done_bytes)}/{format_bytes(total_bytes)}]"
+
+                progress_line = f"Downloading {file_name}: {current_progress}%{speed_info}{eta_info}{size_info}"
+                self.log(progress_line)
+
+                last_logged_percentage = current_progress
+                last_log_time = current_time
+
+            # Small delay to prevent busy waiting
+            time.sleep(0.1)
+
+        # Log completion
+        self.log(f"Download completed: {file_name}")
+
+        if dl.Failed:
+            raise Exception("Download failed")
 
     def report(self, key: str, data: Optional[Dict[str, Any]] = None, tool_group_id: Optional[str] = None) -> None:
         """

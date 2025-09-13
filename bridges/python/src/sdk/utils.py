@@ -2,6 +2,8 @@ import platform
 from typing import List
 import urllib.request
 import urllib.error
+import math
+from typing import Union
 
 HUGGING_FACE_URL = 'https://huggingface.co'
 HUGGING_FACE_MIRROR_URL = 'https://hf-mirror.com'
@@ -145,3 +147,93 @@ def is_linux() -> bool:
         if is_linux(): check_system_package('ffmpeg')
     """
     return get_platform_name().startswith('linux')
+
+
+def format_bytes(bytes_val: float) -> str:
+    """Format bytes into human-readable units
+    
+    Args:
+        bytes_val: The number of bytes to format
+        
+    Returns:
+        A human-readable string representation
+        
+    Example:
+        format_bytes(1024) # returns "1 KB"
+        format_bytes(1536) # returns "1.5 KB"
+    """
+    if bytes_val == 0:
+        return "0 B"
+
+    k = 1024
+    sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+    i = int(math.log(bytes_val) / math.log(k)) if bytes_val > 0 else 0
+    return f"{round(bytes_val / (k ** i), 2)} {sizes[i]}"
+
+
+def format_speed(speed: Union[float, str]) -> str:
+    """Format speed from MB/s to human-readable format
+    
+    Args:
+        speed: The speed in MB/s (pypdl format) or already formatted string
+        
+    Returns:
+        A human-readable speed string
+        
+    Example:
+        format_speed(1.5) # returns "1.5 MB/s" (pypdl returns in MB/s)
+        format_speed("1.5 MB/s") # returns "1.5 MB/s" (already formatted)
+    """
+    if isinstance(speed, str):
+        # If it's already formatted (e.g., "1.5 MB/s"), return as is
+        if '/s' in speed:
+            return speed
+        # If it's a string number, convert to float
+        try:
+            speed = float(speed)
+        except ValueError:
+            return '0 B/s'
+
+    if speed == 0:
+        return '0 B/s'
+
+    # pypdl returns speed in MB/s, convert to bytes/s for formatting
+    bytes_per_sec = speed * 1024 * 1024
+    return format_bytes(bytes_per_sec) + '/s'
+
+
+def format_eta(eta_str: str) -> str:
+    """Format ETA from HH:MM:SS to human-readable format
+    
+    Args:
+        eta_str: The ETA in HH:MM:SS format (pypdl format)
+        
+    Returns:
+        A human-readable ETA string
+        
+    Example:
+        format_eta("01:02:30") # returns "1h 2m 30s"
+        format_eta("00:02:30") # returns "2m 30s"
+        format_eta("00:00:30") # returns "30s"
+    """
+    if not eta_str or eta_str == '∞':
+        return '∞'
+
+    try:
+        # Parse HH:MM:SS format
+        parts = eta_str.split(':')
+        if len(parts) == 3:
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            seconds = int(parts[2])
+
+            if hours > 0:
+                return f"{hours}h {minutes}m {seconds}s"
+            elif minutes > 0:
+                return f"{minutes}m {seconds}s"
+
+            return f"{seconds}s"
+
+        return eta_str
+    except (ValueError, IndexError):
+        return eta_str
