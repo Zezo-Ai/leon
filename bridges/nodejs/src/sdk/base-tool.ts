@@ -452,7 +452,7 @@ export abstract class Tool {
     if (this.isResourceComplete(resourcePath, resourceUrls)) {
       await this.report('bridges.tools.resource_already_exists', {
         resource_name: resourceName,
-        resource_path: resourcePath
+        resource_path: formatFilePath(resourcePath)
       })
 
       return resourcePath

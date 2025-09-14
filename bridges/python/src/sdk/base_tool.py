@@ -333,7 +333,7 @@ class BaseTool(ABC):
         if self._is_resource_complete(resource_path, resource_urls):
             self.report('bridges.tools.resource_already_exists', {
                 'resource_name': resource_name,
-                'resource_path': resource_path
+                'resource_path': format_file_path(resource_path)
             })
             return resource_path
 
