@@ -242,10 +242,10 @@
     ],
     "bridges.tools.creating_resource_directory": [
       "Creating resource directory for {{ resource_name }} at {{ resource_path }}...",
-      "Setting up resource storage for {{ resource_name }}.",
-      "Initializing {{ resource_name }} resource directory.",
-      "Creating resource directory structure for {{ resource_name }}.",
-      "Preparing resource storage location at {{ resource_path }}."
+      "Setting up resource storage for {{ resource_name }} at {{ resource_path }}...",
+      "Initializing {{ resource_name }} resource directory at {{ resource_path }}...",
+      "Creating resource directory structure for {{ resource_name }} at {{ resource_path }}...",
+      "Preparing resource storage location at {{ resource_path }}..."
     ],
     "bridges.tools.resource_already_exists": [
       "{{ resource_name }} resource already exists at {{ resource_path }}.",

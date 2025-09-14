@@ -12,7 +12,8 @@ import {
   setHuggingFaceURL,
   formatBytes,
   formatSpeed,
-  formatETA
+  formatETA,
+  formatFilePath
 } from '@sdk/utils'
 import { leon } from '@sdk/leon'
 
@@ -441,7 +442,7 @@ export abstract class Tool {
     if (!fs.existsSync(resourcePath)) {
       await this.report('bridges.tools.creating_resource_directory', {
         resource_name: resourceName,
-        resource_path: resourcePath
+        resource_path: formatFilePath(resourcePath)
       })
 
       fs.mkdirSync(resourcePath, { recursive: true })
@@ -517,7 +518,7 @@ export abstract class Tool {
 
     await this.report('bridges.tools.resource_downloaded', {
       resource_name: resourceName,
-      resource_path: resourcePath
+      resource_path: formatFilePath(resourcePath)
     })
 
     return resourcePath

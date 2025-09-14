@@ -9,5 +9,5 @@
     "server/dist",
     "bridges/toolkits"
   ],
-  "exec": "tsc --noEmit && tsx server/src/index.ts"
+  "exec": "tsx server/src/index.ts"
 }

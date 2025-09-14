@@ -6,7 +6,7 @@ from pypdl import Pypdl
 from urllib.parse import urlparse
 from .toolkit_config import ToolkitConfig
 from .leon import leon
-from .utils import is_windows, is_macos, set_hugging_face_url, format_bytes, format_speed, format_eta
+from .utils import is_windows, is_macos, set_hugging_face_url, format_bytes, format_speed, format_eta, format_file_path
 from ..constants import TOOLKITS_PATH
 import subprocess
 import sys
@@ -325,7 +325,7 @@ class BaseTool(ABC):
         if not os.path.exists(resource_path):
             self.report('bridges.tools.creating_resource_directory', {
                 'resource_name': resource_name,
-                'resource_path': resource_path
+                'resource_path': format_file_path(resource_path)
             })
             os.makedirs(resource_path, exist_ok=True)
 
@@ -394,7 +394,7 @@ class BaseTool(ABC):
 
         self.report('bridges.tools.resource_downloaded', {
             'resource_name': resource_name,
-            'resource_path': resource_path
+            'resource_path': format_file_path(resource_path)
         })
 
         return resource_path
