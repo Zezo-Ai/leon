@@ -1,5 +1,21 @@
+import fs from 'node:fs'
+
+import type { TranscriptionOutput } from '@sdk/tools/schemas'
 import { Tool } from '@sdk/base-tool'
 import { ToolkitConfig } from '@sdk/toolkit-config'
+
+/**
+ * Example:
+ *
+ * Detected language: en (probability: 1.00)
+ * Duration: 26.84 seconds
+ * ==================================================
+ *
+ * [0.00 -> 5.70] DuckDB, an open-source, fast, embeddable, SQL OLAP database that simplifies the way
+ * [5.70 -> 10.84] developers implement analytics. It was developed in the Netherlands, written in C++, and first
+ * [10.84 -> 16.78] released in 2019. And the TLDR is that it's like SQLite, but for columnar data. Everybody knows
+ */
+type FasterWhisperTranscriptionOutput = string
 
 const MODEL_NAME = 'faster-whisper-large-v3'
 
@@ -79,9 +95,70 @@ export default class FasterWhisperTool extends Tool {
         options: { sync: true }
       })
 
+      const transcriptionContent = await fs.promises.readFile(
+        outputPath,
+        'utf-8'
+      )
+      const parsedOutput = this.parseTranscription(transcriptionContent)
+
+      await fs.promises.writeFile(
+        outputPath,
+        JSON.stringify(parsedOutput, null, 2),
+        'utf8'
+      )
+
       return outputPath
     } catch (error: unknown) {
       throw new Error(`Audio transcription failed: ${(error as Error).message}`)
+    }
+  }
+
+  /**
+   * Speaker diarization is not supported for Faster Whisper
+   */
+  private parseTranscription(
+    rawOutput: FasterWhisperTranscriptionOutput
+  ): TranscriptionOutput {
+    const lines = rawOutput.split('\n')
+
+    const durationLine = lines.find((line) => line.startsWith('Duration:'))
+    let duration = 0
+
+    if (durationLine) {
+      const match = durationLine.match(/Duration:\s+([\d.]+)\s+seconds/)
+
+      if (match && match[1]) {
+        duration = parseFloat(match[1])
+      }
+    }
+
+    const segments: TranscriptionOutput['segments'] = []
+    const segmentRegex = /^\[(\d+\.\d+)\s+->\s+(\d+\.\d+)\]\s+(.+)$/
+
+    for (const line of lines) {
+      const match = line.match(segmentRegex)
+      if (match && match[1] && match[2] && match[3]) {
+        const start = match[1]
+        const end = match[2]
+        const text = match[3]
+
+        segments.push({
+          from: parseFloat(start),
+          to: parseFloat(end),
+          text: text.trim(),
+          speaker: null
+        })
+      }
+    }
+
+    return {
+      duration,
+      speakers: [],
+      speaker_count: 0,
+      segments,
+      metadata: {
+        tool: this.toolName
+      }
     }
   }
 }

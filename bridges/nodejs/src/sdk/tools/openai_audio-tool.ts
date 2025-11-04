@@ -2,9 +2,28 @@ import fs from 'node:fs'
 
 import FormData from 'form-data'
 
+import type { TranscriptionOutput } from '@sdk/tools/schemas'
 import { Tool } from '@sdk/base-tool'
 import { ToolkitConfig } from '@sdk/toolkit-config'
 import { Network } from '@sdk/network'
+
+interface OpenAITranscriptionOutput {
+  task: string
+  duration: number
+  text: string
+  segments: {
+    type: string
+    id: string
+    start: number
+    end: number
+    text: string
+    speaker: string
+  }[]
+  usage: {
+    type: string
+    seconds: number
+  }
+}
 
 export default class OpenAIAudioTool extends Tool {
   private static readonly TOOLKIT = 'music_audio'
@@ -48,10 +67,10 @@ export default class OpenAIAudioTool extends Tool {
     const form = new FormData()
     form.append('file', fs.createReadStream(inputPath))
     form.append('model', model)
-    form.append('response_format', 'text')
+    form.append('response_format', 'diarized_json')
 
     const network = new Network({ baseURL: 'https://api.openai.com' })
-    const response = await network.request<string>({
+    const response = await network.request({
       url: '/v1/audio/transcriptions',
       method: 'POST',
       // Pass FormData directly so axios handles multipart body
@@ -64,12 +83,43 @@ export default class OpenAIAudioTool extends Tool {
       }
     })
 
+    const parsedOutput = this.parseTranscription(
+      response.data as OpenAITranscriptionOutput
+    )
+
     await fs.promises.writeFile(
       outputPath,
-      response.data as unknown as string,
+      JSON.stringify(parsedOutput, null, 2),
       'utf8'
     )
 
     return outputPath
+  }
+
+  private parseTranscription(
+    rawOutput: OpenAITranscriptionOutput
+  ): TranscriptionOutput {
+    const speakers = Array.from(
+      new Set(rawOutput.segments.map((segment) => segment.speaker))
+    )
+
+    const segments = rawOutput.segments.map((segment) => {
+      return {
+        from: segment.start,
+        to: segment.end,
+        text: segment.text,
+        speaker: segment.speaker || null
+      }
+    })
+
+    return {
+      duration: rawOutput.duration,
+      speakers: speakers,
+      speaker_count: speakers.length,
+      segments,
+      metadata: {
+        tool: this.toolName
+      }
+    }
   }
 }

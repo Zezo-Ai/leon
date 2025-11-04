@@ -1,11 +1,27 @@
+import json
+import re
 from typing import Optional
 
 from ..base_tool import BaseTool, ExecuteCommandOptions
 from ..toolkit_config import ToolkitConfig
+from .schemas import TranscriptionOutput, TranscriptionSegment
 
 MODEL_NAME = 'faster-whisper-large-v3'
 
+
 class FasterWhisperTool(BaseTool):
+    """
+    Example output format:
+
+    Detected language: en (probability: 1.00)
+    Duration: 26.84 seconds
+    ==================================================
+
+    [0.00 -> 5.70] DuckDB, an open-source, fast, embeddable, SQL OLAP database that simplifies the way
+    [5.70 -> 10.84] developers implement analytics. It was developed in the Netherlands, written in C++, and first
+    [10.84 -> 16.78] released in 2019. And the TLDR is that it's like SQLite, but for columnar data. Everybody knows
+    """
+
     TOOLKIT = 'music_audio'
 
     def __init__(self):
@@ -76,6 +92,52 @@ class FasterWhisperTool(BaseTool):
                 options={'sync': True}
             ))
 
+            with open(output_path, 'r', encoding='utf-8') as f:
+                transcription_content = f.read()
+
+            parsed_output = self._parse_transcription(transcription_content)
+
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(parsed_output, f, indent=2, ensure_ascii=False)
+
             return output_path
         except Exception as e:
             raise Exception(f"Audio transcription failed: {str(e)}")
+
+    def _parse_transcription(self, raw_output: str) -> TranscriptionOutput:
+        lines = raw_output.split('\n')
+
+        duration = 0.0
+        for line in lines:
+            if line.startswith('Duration:'):
+                match = re.search(r'Duration:\s+([\d.]+)\s+seconds', line)
+                if match:
+                    duration = float(match.group(1))
+                break
+
+        segments: list[TranscriptionSegment] = []
+        segment_regex = re.compile(r'^\[(\d+\.\d+)\s+->\s+(\d+\.\d+)\]\s+(.+)$')
+
+        for line in lines:
+            match = segment_regex.match(line)
+            if match:
+                start = match.group(1)
+                end = match.group(2)
+                text = match.group(3)
+
+                segments.append({
+                    'from': float(start),
+                    'to': float(end),
+                    'text': text.strip(),
+                    'speaker': None
+                })
+
+        return {
+            'duration': duration,
+            'speakers': [],
+            'speaker_count': 0,
+            'segments': segments,
+            'metadata': {
+                'tool': self.tool_name
+            }
+        }
