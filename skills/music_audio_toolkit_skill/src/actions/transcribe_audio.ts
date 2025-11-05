@@ -7,14 +7,18 @@ import { ParamsHelper } from '@sdk/params-helper'
 import { Settings } from '@sdk/settings'
 import FasterWhisperTool from '@sdk/tools/faster_whisper-tool'
 import OpenAIAudioTool from '@sdk/tools/openai_audio-tool'
+import ElevenLabsAudioTool from '@sdk/tools/elevenlabs_audio-tool'
 import { formatFilePath } from '@sdk/utils'
 
 interface MusicAudioToolkitSkillSettings extends Record<string, unknown> {
-  transcriber_provider: 'faster_whisper' | 'openai_audio'
-  device?: 'auto' | 'cpu' | 'cuda'
-  cpu_threads?: number
-  openai_api_key?: string
-  openai_model?: string
+  transcription_provider: 'faster_whisper' | 'openai_audio' | 'elevenlabs_audio'
+  faster_whisper_device?: 'auto' | 'cpu' | 'cuda'
+  faster_whisper_cpu_threads?: number
+  openai_transcription_api_key?: string
+  openai_transcription_model?: string
+  elevenlabs_transcription_api_key?: string
+  elevenlabs_transcription_model?: string
+  elevenlabs_transcription_diarize?: boolean
 }
 
 export const run: ActionFunction = async function (
@@ -27,19 +31,30 @@ export const run: ActionFunction = async function (
 
   try {
     const settings = new Settings<MusicAudioToolkitSkillSettings>()
-    const provider = ((await settings.get('transcriber_provider')) ||
-      'faster_whisper') as MusicAudioToolkitSkillSettings['transcriber_provider']
+    const provider = ((await settings.get('transcription_provider')) ||
+      'faster_whisper') as MusicAudioToolkitSkillSettings['transcription_provider']
     const fasterWhisperDevice = ((await settings.get(
       'faster_whisper_device'
-    )) || 'auto') as NonNullable<MusicAudioToolkitSkillSettings['device']>
+    )) || 'auto') as NonNullable<
+      MusicAudioToolkitSkillSettings['faster_whisper_device']
+    >
     const fasterWhisperCPUThreads = (await settings.get(
       'faster_whisper_cpu_threads'
     )) as number | undefined
-    const openaiApiKey = (await settings.get('openai_api_key')) as
-      | string
-      | undefined
-    const openaiModel = ((await settings.get('openai_model')) ||
+    const openaiAPIKey = (await settings.get(
+      'openai_transcription_api_key'
+    )) as string | undefined
+    const openaiModel = ((await settings.get('openai_transcription_model')) ||
       'whisper-1') as string
+    const elevenlabsAPIKey = (await settings.get(
+      'elevenlabs_transcription_api_key'
+    )) as string | undefined
+    const elevenlabsModel = ((await settings.get(
+      'elevenlabs_transcription_model'
+    )) || 'scribe_v1') as string
+    const elevenlabsDiarize = ((await settings.get(
+      'elevenlabs_transcription_diarize'
+    )) ?? true) as boolean
 
     const audioPath = audioPathArg || paramsHelper.getContextData('audio_path')
 
@@ -74,7 +89,7 @@ export const run: ActionFunction = async function (
         fasterWhisperCPUThreads
       )
     } else if (provider === 'openai_audio') {
-      if (!openaiApiKey) {
+      if (!openaiAPIKey) {
         leon.answer({ key: 'missing_api_key' })
         return
       }
@@ -83,8 +98,22 @@ export const run: ActionFunction = async function (
       await tool.transcribeToFile(
         audioPath,
         transcriptionPath,
-        openaiApiKey,
+        openaiAPIKey,
         openaiModel
+      )
+    } else if (provider === 'elevenlabs_audio') {
+      if (!elevenlabsAPIKey) {
+        leon.answer({ key: 'missing_api_key' })
+        return
+      }
+
+      const tool = new ElevenLabsAudioTool()
+      await tool.transcribeToFile(
+        audioPath,
+        transcriptionPath,
+        elevenlabsAPIKey,
+        elevenlabsModel,
+        elevenlabsDiarize
       )
     } else {
       leon.answer({ key: 'provider_not_supported' })
@@ -111,6 +140,8 @@ export const run: ActionFunction = async function (
       }
     })
   } catch (error) {
+    console.log('ERRORRR', JSON.stringify(error, null, 2))
+
     leon.answer({
       key: 'transcription_error',
       data: { error: (error as Error).message }

@@ -23,6 +23,9 @@
     },
     "openai_audio": {
       "description": "A tool for audio processing using OpenAI's API."
+    },
+    "elevenlabs_audio": {
+      "description": "A tool for audio processing using ElevenLabs's API."
     }
   }
 }
