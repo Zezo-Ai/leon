@@ -34,7 +34,7 @@
           "description": "Target language code for dubbing (e.g., 'es' for Spanish, 'fr' for French, 'zh' for Chinese)."
         }
       },
-      "optional_parameters": ["audio_path"]
+      "optional_parameters": ["audio_path", "target_language"]
     }
   }
 }

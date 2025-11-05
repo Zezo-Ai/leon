@@ -12,7 +12,8 @@
   "flow": [
     "download_video",
     "extract_audio",
-    "music_audio_toolkit_skill:dub_audio"
+    "music_audio_toolkit_skill:dub_audio",
+    "merge_audio"
   ],
   "actions": {
     "download_video": {
@@ -38,6 +39,10 @@
     "extract_audio": {
       "type": "logic",
       "description": "Extract audio from a downloaded video file for translation processing."
+    },
+    "merge_audio": {
+      "type": "logic",
+      "description": "Replace the original video audio with the dubbed audio to create a translated video."
     }
   }
 }

@@ -212,6 +212,54 @@ export default class FfmpegTool extends Tool {
   }
 
   /**
+   * Replaces the audio track of a video with a new audio file.
+   * Removes/mutes the original audio and merges the new audio with the video.
+   * @param videoPath The file path of the video file.
+   * @param newAudioPath The file path of the new audio file to replace the original audio.
+   * @param outputPath The desired file path for the video with replaced audio.
+   * @returns A promise that resolves with the path to the video file with new audio.
+   */
+  async replaceVideoAudio(
+    videoPath: string,
+    newAudioPath: string,
+    outputPath: string
+  ): Promise<string> {
+    try {
+      // Use -map to explicitly map video from first input and audio from second input
+      // This effectively removes the original audio and replaces it with the new audio
+      await this.executeCommand({
+        binaryName: 'ffmpeg',
+        args: [
+          '-y', // Overwrite output file if it exists
+          '-i',
+          videoPath,
+          '-i',
+          newAudioPath,
+          '-map',
+          '0:v:0', // Map video from first input
+          '-map',
+          '1:a:0', // Map audio from second input
+          '-c:v',
+          'copy', // Copy video codec (no re-encoding)
+          '-c:a',
+          'aac', // Encode audio to AAC
+          '-b:a',
+          '192k', // Audio bitrate
+          '-shortest', // Finish encoding when the shortest input stream ends
+          outputPath
+        ],
+        options: { sync: true }
+      })
+
+      return outputPath
+    } catch (error: unknown) {
+      throw new Error(
+        `Video audio replacement failed: ${(error as Error).message}`
+      )
+    }
+  }
+
+  /**
    * Compresses a video to reduce its file size.
    * @param inputPath The file path of the video to be compressed.
    * @param outputPath The desired file path for the compressed video.

@@ -5,7 +5,7 @@ import type { ActionFunction, ActionParams } from '@sdk/types'
 import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
 import FfmpegTool from '@sdk/tools/ffmpeg-tool'
-import { formatFilePath } from '@sdk/utils'
+import { formatBytes, formatFilePath } from '@sdk/utils'
 
 export const run: ActionFunction = async function (
   _params: ActionParams,
@@ -52,15 +52,15 @@ export const run: ActionFunction = async function (
 
     // Get video file info
     const videoStats = await fs.promises.stat(videoPath)
-    const videoSizeMB = Math.round(videoStats.size / (1024 * 1024))
+    const videoSizeMB = formatBytes(videoStats.size)
 
     const extractionStartedData: Record<string, string> = {
       video_path: formatFilePath(path.basename(videoPath)),
       audio_format: audioFormat,
-      video_size: `${videoSizeMB} MB`
+      video_size: videoSizeMB
     }
     if (targetLanguage) {
-      extractionStartedData.target_language = targetLanguage
+      extractionStartedData['target_language'] = targetLanguage
     }
     leon.answer({
       key: 'extraction_started',
@@ -102,7 +102,7 @@ export const run: ActionFunction = async function (
       audio_format: audioFormat
     }
     if (targetLanguage) {
-      extractionCompletedData.target_language = targetLanguage
+      extractionCompletedData['target_language'] = targetLanguage
     }
     leon.answer({
       key: 'extraction_completed',
@@ -118,7 +118,7 @@ export const run: ActionFunction = async function (
     leon.answer({
       key: 'extraction_error',
       data: {
-        video_path: path.basename(videoPath),
+        video_path: path.basename(videoPath as string),
         error: (error as Error).message
       }
     })

@@ -28,7 +28,7 @@ class NetworkRequestOptions(TypedDict, total=False):
     headers: Dict[str, str]
     files: Dict[str, Any]
     use_json: bool
-
+    response_type: Optional[Union[Literal['json'], Literal['text'], Literal['arraybuffer'], Literal['bytes']]]
 
 class Network:
     def __init__(self, options: NetworkOptions = {'base_url': None}) -> None:
@@ -46,6 +46,7 @@ class Network:
             headers = options.get('headers', {})
             files = options.get('files')
             use_json = options.get('use_json', True)
+            response_type = options.get('response_type', 'json')
 
             request_kwargs: Dict[str, Any] = {
                 'headers': {
@@ -69,10 +70,13 @@ class Network:
             )
 
             parsed_data: Any
-            try:
-                parsed_data = response.json()
-            except Exception:
-                parsed_data = response.text
+            if response_type in ['arraybuffer', 'bytes']:
+                parsed_data = response.content
+            else:
+                try:
+                    parsed_data = response.json()
+                except Exception:
+                    parsed_data = response.text
 
             network_response: NetworkResponse = {
                 'data': parsed_data,

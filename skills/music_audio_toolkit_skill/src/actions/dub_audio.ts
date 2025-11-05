@@ -26,10 +26,12 @@ export const run: ActionFunction = async function (
   const targetLanguage =
     (paramsHelper.getActionArgument('target_language') as string) ||
     paramsHelper.getContextData<string>('target_language')
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-expect-error
   const targetLanguageISOCode =
-    paramsHelper.findAllEntitiesFromContext('language')[0]?.option
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-expect-error
+    paramsHelper
+      .findAllEntitiesFromContext('language')[0]
+      ?.option.slice(0, 2) || null
 
   try {
     const settings = new Settings<MusicAudioToolkitSkillSettings>()
@@ -196,14 +198,14 @@ export const run: ActionFunction = async function (
 
     // Get dubbed file info
     const dubbedStats = await fs.promises.stat(dubbedPath)
-    const dubbedSizeMB = Math.round(dubbedStats.size / (1_024 * 1_024))
+    const dubbedSizeMB = formatBytes(dubbedStats.size)
 
     leon.answer({
       key: 'dubbing_completed',
       data: {
         dubbed_path: formatFilePath(dubbedPath),
         target_language: targetLanguage,
-        file_size: `${dubbedSizeMB} MB`,
+        file_size: dubbedSizeMB,
         dubbing_id: dubbingId
       },
       core: {

@@ -72,6 +72,56 @@
           "There was a problem extracting audio from {{ video_path }}: {{ error }}"
         ]
       }
+    },
+    "merge_audio": {
+      "missing_param_follow_ups": {
+        "video_path": [
+          "Please provide the path to the original video file.",
+          "What video file would you like me to merge the dubbed audio with?"
+        ],
+        "dubbed_audio_path": [
+          "Please provide the path to the dubbed audio file.",
+          "Where is the dubbed audio file that should replace the original audio?"
+        ],
+        "target_language": [
+          "What language is the dubbed audio in?",
+          "Please specify the target language for the video."
+        ]
+      },
+      "answers": {
+        "no_video_path": [
+          "❌ No video path found. Please download a video first or provide a video_path parameter.",
+          "I couldn't find the video file. Please run the download_video action first or specify a video path."
+        ],
+        "no_dubbed_audio_path": [
+          "❌ No dubbed audio path found. Please run the dub_audio action first or provide a dubbed_audio_path parameter.",
+          "I couldn't find the dubbed audio file. Please ensure the dubbing process has completed successfully."
+        ],
+        "video_file_not_found": [
+          "❌ I couldn't find the video file at {{ video_path }}. Please check the file path.",
+          "The specified video file doesn't exist or is not accessible at {{ video_path }}."
+        ],
+        "dubbed_audio_file_not_found": [
+          "❌ I couldn't find the dubbed audio file at {{ dubbed_audio_path }}. Please check the file path.",
+          "The specified dubbed audio file doesn't exist or is not accessible at {{ dubbed_audio_path }}."
+        ],
+        "merge_started": [
+          "🎬 Merging {{ dubbed_audio_path }} ({{ audio_size }}) with {{ video_path }} ({{ video_size }}){{ target_language ? ' for ' + target_language + ' version' : '' }}...",
+          "Starting audio replacement process{{ target_language ? ' to create ' + target_language + ' version' : '' }}..."
+        ],
+        "merge_completed": [
+          "✅ Video with {{ target_language }} audio created successfully! Saved to: {{ folder_path }}. File: {{ merged_video_path }} ({{ merged_size }}). Original video: {{ original_video }}, Dubbed audio: {{ dubbed_audio }}.",
+          "Audio merge complete! Your {{ target_language }} video ({{ merged_size }}) is ready at {{ folder_path }}. File: {{ merged_video_path }}."
+        ],
+        "merge_failed": [
+          "❌ Failed to merge audio with video {{ video_path }}. Error: {{ error }}",
+          "Sorry, I couldn't merge the audio with the video. Please check if both files are valid."
+        ],
+        "merge_error": [
+          "❌ An error occurred during audio merging: {{ error }}",
+          "There was a problem merging the audio with the video: {{ error }}"
+        ]
+      }
     }
   },
   "common_answers": {
