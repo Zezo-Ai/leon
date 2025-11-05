@@ -140,8 +140,6 @@ export const run: ActionFunction = async function (
       }
     })
   } catch (error) {
-    console.log('ERRORRR', JSON.stringify(error, null, 2))
-
     leon.answer({
       key: 'transcription_error',
       data: { error: (error as Error).message }

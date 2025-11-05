@@ -22,6 +22,21 @@ interface ElevenLabsTranscriptionResponse {
   words: ElevenLabsWord[]
 }
 
+interface ElevenLabsDubbingCreateResponse {
+  dubbing_id: string
+  expected_duration_sec: number
+}
+
+interface ElevenLabsDubbingStatusResponse {
+  dubbing_id: string
+  name: string
+  status: 'dubbing' | 'dubbed' | 'failed'
+  target_languages: string[]
+  error?: string | null
+  created_at?: string
+  editable?: boolean | null
+}
+
 export default class ElevenLabsAudioTool extends Tool {
   private static readonly TOOLKIT = 'music_audio'
   private readonly config: ReturnType<typeof ToolkitConfig.load>
@@ -89,6 +104,113 @@ export default class ElevenLabsAudioTool extends Tool {
       outputPath,
       JSON.stringify(normalizedOutput, null, 2),
       'utf8'
+    )
+
+    return outputPath
+  }
+
+  /**
+   * Create a dubbing project using ElevenLabs' Dubbing API
+   * @param inputPath Path to the audio/video file to dub
+   * @param targetLang Target language code (e.g., 'es', 'fr', 'zh')
+   * @param apiKey ElevenLabs API key
+   * @param sourceLang Source language code (defaults to 'auto')
+   * @param numSpeakers Number of speakers (0 for auto-detect)
+   * @param watermark Whether to add watermark to output video
+   * @returns Dubbing project ID and expected duration
+   */
+  async createDubbing(
+    inputPath: string,
+    targetLang: string,
+    apiKey: string,
+    sourceLang = 'auto',
+    numSpeakers = 0,
+    watermark = false
+  ): Promise<ElevenLabsDubbingCreateResponse> {
+    if (!apiKey) {
+      throw new Error('ElevenLabs API key is missing')
+    }
+
+    const form = new FormData()
+    form.append('file', fs.createReadStream(inputPath))
+    form.append('target_lang', targetLang)
+    form.append('source_lang', sourceLang)
+    form.append('num_speakers', numSpeakers.toString())
+    form.append('watermark', watermark.toString())
+
+    const network = new Network({ baseURL: 'https://api.elevenlabs.io' })
+    const response = await network.request<ElevenLabsDubbingCreateResponse>({
+      url: '/v1/dubbing',
+      method: 'POST',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data: form as any,
+      headers: {
+        'xi-api-key': apiKey,
+        ...form.getHeaders()
+      }
+    })
+
+    return response.data
+  }
+
+  /**
+   * Get the status of a dubbing project
+   * @param dubbingId The dubbing project ID
+   * @param apiKey ElevenLabs API key
+   * @returns Dubbing project status information
+   */
+  async getDubbingStatus(
+    dubbingId: string,
+    apiKey: string
+  ): Promise<ElevenLabsDubbingStatusResponse> {
+    if (!apiKey) {
+      throw new Error('ElevenLabs API key is missing')
+    }
+
+    const network = new Network({ baseURL: 'https://api.elevenlabs.io' })
+    const response = await network.request<ElevenLabsDubbingStatusResponse>({
+      url: `/v1/dubbing/${dubbingId}`,
+      method: 'GET',
+      headers: {
+        'xi-api-key': apiKey
+      }
+    })
+
+    return response.data
+  }
+
+  /**
+   * Download the dubbed file
+   * @param dubbingId The dubbing project ID
+   * @param targetLang Target language code
+   * @param outputPath Path to save the dubbed file
+   * @param apiKey ElevenLabs API key
+   * @returns Path to the downloaded file
+   */
+  async downloadDubbedFile(
+    dubbingId: string,
+    targetLang: string,
+    outputPath: string,
+    apiKey: string
+  ): Promise<string> {
+    if (!apiKey) {
+      throw new Error('ElevenLabs API key is missing')
+    }
+
+    const network = new Network({ baseURL: 'https://api.elevenlabs.io' })
+    const response = await network.request({
+      url: `/v1/dubbing/${dubbingId}/audio/${targetLang}`,
+      method: 'GET',
+      headers: {
+        'xi-api-key': apiKey
+      },
+      responseType: 'arraybuffer'
+    })
+
+    // Write the audio/video file
+    await fs.promises.writeFile(
+      outputPath,
+      Buffer.from(response.data as ArrayBuffer)
     )
 
     return outputPath

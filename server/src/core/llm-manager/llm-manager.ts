@@ -398,14 +398,13 @@ export default class LLMManager {
          *      - [ok] In yt-dlp tool, add tips from my personal notes
          *    - [ok] Be able to push data/args to context from skill actions. No need to use memory library SDK for simple memory. E.g. audio_path. Remove from music_audio transcribe_audio memory video translator, and use context instead
          *    - [ok] Try by using OpenAI tool to transcribe_audio (settings.json)
-         *    - Create "parsers" folder in SDK. Used to normalize output from tools and be universally used across all skills. Create special tools call "JSONParser"? Create diarize JSON format to unify output across all diarization tool functions
-         *      - Parser in OpenAI audio tool TS + Python
-         *      - In Faster Whisper, keep speaker empty (must use remote service for diarization support)
-         *      - 11Labs speech to text + diarization
-         *      - Gladia speech to text + diarization
-         *      - etc.
-         *    - Diarize tool function with OpenAI audio
-         *    - Download video > extract audio > transcribe + diarize > detect gender (later) > clone voice (later) > text to speech each segment > merge audio with video > upload video to target platform according to settings (later)
+         *    - [ok] Create tool schemas to normalize tool function outputs across Leon
+         *    - [ok] Create 11labs and openai tools for transcription
+         *    - Make use of the ElevenLabs dubbing API instead, much simpler!
+         *      - Dub API: https://elevenlabs.io/docs/api-reference/dubbing/create?explorer=true
+         *      - Then get dubbed audio (progress + resource): https://elevenlabs.io/docs/api-reference/dubbing/audio/get?explorer=true
+         *    - Create new tool for LLM inference (openrouter?); use for new action in video translator skill to translate and merge segments before TTS
+         *    - Download video > extract audio > transcribe + diarize > translate into target language > detect gender (later) > clone voice (later) > text to speech each segment > merge audio with video > upload video to target platform according to settings (later)
          *    - Replace camelCase props in SkillAnswerCoreData to snake_case
          *    - Create "video_streaming_toolkit_skill" (ffmpeg related stuff?) and "music_audio_toolkit_skill", such common skills contain actions that can be reused by other skills
          *    - Settings priority: 1. caller action (video_translator:*); 2. called action (music_audio:*)

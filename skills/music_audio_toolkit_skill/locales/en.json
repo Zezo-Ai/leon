@@ -9,6 +9,21 @@
         "missing_api_key": "Your OpenAI API key is not set. Please add it in this skill's settings.",
         "transcription_error": "An error occurred while transcribing the audio: {{ error }}"
       }
+    },
+    "dub_audio": {
+      "answers": {
+        "audio_not_found": "I couldn't find the given audio/video file to dub.",
+        "target_language_missing": "Target language is required for dubbing. Please specify which language to dub into.",
+        "missing_api_key": "Your ElevenLabs API key is not set. Please add it in this skill's settings.",
+        "dubbing_started": "🎬 Starting dubbing of {{ audio_path }} ({{ file_size }}) to {{ target_language }}... Source: {{ source_language }}, Speakers: {{ num_speakers }}",
+        "dubbing_created": "✨ Dubbing project created! ID: {{ dubbing_id }}, Expected duration: {{ expected_duration }}, Target: {{ target_language }}",
+        "dubbing_progress": "⏳ Dubbing in progress... Status: {{ status }}, Elapsed: {{ elapsed_time }}, ID: {{ dubbing_id }}",
+        "dubbing_failed": "❌ Dubbing failed for project {{ dubbing_id }}: {{ error }}",
+        "dubbing_timeout": "⏱️ Dubbing timed out after {{ elapsed_time }}. Project ID: {{ dubbing_id }}. Please check the status manually.",
+        "dubbing_download_failed": "❌ Failed to download dubbed file for project {{ dubbing_id }}: {{ error }}",
+        "dubbing_completed": "✅ Dubbing completed successfully! Dubbed file ({{ file_size }}) saved at {{ dubbed_path }} for language {{ target_language }}. Project ID: {{ dubbing_id }}",
+        "dubbing_error": "❌ An error occurred during dubbing: {{ error }}"
+      }
     }
   }
 }

@@ -12,7 +12,7 @@ class Owner(TypedDict):
     birth_date: str
 
 
-def run(params: ActionParams) -> None:
+def run(_params: ActionParams) -> None:
     """Leon greets you"""
 
     time = datetime.time(datetime.now())

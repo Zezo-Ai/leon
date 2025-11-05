@@ -20,6 +20,21 @@
         }
       },
       "optional_parameters": ["audio_path"]
+    },
+    "dub_audio": {
+      "type": "logic",
+      "description": "Dub audio or video into a different language using ElevenLabs AI dubbing.",
+      "parameters": {
+        "audio_path": {
+          "type": "string",
+          "description": "Path to the audio or video file to dub (optional when called from other skills that manage audio context)."
+        },
+        "target_language": {
+          "type": "string",
+          "description": "Target language code for dubbing (e.g., 'es' for Spanish, 'fr' for French, 'zh' for Chinese)."
+        }
+      },
+      "optional_parameters": ["audio_path"]
     }
   }
 }

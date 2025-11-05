@@ -12,7 +12,7 @@
   "flow": [
     "download_video",
     "extract_audio",
-    "music_audio_toolkit_skill:transcribe_audio"
+    "music_audio_toolkit_skill:dub_audio"
   ],
   "actions": {
     "download_video": {
