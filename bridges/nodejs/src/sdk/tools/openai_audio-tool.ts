@@ -113,8 +113,14 @@ export default class OpenAIAudioTool extends Tool {
       }
     })
 
+    // If duration is not found, use the "to" property from the last segment
+    let duration = rawOutput.duration
+    if (!duration && segments.length > 0) {
+      duration = segments[segments.length - 1]?.to || 0
+    }
+
     return {
-      duration: rawOutput.duration,
+      duration: duration || 0,
       speakers: speakers,
       speaker_count: speakers.length,
       segments,

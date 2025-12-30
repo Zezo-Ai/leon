@@ -73,6 +73,122 @@
         ]
       }
     },
+    "translate_transcription": {
+      "missing_param_follow_ups": {
+        "transcription_path": [
+          "Please provide the path to the transcription file to translate.",
+          "What transcription file would you like me to translate?"
+        ],
+        "target_language": [
+          "What language would you like to translate into?",
+          "Please specify the target language for translation (e.g., Chinese, Spanish, French)."
+        ]
+      },
+      "answers": {
+        "transcription_not_found": [
+          "❌ I couldn't find the given transcription file to translate.",
+          "The specified transcription file doesn't exist or is not accessible."
+        ],
+        "target_language_missing": [
+          "❌ Target language is required for translation. Please specify which language to translate into.",
+          "I need to know which language to translate to. Please specify a target language."
+        ],
+        "missing_api_key": [
+          "❌ Your OpenRouter API key is not set. Please add it in this skill's settings.",
+          "I need an OpenRouter API key to translate. Please configure it in the skill settings."
+        ],
+        "no_segments_found": [
+          "❌ No segments found in the transcription file. The file may be empty or corrupted.",
+          "The transcription file appears to be empty or invalid."
+        ],
+        "translation_started": [
+          "🌐 Starting translation of {{ segment_count }} segments from {{ transcription_path }} to {{ target_language }} using {{ model }}...",
+          "Beginning translation to {{ target_language }} using {{ model }}. Processing {{ segment_count }} segments..."
+        ],
+        "translating_batch": [
+          "📝 Translating batch {{ batch_number }}/{{ total_batches }} ({{ segments_in_batch }} segments)...",
+          "⏳ Processing batch {{ batch_number }} of {{ total_batches }}..."
+        ],
+        "translation_api_error": [
+          "❌ Translation API error in batch {{ batch_number }}: {{ error }}",
+          "Failed to translate batch {{ batch_number }}. Error: {{ error }}"
+        ],
+        "translation_completed": [
+          "✅ Translation completed successfully! {{ segment_count }} segments translated to {{ target_language }}. File saved at {{ translated_path }}",
+          "Translation to {{ target_language }} complete! Translated {{ segment_count }} segments and saved to {{ translated_path }}"
+        ],
+        "translation_error": [
+          "❌ An error occurred during translation: {{ error }}",
+          "Translation failed with error: {{ error }}"
+        ]
+      }
+    },
+    "get_speakers_references": {
+      "missing_param_follow_ups": {
+        "transcription_path": [
+          "Please provide the path to the transcription file.",
+          "What transcription file contains the speaker information?"
+        ],
+        "audio_path": [
+          "Please provide the path to the audio file.",
+          "What audio file should I extract speaker references from?"
+        ]
+      },
+      "answers": {
+        "transcription_not_found": [
+          "❌ I couldn't find the transcription file. Please ensure the transcription has been completed first.",
+          "The transcription file doesn't exist or is not accessible."
+        ],
+        "audio_not_found": [
+          "❌ I couldn't find the audio file. Please ensure the audio has been extracted first.",
+          "The audio file doesn't exist or is not accessible."
+        ],
+        "no_speakers_found": [
+          "❌ No speakers found in the transcription. The transcription may be empty or invalid.",
+          "I couldn't find any speaker information in the transcription file."
+        ],
+        "extraction_started": [
+          "🎤 Starting speaker reference extraction for {{ speaker_count }} speakers from {{ audio_path }}...",
+          "Extracting voice references for {{ speaker_count }} speakers..."
+        ],
+        "no_valid_segments": [
+          "⚠️ No valid segments found for speaker {{ speaker }} after the first third of the audio.",
+          "Skipping speaker {{ speaker }} - insufficient audio segments."
+        ],
+        "insufficient_audio": [
+          "⚠️ Insufficient audio for speaker {{ speaker }} to create 10-second references.",
+          "Speaker {{ speaker }} doesn't have enough clear audio for reference extraction."
+        ],
+        "extracting_reference": [
+          "✂️ Extracting reference {{ reference_number }} for speaker {{ speaker }} starting at {{ start_time }} ({{ duration }} seconds)...",
+          "Creating reference audio {{ reference_number }} for speaker {{ speaker }}..."
+        ],
+        "speaker_references_created": [
+          "✅ Speaker {{ speaker }} references created: {{ reference1_path }} and {{ reference2_path }}",
+          "Voice references for speaker {{ speaker }} saved successfully."
+        ],
+        "extraction_completed": [
+          "✅ Speaker reference extraction completed! Created references for {{ speaker_count }} speakers in {{ folder_path }}",
+          "All speaker voice references have been extracted and saved to {{ folder_path }}"
+        ],
+        "extraction_error": [
+          "❌ An error occurred during speaker reference extraction: {{ error }}",
+          "Failed to extract speaker references: {{ error }}"
+        ]
+      }
+    },
+    "detect_genders": {
+      "answers": {
+        "no_speaker_references": [
+          "❌ No speaker references available to analyze gender.",
+          "I couldn't find any voice reference clips to determine gender for the speakers."
+        ],
+        "genders_detected": [
+          "✅ Gender detection complete! Here are the detected genders for each speaker: {{ genders }}.",
+          "Gender analysis finished: {{ count }} speakers processed. Results: {{ genders }}."
+        ]
+      }
+    },
     "merge_audio": {
       "missing_param_follow_ups": {
         "video_path": [
@@ -130,8 +246,8 @@
       "Beginning video translation process to {{ target_language }}."
     ],
     "workflow_info": [
-      "📋 Video Translation Workflow: 1) Download video → 2) Extract audio → 3) Translation processing",
-      "This skill prepares videos for translation by downloading and extracting audio content."
+      "📋 Video Translation Workflow: 1) Download video → 2) Extract audio → 3) Transcribe → 4) Translate → 5) Merge",
+      "This skill translates videos using speech-to-text and AI translation."
     ]
   }
 }

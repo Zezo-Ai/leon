@@ -403,7 +403,50 @@ export default class LLMManager {
          *    - [ok] Make use of the ElevenLabs dubbing API instead, much simpler!
          *      - Dub API: https://elevenlabs.io/docs/api-reference/dubbing/create?explorer=true
          *      - Then get dubbed audio (progress + resource): https://elevenlabs.io/docs/api-reference/dubbing/audio/get?explorer=true
-         *    - Fix issue when doing cross skill execution. To debug: quickly return/mock video_translator_skill actions instead of going through the full flow
+         *    - [ok] Fix issue when doing cross skill execution. To debug: quickly return/mock video_translator_skill actions instead of going through the full flow
+         *    - [ok] 2025-12-09: get_speakers_references
+         *    - [ok] 2025-12-09: detect_gender
+         *    - [ok] 2025-12-11: Try with French video (multi speakers) to English video
+         *    - 2025-12-14: Add transcription provider https://www.assemblyai.com/docs/api-reference/transcripts/submit
+         *    - 2025-12-11: Add voice cloning option, otherwise use the gender to generate
+         *    - 2025-12-11: Improve the translation quality and segmentation of the translation
+         *    - 2025-12-11: Make use of dub-test-2 PoC for audio alignment
+         *    - Copy current DuckDB transcription and add new speakers for testing with different audio reference for voice cloning. Then work on it for dubbing multi speakers
+         *    - Check this model for TTS + voice cloning: https://github.com/SWivid/F5-TTS
+         *    - In the video_translator_skill, add option "has_cloning" to enable voice cloning. If not enabled, use the gender to generate
+         *    - Use open-source models for video translation:
+         *      - https://aistudio.google.com/prompts/1WIgTwl9lGBWJtXjj8Ec7RWLA_Zt4kM3h
+         *      - https://chat.qwen.ai/c/52cc9526-caf9-43d8-81c4-8cde15c0c6c3
+         *      - Voice cloning: https://docs.fish.audio/resources/best-practices/voice-cloning
+         *      - RVC for voice cloning (transfer learning based voice conversion)
+         *      - 2025-11-11:
+         *      - Voice cloning + TTS with Pay-as-you-go pricing: https://www.resemble.ai/
+         *      - Main offline TTS? https://github.com/resemble-ai/chatterbox
+         *      - Use voice cloning only with online providers!
+         *        - clone https://github.com/myshell-ai/OpenVoice/blob/main/demo_part2.ipynb
+         *        - Can combine voices to get more voices: https://www.reddit.com/r/LocalLLaMA/comments/1mdu9gr/is_there_a_way_to_download_more_kokoro_tts_voices/
+         *        - On-device TTS + Voice Cloning English only: https://huggingface.co/neuphonic/neutts-air
+         *      - Kokoro for TTS (text to speech); https://github.com/thewh1teagle/kokoro-onnx?tab=readme-ov-file
+         *        - Use Kokoro ONNX? https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX
+         *        - Close to voice cloning with Kokoro: https://github.com/RobViren/kvoicewalk
+         *        - OR (Coqui fork voice cloning): https://github.com/idiap/coqui-ai-TTS
+         *        - OR: https://github.com/boson-ai/higgs-audio
+         *        - OR: https://github.com/fishaudio/fish-speech
+         *        - OR: https://github.com/astramind-ai/Auralis
+         *        - OR: https://github.com/SesameAILabs/csm
+         *        - OR: https://github.com/nari-labs/dia
+         *        - OR? https://github.com/canopyai/Orpheus-TTS
+         *      - Adjusts audio timing
+         *      - Ignore voice cloning for now, just do: translation -> TTS with timing adjustment -> merge audio with video
+         *      - Then add voice cloning; then speaker diarization
+         *      - Steps:
+         *        1. Faster Whisper → segments + timestamps + speaker diarization
+         *        2. OpenRouter (Gemini) → translate each segment
+         *        3. XTTS-v2 / OpenVoice → TTS + voice cloning in one step
+         *          (using original audio sample per speaker)
+         *        4. FFmpeg → time-stretch to match original duration
+         *        5. FFmpeg → concatenate all segments
+         *        6. FFmpeg → merge audio with video
          *    - Download video > extract audio > transcribe + diarize > translate into target language > detect gender (later) > clone voice (later) > text to speech each segment > merge audio with video > upload video to target platform according to settings (later)
          *    - Replace camelCase props in SkillAnswerCoreData to snake_case
          *    - Create "video_streaming_toolkit_skill" (ffmpeg related stuff?) and "music_audio_toolkit_skill", such common skills contain actions that can be reused by other skills
@@ -444,11 +487,22 @@ export default class LLMManager {
          *    - Cf. https://chatgpt.com/c/68b5c2c6-ec88-832f-aa44-3b7ada3171a3 -> For projects that aren't already compiled (Pyannote, WhisperX, etc.), need to compile them ourselves via GitHub Actions + Pyinstaller or cx_freeze. Keep compile setup files in /tool_bins/ folder. E.g. /tool_bins/whisperx/setup.py, /tool_bins/whisperx/whisperx, etc.
          *    - Tool settings OR use skill settings? (OpenRouter API key, etc.)
          * TODO NEXT: B. Then create a Skill Writer skill where Leon can write a skill > actions by himself based on examples and given owner query (e.g. to_do list, video translator, etc.) and current architecture. Leon can also write tools by himself. If a skill is not found, then we can fallback so Leon can suggest to develop a skill for the owner
+         *  - Use https://zenmux.ai/volcengine/doubao-seed-code ?
+         *  - Start by building simple skills:
+         *    "what are the gender of the speakers in this video?" -> use existing classifier tool;
+         *    "summarize this video", etc.
+         *    "Clone Elon Musk's voice and say "SpaceX is the most ambitious company on Earth!"" -> research about Elon Musk video/audio samples, download it, and then use XTTS-2 (or something else) to clone the voice and synthesize the text
+         *    "I need to learn the following words in Chinese: ..., ..., .... Please challenge me to pronounce them correctly and to remember them by giving me examples and sentences"
          * TODO NEXT: C. Create the autonomous mode where we give the tools directly to Leon (ReAct). E.g. "Can you download the audiobook for Hunger Games 2 and Hunger Games 3?"
+         *  - Make use of OpenRouter; https://zenmux.ai/ etc.
          * TODO: main goal with A, B, C:
          *  - A: we have a clear breakdown of the atomic structure: skills > actions > toolkits > tools > functions
          *  - B: Leon can write skills and tools by himself (useful when it is a common scenario and that it just needs to be executed and needs to be reliable)
          *  - C: Leon can use the tools directly to achieve the owner's goals and if the necessary tool isn't found, Leon can suggest to develop one for the owner (B.)
+         * TODO: 2 skills to build based A, B, C:
+         *  - TODO 1. Based on my French YouTube video, create a video that will dub my voice in English, get transcription from YouTube, select all the key moments and create a 1 minute video automatically so I can post on Twitter
+         *  - TODO 2. Go on my Twitter account and unfollow the followers that look like bot or spam accounts. Ask me for confirmation before unfollow
+         * TODO: replace Pipenv (and Pyenv?) with uv
          * Tools:
          * - video_streaming
          *  - yt-dlp

@@ -12,7 +12,10 @@
   "flow": [
     "download_video",
     "extract_audio",
-    "music_audio_toolkit_skill:dub_audio",
+    "music_audio_toolkit_skill:transcribe_audio",
+    "translate_transcription",
+    "get_speakers_references",
+    "detect_genders",
     "merge_audio"
   ],
   "actions": {
@@ -40,9 +43,21 @@
       "type": "logic",
       "description": "Extract audio from a downloaded video file for translation processing."
     },
+    "translate_transcription": {
+      "type": "logic",
+      "description": "Translate a transcription file from one language to another using OpenRouter and LLM."
+    },
     "merge_audio": {
       "type": "logic",
       "description": "Replace the original video audio with the dubbed audio to create a translated video."
+    },
+    "get_speakers_references": {
+      "type": "logic",
+      "description": "Extract speaker reference audio clips from the transcribed audio for voice cloning purposes."
+    },
+    "detect_genders": {
+      "type": "logic",
+      "description": "Detect the gender of each speaker from the audio file for personalized translation."
     }
   }
 }

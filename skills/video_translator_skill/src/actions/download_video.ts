@@ -14,6 +14,18 @@ export const run: ActionFunction = async function (
   _params: ActionParams,
   paramsHelper: ParamsHelper
 ) {
+  /*return leon.answer({
+    key: 'download_completed',
+    core: {
+      context_data: {
+        video_path:
+          '/private/var/folders/bx/y0k93r411z9gkczylqxx1fvc0000gn/T/video_translator/1765443522631/Ce que le monde doit à la France - 5 minutes de français.mp4',
+        target_language: 'English',
+        quality: '480p'
+      }
+    }
+  })*/
+
   const videoUrl = paramsHelper.getActionArgument('video_url') as string
   const targetLanguage = paramsHelper.getActionArgument(
     'target_language'

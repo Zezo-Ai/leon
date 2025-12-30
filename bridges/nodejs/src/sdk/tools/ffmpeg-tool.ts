@@ -109,14 +109,14 @@ export default class FfmpegTool extends Tool {
   }
 
   /**
-   * Trims a video to a specified duration.
-   * @param inputPath The file path of the video to be trimmed.
-   * @param outputPath The desired file path for the trimmed video.
+   * Trims a media (video or audio) file to a specified duration.
+   * @param inputPath The file path of the media to be trimmed.
+   * @param outputPath The desired file path for the trimmed media.
    * @param startTime The start time for the trim, formatted as HH:MM:SS.
    * @param endTime The end time for the trim, formatted as HH:MM:SS.
-   * @returns A promise that resolves with the path to the trimmed video file.
+   * @returns A promise that resolves with the path to the trimmed media file.
    */
-  async trimVideo(
+  async trimMedia(
     inputPath: string,
     outputPath: string,
     startTime: string,

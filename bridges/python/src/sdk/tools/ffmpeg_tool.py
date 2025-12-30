@@ -100,18 +100,18 @@ class FfmpegTool(BaseTool):
         except Exception as e:
             raise Exception(f"Audio extraction failed: {str(e)}")
 
-    def trim_video(self, input_path: str, output_path: str, start_time: str, end_time: str) -> str:
+    def trim_media(self, input_path: str, output_path: str, start_time: str, end_time: str) -> str:
         """
-        Trims a video to a specified duration.
+        Trims a media (video or audio) file to a specified duration.
         
         Args:
-            input_path: The file path of the video to be trimmed.
-            output_path: The desired file path for the trimmed video.
+            input_path: The file path of the media to be trimmed.
+            output_path: The desired file path for the trimmed media.
             start_time: The start time for the trim, formatted as HH:MM:SS.
             end_time: The end time for the trim, formatted as HH:MM:SS.
             
         Returns:
-            The path to the trimmed video file.
+            The path to the trimmed media file.
         """
         try:
             self.execute_command(ExecuteCommandOptions(

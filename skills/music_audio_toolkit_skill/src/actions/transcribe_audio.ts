@@ -7,15 +7,21 @@ import { ParamsHelper } from '@sdk/params-helper'
 import { Settings } from '@sdk/settings'
 import FasterWhisperTool from '@sdk/tools/faster_whisper-tool'
 import OpenAIAudioTool from '@sdk/tools/openai_audio-tool'
+import AssemblyAIAudioTool from '@sdk/tools/assemblyai_audio-tool'
 import ElevenLabsAudioTool from '@sdk/tools/elevenlabs_audio-tool'
 import { formatFilePath } from '@sdk/utils'
 
 interface MusicAudioToolkitSkillSettings extends Record<string, unknown> {
-  transcription_provider: 'faster_whisper' | 'openai_audio' | 'elevenlabs_audio'
+  transcription_provider:
+    | 'faster_whisper'
+    | 'openai_audio'
+    | 'assemblyai_audio'
+    | 'elevenlabs_audio'
   faster_whisper_device?: 'auto' | 'cpu' | 'cuda'
   faster_whisper_cpu_threads?: number
   openai_transcription_api_key?: string
   openai_transcription_model?: string
+  assemblyai_transcription_api_key?: string
   elevenlabs_transcription_api_key?: string
   elevenlabs_transcription_model?: string
   elevenlabs_transcription_diarize?: boolean
@@ -25,6 +31,21 @@ export const run: ActionFunction = async function (
   _params: ActionParams,
   paramsHelper: ParamsHelper
 ) {
+  /*return leon.answer({
+    key: 'transcription_completed',
+    data: {
+      transcription_path: formatFilePath(
+        '/private/var/folders/bx/y0k93r411z9gkczylqxx1fvc0000gn/T/video_translator/1765443522631/Ce que le monde doit à la France - 5 minutes de français_audio_transcription.json'
+      )
+    },
+    core: {
+      context_data: {
+        transcription_path:
+          '/private/var/folders/bx/y0k93r411z9gkczylqxx1fvc0000gn/T/video_translator/1765443522631/Ce que le monde doit à la France - 5 minutes de français_audio_transcription.json'
+      }
+    }
+  })*/
+
   const audioPathArg =
     paramsHelper.getActionArgument('audio_path') ||
     (paramsHelper.findActionArgumentFromContext('audio_path') as string)
@@ -46,6 +67,9 @@ export const run: ActionFunction = async function (
     )) as string | undefined
     const openaiModel = ((await settings.get('openai_transcription_model')) ||
       'whisper-1') as string
+    const assemblyaiAPIKey = (await settings.get(
+      'assemblyai_transcription_api_key'
+    )) as string | undefined
     const elevenlabsAPIKey = (await settings.get(
       'elevenlabs_transcription_api_key'
     )) as string | undefined
@@ -69,7 +93,7 @@ export const run: ActionFunction = async function (
     const audioName = path.parse(audioPath).name
     const transcriptionPath = path.join(
       audioDir,
-      `${audioName}_transcription.txt`
+      `${audioName}_transcription.json`
     )
 
     leon.answer({
@@ -100,6 +124,18 @@ export const run: ActionFunction = async function (
         transcriptionPath,
         openaiAPIKey,
         openaiModel
+      )
+    } else if (provider === 'assemblyai_audio') {
+      if (!assemblyaiAPIKey) {
+        leon.answer({ key: 'missing_api_key' })
+        return
+      }
+
+      const tool = new AssemblyAIAudioTool()
+      await tool.transcribeToFile(
+        audioPath,
+        transcriptionPath,
+        assemblyaiAPIKey
       )
     } else if (provider === 'elevenlabs_audio') {
       if (!elevenlabsAPIKey) {

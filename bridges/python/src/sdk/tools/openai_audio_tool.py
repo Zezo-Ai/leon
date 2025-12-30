@@ -98,8 +98,13 @@ class OpenAIAudioTool(BaseTool):
                 'speaker': segment.get('speaker') or None
             })
 
+        # If duration is not found, use the "to" property from the last segment
+        duration = raw_output.get('duration')
+        if not duration and len(segments) > 0:
+            duration = segments[-1]['to'] or 0.0
+
         return {
-            'duration': float(raw_output.get('duration', 0)),
+            'duration': float(duration) if duration else 0.0,
             'speakers': unique_speakers,
             'speaker_count': len(unique_speakers),
             'segments': segments,
