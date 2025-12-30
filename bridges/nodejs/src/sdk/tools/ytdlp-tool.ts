@@ -39,9 +39,9 @@ export default class YtdlpTool extends Tool {
       '--retries',
       '3',
       '--sleep-interval',
-      '2',
+      '0.5',
       '--max-sleep-interval',
-      '7'
+      '1'
     ]
   }
 

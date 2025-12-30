@@ -411,6 +411,7 @@ export default class LLMManager {
          *    - 2025-12-11: Add voice cloning option, otherwise use the gender to generate
          *    - 2025-12-11: Improve the translation quality and segmentation of the translation
          *    - 2025-12-11: Make use of dub-test-2 PoC for audio alignment
+         *    - For getting speaker audio refs, child processes are crashing (out of memory). Need to debug, cf. https://aistudio.google.com/prompts/1ULyv7WoW93ZKi_ODPyuXkC46qfHn2lDi
          *    - Copy current DuckDB transcription and add new speakers for testing with different audio reference for voice cloning. Then work on it for dubbing multi speakers
          *    - Check this model for TTS + voice cloning: https://github.com/SWivid/F5-TTS
          *    - In the video_translator_skill, add option "has_cloning" to enable voice cloning. If not enabled, use the gender to generate

@@ -31,8 +31,8 @@ class YtdlpTool(BaseTool):
         """Build common yt-dlp arguments with retry and sleep options"""
         return [
             '--retries', '3',
-            '--sleep-interval', '2',
-            '--max-sleep-interval', '7'
+            '--sleep-interval', '0.5',
+            '--max-sleep-interval', '1'
         ]
 
     def download_video(self, video_url: str, output_path: str) -> str:
