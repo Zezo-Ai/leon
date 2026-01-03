@@ -12,6 +12,7 @@ logs/*
 core/config/**/*.json
 bin/coqui/*
 bin/flite/*
+bin/cuda/*
 
 package-lock.json
 *.pyc

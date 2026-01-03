@@ -407,8 +407,9 @@ export default class LLMManager {
          *    - [ok] 2025-12-09: get_speakers_references
          *    - [ok] 2025-12-09: detect_gender
          *    - [ok] 2025-12-11: Try with French video (multi speakers) to English video
-         *    - 2025-12-14: Add transcription provider https://www.assemblyai.com/docs/api-reference/transcripts/submit
+         *    - [ok] 2025-12-14: Add transcription provider https://www.assemblyai.com/docs/api-reference/transcripts/submit
          *    - 2025-12-11: Add voice cloning option, otherwise use the gender to generate
+         *    - 2025-12-31: XTTS-v2 https://github.com/astramind-ai/Auralis and https://github.com/idiap/coqui-ai-TTS
          *    - 2025-12-11: Improve the translation quality and segmentation of the translation
          *    - 2025-12-11: Make use of dub-test-2 PoC for audio alignment
          *    - For getting speaker audio refs, child processes are crashing (out of memory). Need to debug, cf. https://aistudio.google.com/prompts/1ULyv7WoW93ZKi_ODPyuXkC46qfHn2lDi
@@ -453,6 +454,7 @@ export default class LLMManager {
          *    - Create "video_streaming_toolkit_skill" (ffmpeg related stuff?) and "music_audio_toolkit_skill", such common skills contain actions that can be reused by other skills
          *    - Settings priority: 1. caller action (video_translator:*); 2. called action (music_audio:*)
          *    - Create openai_audio tool -> transcribe; translate; synthesize, etc.
+         *    - Now that we share the CUDA runtime, we can remove it from all current Leon's binaries (e.g. TCP Server, etc.) and point the path instead
          *    - [ok] In video_translator skill, can add this in flow: "transcriber:transcribe_audio" to execute an action from another skill; but need to config transcribe_audio within this skill need to find a way
          *      VideoTranslator settings
                  *  - transcribe action {
