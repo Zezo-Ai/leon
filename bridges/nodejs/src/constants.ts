@@ -11,6 +11,7 @@ const {
 
 export const LEON_VERSION = process.env['npm_package_version']
 
+const BIN_PATH = path.join(process.cwd(), 'bin')
 const BRIDGES_PATH = path.join(process.cwd(), 'bridges')
 const NODEJS_BRIDGE_ROOT_PATH = path.join(BRIDGES_PATH, 'nodejs')
 const NODEJS_BRIDGE_SRC_PATH = path.join(NODEJS_BRIDGE_ROOT_PATH, 'src')
@@ -28,6 +29,8 @@ export const [, NODEJS_BRIDGE_VERSION] = fs
 export const INTENT_OBJECT: IntentObject = JSON.parse(
   fs.readFileSync(INTENT_OBJ_FILE_PATH as string, 'utf8')
 )
+
+export const CUDA_RUNTIME_PATH = path.join(BIN_PATH, 'cuda')
 
 export const SKILLS_PATH = path.join(process.cwd(), 'skills')
 export const SKILL_PATH = path.join(SKILLS_PATH, INTENT_OBJECT.skill_name)

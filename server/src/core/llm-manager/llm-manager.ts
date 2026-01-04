@@ -408,6 +408,15 @@ export default class LLMManager {
          *    - [ok] 2025-12-09: detect_gender
          *    - [ok] 2025-12-11: Try with French video (multi speakers) to English video
          *    - [ok] 2025-12-14: Add transcription provider https://www.assemblyai.com/docs/api-reference/transcripts/submit
+         *    - 2026-01-04:
+         *      [ ] Implement chatterbox_onnx tool in video translator skill (add in create_new_audio action)
+         *      [ ] Add settings to the video translator skill to control speech_synthesis provider (controlled from create_new_audio action)
+         *      [ ] Try CosyVoice3 https://huggingface.co/FluffyBunnies/vibevoice-onnx-v2
+         *      [ ] Try XTTS-v2
+         *      [ ] Try VibeVoice
+         *      [ ] Try Kokoro-82M-onnx
+         *      [ ] Create edge-tts tool
+         *      [ ] Convert models above to ONNX
          *    - 2025-12-11: Add voice cloning option, otherwise use the gender to generate
          *    - 2025-12-31: XTTS-v2 https://github.com/astramind-ai/Auralis and https://github.com/idiap/coqui-ai-TTS
          *    - 2025-12-11: Improve the translation quality and segmentation of the translation
@@ -416,6 +425,7 @@ export default class LLMManager {
          *    - Copy current DuckDB transcription and add new speakers for testing with different audio reference for voice cloning. Then work on it for dubbing multi speakers
          *    - Check this model for TTS + voice cloning: https://github.com/SWivid/F5-TTS
          *    - In the video_translator_skill, add option "has_cloning" to enable voice cloning. If not enabled, use the gender to generate
+         *    - Should we remove toolkit skills from the skill router? We could still create dedicated skill if we really want to expose a specific one
          *    - Use open-source models for video translation:
          *      - https://aistudio.google.com/prompts/1WIgTwl9lGBWJtXjj8Ec7RWLA_Zt4kM3h
          *      - https://chat.qwen.ai/c/52cc9526-caf9-43d8-81c4-8cde15c0c6c3

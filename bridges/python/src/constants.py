@@ -13,10 +13,16 @@ SKILLS_ROOT_PATH = os.path.join(
     os.getcwd(),
     'skills'
 )
+BIN_PATH = os.path.join(
+    os.getcwd(),
+    'bin'
+)
 BRIDGES_PATH = os.path.join(
     os.getcwd(),
     'bridges'
 )
+
+CUDA_RUNTIME_PATH = os.path.join(BIN_PATH, 'cuda')
 
 TOOLKITS_PATH = os.path.join(BRIDGES_PATH, 'toolkits')
 

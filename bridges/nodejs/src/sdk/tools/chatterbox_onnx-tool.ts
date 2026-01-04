@@ -1,7 +1,11 @@
 import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 
+import { CUDA_RUNTIME_PATH } from '@bridge/constants'
 import { Tool } from '@sdk/base-tool'
 import { ToolkitConfig } from '@sdk/toolkit-config'
+import { getPlatformName } from '@sdk/utils'
 
 const MODEL_NAME = 'chatterbox-multilingual-onnx'
 
@@ -42,10 +46,10 @@ export default class ChatterboxONNXTool extends Tool {
   /**
    * Synthesize speech from text using Chatterbox ONNX
    * @param tasks Array of synthesis tasks or a single task
-   * @param cudaRuntimePath Optional path to CUDA runtime for GPU acceleration
+   * @param cudaRuntimePath Optional path to CUDA runtime for GPU acceleration (auto-detected if not provided)
    * @returns A promise that resolves when synthesis is complete
    */
-  async synthesizeSpeech(
+  async synthesizeSpeechToFiles(
     tasks: SynthesisTask | SynthesisTask[],
     cudaRuntimePath?: string
   ): Promise<void> {
@@ -57,8 +61,10 @@ export default class ChatterboxONNXTool extends Tool {
       const modelPath = await this.getResourcePath(MODEL_NAME)
 
       // Create a temporary JSON file for the tasks
-      const tempDir = await fs.promises.mkdtemp('/tmp/chatterbox_onnx_tasks_')
-      const jsonFilePath = `${tempDir}/tasks.json`
+      const tempDir = await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), 'chatterbox_onnx_tasks_')
+      )
+      const jsonFilePath = path.join(tempDir, 'tasks.json')
 
       await fs.promises.writeFile(
         jsonFilePath,
@@ -75,8 +81,15 @@ export default class ChatterboxONNXTool extends Tool {
         modelPath
       ]
 
-      if (cudaRuntimePath) {
-        args.push('--cuda_runtime_path', cudaRuntimePath)
+      // Auto-detect CUDA runtime path if not provided
+      const platformName = getPlatformName()
+      const shouldUseCuda =
+        platformName === 'linux-x86_64' || platformName === 'win-amd64'
+      const finalCudaRuntimePath =
+        cudaRuntimePath ?? (shouldUseCuda ? CUDA_RUNTIME_PATH : undefined)
+
+      if (finalCudaRuntimePath) {
+        args.push('--cuda_runtime_path', finalCudaRuntimePath)
       }
 
       await this.executeCommand({
