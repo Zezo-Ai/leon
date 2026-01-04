@@ -45,6 +45,31 @@
           "https://huggingface.co/JaesungHuh/voice-gender-classifier/resolve/main/model.safetensors?download=true"
         ]
       }
+    },
+    "chatterbox_onnx": {
+      "description": "A tool for text-to-speech synthesis and voice cloning using the Chatterbox ONNX model.",
+      "binaries": {
+        "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.0.0/chatterbox_onnx_1.0.0-linux-x86_64",
+        "linux-aarch64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.0.0/chatterbox_onnx_1.0.0-linux-aarch64",
+        "macosx-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.0.0/chatterbox_onnx_1.0.0-macosx-x86_64",
+        "macosx-arm64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.0.0/chatterbox_onnx_1.0.0-macosx-arm64",
+        "win-amd64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.0.0/chatterbox_onnx_1.0.0-win-amd64.exe"
+      },
+      "resources": {
+        "chatterbox-multilingual-onnx": [
+          "https://huggingface.co/onnx-community/chatterbox-multilingual-ONNX/resolve/main/Cangjie5_TC.json?download=true",
+          "https://huggingface.co/onnx-community/chatterbox-multilingual-ONNX/resolve/main/default_voice.wav?download=true",
+          "https://huggingface.co/onnx-community/chatterbox-multilingual-ONNX/resolve/main/tokenizer.json?download=true",
+          "https://huggingface.co/onnx-community/chatterbox-multilingual-ONNX/resolve/main/onnx/conditional_decoder.onnx?download=true",
+          "https://huggingface.co/onnx-community/chatterbox-multilingual-ONNX/resolve/main/onnx/conditional_decoder.onnx_data?download=true",
+          "https://huggingface.co/onnx-community/chatterbox-multilingual-ONNX/resolve/main/onnx/embed_tokens.onnx?download=true",
+          "https://huggingface.co/onnx-community/chatterbox-multilingual-ONNX/resolve/main/onnx/embed_tokens.onnx_data?download=true",
+          "https://huggingface.co/onnx-community/chatterbox-multilingual-ONNX/resolve/main/onnx/language_model_q4.onnx?download=true",
+          "https://huggingface.co/onnx-community/chatterbox-multilingual-ONNX/resolve/main/onnx/language_model_q4.onnx_data?download=true",
+          "https://huggingface.co/onnx-community/chatterbox-multilingual-ONNX/resolve/main/onnx/speech_encoder.onnx?download=true",
+          "https://huggingface.co/onnx-community/chatterbox-multilingual-ONNX/resolve/main/onnx/speech_encoder.onnx_data?download=true"
+        ]
+      }
     }
   }
 }
