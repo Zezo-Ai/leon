@@ -553,6 +553,72 @@ export abstract class Tool {
   }
 
   /**
+   * Delete older versions of a binary based on filename pattern
+   * Example: if downloading chatterbox_onnx_1.1.0-linux-x86_64, delete chatterbox_onnx_1.0.0-linux-x86_64
+   */
+  private async deleteOlderBinaryVersions(
+    binsPath: string,
+    newExecutable: string
+  ): Promise<void> {
+    try {
+      // Parse the new binary filename to extract name, version, and platform
+      // Pattern: {name}_{version}-{platform}[.exe]
+      const match = newExecutable.match(
+        /^(.+?)_(\d+\.\d+\.\d+)-(.*?)(?:\.exe)?$/
+      )
+
+      if (!match) {
+        // If filename doesn't match the versioned pattern, skip cleanup
+        return
+      }
+
+      const [, binaryBaseName, newVersion, platform] = match
+
+      // Get all files in the bins directory
+      const files = fs.readdirSync(binsPath)
+
+      for (const file of files) {
+        // Check if this file matches the same binary name and platform but different version
+        const fileMatch = file.match(/^(.+?)_(\d+\.\d+\.\d+)-(.*?)(?:\.exe)?$/)
+
+        if (!fileMatch) {
+          continue
+        }
+
+        const [, fileBaseName, fileVersion, filePlatform] = fileMatch
+
+        // Only delete if:
+        // 1. Same binary base name
+        // 2. Same platform
+        // 3. Different version
+        if (
+          fileBaseName === binaryBaseName &&
+          filePlatform === platform &&
+          fileVersion !== newVersion
+        ) {
+          const oldBinaryPath = path.join(binsPath, file)
+
+          await this.report('bridges.tools.deleting_old_version', {
+            old_version: file,
+            new_version: newExecutable
+          })
+
+          fs.unlinkSync(oldBinaryPath)
+
+          await this.report('bridges.tools.old_version_deleted', {
+            deleted_file: file
+          })
+        }
+      }
+    } catch (error) {
+      // Don't fail the entire process if cleanup fails
+      await this.report('bridges.tools.cleanup_warning', {
+        error: (error as Error).message
+      })
+    }
+  }
+
+  /**
    * Download binary on-demand if not found
    */
   private async downloadBinaryOnDemand(
@@ -573,6 +639,9 @@ export abstract class Tool {
       await this.report('bridges.tools.binary_downloaded', {
         binary_name: binaryName
       })
+
+      // Delete older versions of this binary
+      await this.deleteOlderBinaryVersions(binsPath, executable)
 
       // Make binary executable (Unix systems)
       if (!isWindows()) {

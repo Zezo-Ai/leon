@@ -35,13 +35,13 @@ export const run: ActionFunction = async function (
     key: 'transcription_completed',
     data: {
       transcription_path: formatFilePath(
-        '/private/var/folders/bx/y0k93r411z9gkczylqxx1fvc0000gn/T/video_translator/1765443522631/Ce que le monde doit à la France - 5 minutes de français_audio_transcription.json'
+        '/tmp/video_translator/1767626951356/How to create custom AI evaluators in Stax_audio_transcription.json'
       )
     },
     core: {
       context_data: {
         transcription_path:
-          '/private/var/folders/bx/y0k93r411z9gkczylqxx1fvc0000gn/T/video_translator/1765443522631/Ce que le monde doit à la France - 5 minutes de français_audio_transcription.json'
+          '/tmp/video_translator/1767626951356/How to create custom AI evaluators in Stax_audio_transcription.json'
       }
     }
   })*/

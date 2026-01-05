@@ -19,8 +19,8 @@ export const run: ActionFunction = async function (
     core: {
       context_data: {
         video_path:
-          '/private/var/folders/bx/y0k93r411z9gkczylqxx1fvc0000gn/T/video_translator/1765443522631/Ce que le monde doit à la France - 5 minutes de français.mp4',
-        target_language: 'English',
+          '/tmp/video_translator/1767626951356/How to create custom AI evaluators in Stax.mp4',
+        target_language: 'French',
         quality: '480p'
       }
     }

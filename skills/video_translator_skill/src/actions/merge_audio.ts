@@ -17,10 +17,17 @@ export const run: ActionFunction = async function (
     paramsHelper.getContextData<string>('video_path')
   const dubbedAudioPath =
     (paramsHelper.getActionArgument('dubbed_audio_path') as string) ||
-    paramsHelper.getContextData<string>('dubbed_path')
-  const targetLanguage =
-    (paramsHelper.getActionArgument('target_language') as string) ||
-    paramsHelper.getContextData<string>('target_language')
+    paramsHelper.getContextData<string>('dubbed_audio_path')
+
+  // Extract target language from entity 'language' and format it
+  const languageEntity = paramsHelper.findLastEntityFromContext('language')
+  const targetLanguageLocale =
+    languageEntity && 'option' in languageEntity
+      ? (languageEntity.option as string)
+      : undefined
+  const targetLanguage = targetLanguageLocale
+    ? targetLanguageLocale.substring(0, 2).toLowerCase()
+    : paramsHelper.getContextData<string>('target_language')
 
   try {
     // Validate required inputs
@@ -40,7 +47,7 @@ export const run: ActionFunction = async function (
         key: 'no_dubbed_audio_path',
         data: {
           error:
-            'No dubbed audio path found. Please provide a dubbed_audio_path or run the dub_audio action first.'
+            'No dubbed audio path found. Please provide a dubbed_audio_path or run the create_new_audio action first.'
         }
       })
       return

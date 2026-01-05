@@ -21,6 +21,7 @@ class SynthesisTask(TypedDict, total=False):
     speaker_reference_path: Optional[str]
     cfg_strength: Optional[float]
     exaggeration: Optional[float]
+    temperature: Optional[float]
 
 
 class ChatterboxONNXTool(BaseTool):
@@ -67,6 +68,7 @@ class ChatterboxONNXTool(BaseTool):
                    - speaker_reference_path: Optional path to a reference audio file for voice cloning
                    - cfg_strength: Optional classifier-free guidance strength (default: 0.5)
                    - exaggeration: Optional exaggeration factor (default: 0.5)
+                   - temperature: Optional temperature for sampling (controls randomness)
             cuda_runtime_path: Optional path to CUDA runtime for GPU acceleration (auto-detected if not provided)
 
         Returns:

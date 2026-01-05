@@ -16,6 +16,7 @@
     "translate_transcription",
     "get_speakers_references",
     "detect_genders",
+    "create_new_audio",
     "merge_audio"
   ],
   "actions": {
@@ -58,6 +59,10 @@
     "detect_genders": {
       "type": "logic",
       "description": "Detect the gender of each speaker from the audio file for personalized translation."
+    },
+    "create_new_audio": {
+      "type": "logic",
+      "description": "Generate new dubbed audio segments using Chatterbox ONNX with speaker voice cloning and intelligent grouping."
     }
   }
 }

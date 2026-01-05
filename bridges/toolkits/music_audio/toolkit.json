@@ -49,11 +49,11 @@
     "chatterbox_onnx": {
       "description": "A tool for text-to-speech synthesis and voice cloning using the Chatterbox ONNX model.",
       "binaries": {
-        "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.0.0/chatterbox_onnx_1.0.0-linux-x86_64",
-        "linux-aarch64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.0.0/chatterbox_onnx_1.0.0-linux-aarch64",
-        "macosx-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.0.0/chatterbox_onnx_1.0.0-macosx-x86_64",
-        "macosx-arm64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.0.0/chatterbox_onnx_1.0.0-macosx-arm64",
-        "win-amd64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.0.0/chatterbox_onnx_1.0.0-win-amd64.exe"
+        "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.1.0/chatterbox_onnx_1.1.0-linux-x86_64",
+        "linux-aarch64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.1.0/chatterbox_onnx_1.1.0-linux-aarch64",
+        "macosx-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.1.0/chatterbox_onnx_1.1.0-macosx-x86_64",
+        "macosx-arm64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.1.0/chatterbox_onnx_1.1.0-macosx-arm64",
+        "win-amd64": "https://github.com/leon-ai/leon-binaries/releases/download/chatterbox_onnx-v1.1.0/chatterbox_onnx_1.1.0-win-amd64.exe"
       },
       "resources": {
         "chatterbox-multilingual-onnx": [

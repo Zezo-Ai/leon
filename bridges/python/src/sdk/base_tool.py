@@ -421,6 +421,68 @@ class BaseTool(ABC):
                 return False
         return True
 
+    def _delete_older_binary_versions(self, bins_path: str, new_executable: str) -> None:
+        """
+        Delete older versions of a binary based on filename pattern
+        Example: if downloading chatterbox_onnx_1.1.0-linux-x86_64, delete chatterbox_onnx_1.0.0-linux-x86_64
+        
+        Args:
+            bins_path: Path to the bins directory
+            new_executable: Filename of the new binary being downloaded
+        """
+        try:
+            # Parse the new binary filename to extract name, version, and platform
+            # Pattern: {name}_{version}-{platform}[.exe]
+            match = re.match(r'^(.+?)_(\d+\.\d+\.\d+)-(.*?)(?:\.exe)?$', new_executable)
+            
+            if not match:
+                # If filename doesn't match the versioned pattern, skip cleanup
+                return
+            
+            binary_base_name, new_version, platform = match.groups()
+            
+            # Get all files in the bins directory
+            if not os.path.exists(bins_path):
+                return
+                
+            files = os.listdir(bins_path)
+            
+            for file in files:
+                # Check if this file matches the same binary name and platform but different version
+                file_match = re.match(r'^(.+?)_(\d+\.\d+\.\d+)-(.*?)(?:\.exe)?$', file)
+                
+                if not file_match:
+                    continue
+                
+                file_base_name, file_version, file_platform = file_match.groups()
+                
+                # Only delete if:
+                # 1. Same binary base name
+                # 2. Same platform
+                # 3. Different version
+                if (file_base_name == binary_base_name and
+                    file_platform == platform and
+                    file_version != new_version):
+                    
+                    old_binary_path = os.path.join(bins_path, file)
+                    
+                    self.report('bridges.tools.deleting_old_version', {
+                        'old_version': file,
+                        'new_version': new_executable
+                    })
+                    
+                    os.remove(old_binary_path)
+                    
+                    self.report('bridges.tools.old_version_deleted', {
+                        'deleted_file': file
+                    })
+                    
+        except Exception as e:
+            # Don't fail the entire process if cleanup fails
+            self.report('bridges.tools.cleanup_warning', {
+                'error': str(e)
+            })
+
     def _download_binary_on_demand(self, binary_name: str, binary_url: str, executable: str) -> None:
         """Download binary on-demand if not found"""
 
@@ -437,6 +499,9 @@ class BaseTool(ABC):
             self.report('bridges.tools.binary_downloaded', {
                 'binary_name': binary_name
             })
+
+            # Delete older versions of this binary
+            self._delete_older_binary_versions(bins_path, executable)
 
             # Make binary executable (Unix systems)
             if not is_windows():

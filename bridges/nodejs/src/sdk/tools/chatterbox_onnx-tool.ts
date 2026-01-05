@@ -18,6 +18,7 @@ interface SynthesisTask {
   speaker_reference_path?: string
   cfg_strength?: number
   exaggeration?: number
+  temperature?: number
 }
 
 export default class ChatterboxONNXTool extends Tool {

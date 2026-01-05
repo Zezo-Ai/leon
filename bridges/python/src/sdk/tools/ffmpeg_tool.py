@@ -1,3 +1,4 @@
+from typing import List, Dict, Optional
 from ..base_tool import BaseTool, ExecuteCommandOptions
 from ..toolkit_config import ToolkitConfig
 
@@ -194,3 +195,126 @@ class FfmpegTool(BaseTool):
             return output_path
         except Exception as e:
             raise Exception(f"Video compression failed: {str(e)}")
+
+    def adjust_tempo(self, input_path: str, output_path: str, speed_factor: float, sample_rate: int = None) -> str:
+        """
+        Adjusts the tempo (speed) of an audio file using the atempo filter.
+        If the speed factor is greater than 2.0, multiple atempo filters are chained.
+        
+        Args:
+            input_path: The file path of the audio to be speed-adjusted.
+            output_path: The desired file path for the speed-adjusted audio.
+            speed_factor: The speed multiplier (e.g., 1.3 for 30% faster, 0.8 for 20% slower). Must be between 0.5 and 100.0.
+            sample_rate: Optional sample rate for the output audio (defaults to the input's sample rate).
+            
+        Returns:
+            The path to the speed-adjusted audio file.
+        """
+        try:
+            if speed_factor < 0.5 or speed_factor > 100.0:
+                raise ValueError('Speed factor must be between 0.5 and 100.0')
+
+            # FFmpeg's atempo filter only supports values between 0.5 and 2.0
+            # For larger speed factors, we need to chain multiple atempo filters
+            atempo_filters = []
+            remaining_speed = speed_factor
+
+            while remaining_speed > 2.0:
+                atempo_filters.append('atempo=2.0')
+                remaining_speed /= 2.0
+
+            if remaining_speed < 1.0 and remaining_speed < 0.5:
+                while remaining_speed < 0.5:
+                    atempo_filters.append('atempo=0.5')
+                    remaining_speed /= 0.5
+
+            atempo_filters.append(f'atempo={remaining_speed:.6f}')
+
+            filter_complex = ','.join(atempo_filters)
+            args = ['-y', '-i', input_path, '-filter:a', filter_complex]
+
+            if sample_rate:
+                args.extend(['-ar', str(sample_rate)])
+
+            args.append(output_path)
+
+            self.execute_command(ExecuteCommandOptions(
+                binary_name='ffmpeg',
+                args=args,
+                options={'sync': True}
+            ))
+
+            return output_path
+        except Exception as e:
+            raise Exception(f"Audio tempo adjustment failed: {str(e)}")
+
+    def assemble_audio_segments(
+        self,
+        segments: List[Dict[str, any]],
+        output_path: str,
+        total_duration_ms: int,
+        sample_rate: int = 22_050
+    ) -> str:
+        """
+        Assembles multiple audio segments into a single audio file with precise timing.
+        Each segment is placed at its exact timestamp with silence padding where needed.
+        Similar to pydub's overlay functionality but using FFmpeg.
+        
+        Args:
+            segments: List of dictionaries with 'path' (str) and 'start_ms' (int) keys
+                     representing audio segments and their start times in milliseconds
+            output_path: The desired file path for the assembled audio
+            total_duration_ms: The total duration of the output audio in milliseconds
+            sample_rate: Optional sample rate for the output audio (default: 22050)
+            
+        Returns:
+            The path to the assembled audio file
+        """
+        try:
+            if not segments:
+                raise ValueError('No segments provided for assembly')
+
+            # Build FFmpeg filter_complex for assembling segments at precise timestamps
+            # We'll use the adelay filter to position each segment at its start time
+            inputs = []
+            filter_parts = []
+
+            # Add all segment files as inputs
+            for segment in segments:
+                inputs.extend(['-i', segment['path']])
+
+            # Build filter chain: adelay each segment, then amix them all together
+            for i, segment in enumerate(segments):
+                delay_ms = segment.get('start_ms', 0)
+                # adelay takes delay in milliseconds
+                filter_parts.append(f'[{i}:a]adelay={delay_ms}|{delay_ms}[a{i}]')
+
+            # Mix all delayed streams together
+            mix_inputs = ''.join([f'[a{i}]' for i in range(len(segments))])
+            filter_parts.append(f'{mix_inputs}amix=inputs={len(segments)}:duration=longest[aout]')
+
+            filter_complex = ';'.join(filter_parts)
+
+            # Calculate total duration in seconds for ffmpeg
+            total_duration_s = total_duration_ms / 1000
+
+            args = [
+                '-y',
+                *inputs,
+                '-filter_complex', filter_complex,
+                '-map', '[aout]',
+                '-ar', str(sample_rate),
+                '-t', f'{total_duration_s:.3f}',
+                '-c:a', 'pcm_s16le',
+                output_path
+            ]
+
+            self.execute_command(ExecuteCommandOptions(
+                binary_name='ffmpeg',
+                args=args,
+                options={'sync': True}
+            ))
+
+            return output_path
+        except Exception as e:
+            raise Exception(f"Audio assembly failed: {str(e)}")

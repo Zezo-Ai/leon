@@ -283,4 +283,143 @@ export default class FfmpegTool extends Tool {
       throw new Error(`Video compression failed: ${(error as Error).message}`)
     }
   }
+
+  /**
+   * Adjusts the tempo (speed) of an audio file using the atempo filter.
+   * If the speed factor is greater than 2.0, multiple atempo filters are chained.
+   * @param inputPath The file path of the audio to be speed-adjusted.
+   * @param outputPath The desired file path for the speed-adjusted audio.
+   * @param speedFactor The speed multiplier (e.g., 1.3 for 30% faster, 0.8 for 20% slower). Must be between 0.5 and 100.0.
+   * @param sampleRate Optional sample rate for the output audio (defaults to the input's sample rate).
+   * @returns A promise that resolves with the path to the speed-adjusted audio file.
+   */
+  async adjustTempo(
+    inputPath: string,
+    outputPath: string,
+    speedFactor: number,
+    sampleRate?: number
+  ): Promise<string> {
+    try {
+      if (speedFactor < 0.5 || speedFactor > 100.0) {
+        throw new Error('Speed factor must be between 0.5 and 100.0')
+      }
+
+      // FFmpeg's atempo filter only supports values between 0.5 and 2.0
+      // For larger speed factors, we need to chain multiple atempo filters
+      const atempoFilters: string[] = []
+      let remainingSpeed = speedFactor
+
+      while (remainingSpeed > 2.0) {
+        atempoFilters.push('atempo=2.0')
+        remainingSpeed /= 2.0
+      }
+
+      if (remainingSpeed < 1.0 && remainingSpeed < 0.5) {
+        while (remainingSpeed < 0.5) {
+          atempoFilters.push('atempo=0.5')
+          remainingSpeed /= 0.5
+        }
+      }
+
+      atempoFilters.push(`atempo=${remainingSpeed.toFixed(6)}`)
+
+      const filterComplex = atempoFilters.join(',')
+      const args = ['-y', '-i', inputPath, '-filter:a', filterComplex]
+
+      if (sampleRate) {
+        args.push('-ar', sampleRate.toString())
+      }
+
+      args.push(outputPath)
+
+      await this.executeCommand({
+        binaryName: 'ffmpeg',
+        args,
+        options: { sync: true }
+      })
+
+      return outputPath
+    } catch (error: unknown) {
+      throw new Error(
+        `Audio tempo adjustment failed: ${(error as Error).message}`
+      )
+    }
+  }
+
+  /**
+   * Assembles multiple audio segments into a single audio file with precise timing.
+   * Each segment is placed at its exact timestamp with silence padding where needed.
+   * Similar to pydub's overlay functionality but using FFmpeg.
+   * @param segments Array of {path: string, startMs: number} objects representing audio segments and their start times in milliseconds
+   * @param outputPath The desired file path for the assembled audio
+   * @param totalDurationMs The total duration of the output audio in milliseconds
+   * @param sampleRate Optional sample rate for the output audio (default: 22050)
+   * @returns A promise that resolves with the path to the assembled audio file
+   */
+  async assembleAudioSegments(
+    segments: Array<{ path: string; startMs: number }>,
+    outputPath: string,
+    totalDurationMs: number,
+    sampleRate: number = 22_050
+  ): Promise<string> {
+    try {
+      if (segments.length === 0) {
+        throw new Error('No segments provided for assembly')
+      }
+
+      // Build FFmpeg filter_complex for assembling segments at precise timestamps
+      // We'll use the adelay filter to position each segment at its start time
+      const inputs: string[] = []
+      const filterParts: string[] = []
+
+      // Add all segment files as inputs
+      for (const segment of segments) {
+        inputs.push('-i', segment.path)
+      }
+
+      // Build filter chain: adelay each segment, then amix them all together
+      for (let i = 0; i < segments.length; i += 1) {
+        const delayMs = segments[i]?.startMs ?? 0
+        // adelay takes delay in milliseconds
+        filterParts.push(`[${i}:a]adelay=${delayMs}|${delayMs}[a${i}]`)
+      }
+
+      // Mix all delayed streams together
+      const mixInputs = segments.map((_, i) => `[a${i}]`).join('')
+      filterParts.push(
+        `${mixInputs}amix=inputs=${segments.length}:duration=longest[aout]`
+      )
+
+      const filterComplex = filterParts.join(';')
+
+      // Calculate total duration in seconds for ffmpeg
+      const totalDurationS = totalDurationMs / 1000
+
+      const args = [
+        '-y',
+        ...inputs,
+        '-filter_complex',
+        filterComplex,
+        '-map',
+        '[aout]',
+        '-ar',
+        sampleRate.toString(),
+        '-t',
+        totalDurationS.toFixed(3),
+        '-c:a',
+        'pcm_s16le',
+        outputPath
+      ]
+
+      await this.executeCommand({
+        binaryName: 'ffmpeg',
+        args,
+        options: { sync: true }
+      })
+
+      return outputPath
+    } catch (error: unknown) {
+      throw new Error(`Audio assembly failed: ${(error as Error).message}`)
+    }
+  }
 }
