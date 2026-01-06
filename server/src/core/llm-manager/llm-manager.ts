@@ -409,8 +409,14 @@ export default class LLMManager {
          *    - [ok] 2025-12-11: Try with French video (multi speakers) to English video
          *    - [ok] 2025-12-14: Add transcription provider https://www.assemblyai.com/docs/api-reference/transcripts/submit
          *    - 2026-01-04:
-         *      [ ] Implement chatterbox_onnx tool in video translator skill (add in create_new_audio action)
-         *      [ ] Add settings to the video translator skill to control speech_synthesis provider (controlled from create_new_audio action)
+         *      [ok] Implement chatterbox_onnx tool in video translator skill (add in create_new_audio action)
+         *      [ok] Add settings to the video translator skill to control speech_synthesis provider (controlled from create_new_audio action)
+         *      [ok] create_new_audio -> max chars in segments are still not respected, I saw 700+ chars in one segment (the one before the last one)
+         *      [ok] once the audio segments assembled, the sound is low and then in it tends to increase, fix it, the sound level must be consistent
+         *      [ok] we can hear sound overlaps once the audio segments are assembled
+         *      [ ] Create action and tool about voice/instrumental audio separation
+         *      [ ] better prompting for the translation (provide more context)
+         *
          *      [ ] Try CosyVoice3 https://huggingface.co/FluffyBunnies/vibevoice-onnx-v2
          *      [ ] Try XTTS-v2
          *      [ ] Try VibeVoice

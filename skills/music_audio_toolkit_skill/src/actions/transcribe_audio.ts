@@ -35,13 +35,13 @@ export const run: ActionFunction = async function (
     key: 'transcription_completed',
     data: {
       transcription_path: formatFilePath(
-        '/tmp/video_translator/1767626951356/How to create custom AI evaluators in Stax_audio_transcription.json'
+        '/tmp/video_translator/1767687261298/DuckDB in 100 Seconds_audio_transcription.json'
       )
     },
     core: {
       context_data: {
         transcription_path:
-          '/tmp/video_translator/1767626951356/How to create custom AI evaluators in Stax_audio_transcription.json'
+          '/tmp/video_translator/1767687261298/DuckDB in 100 Seconds_audio_transcription.json'
       }
     }
   })*/

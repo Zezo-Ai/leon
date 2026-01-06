@@ -49,7 +49,70 @@ function toMs(seconds: number): number {
 }
 
 /**
+ * Split a segment's text into smaller chunks at natural breakpoints
+ * Respects GROUP_TARGET_CHARS limit and breaks at punctuation when possible
+ */
+function splitSegmentText(
+  segment: Segment,
+  maxChars: number
+): Array<{ text: string; ratio: number }> {
+  const text = segment.text.trim()
+  if (text.length <= maxChars) {
+    return [{ text, ratio: 1.0 }]
+  }
+
+  const chunks: Array<{ text: string; ratio: number }> = []
+  let remaining = text
+  const totalLength = text.length
+
+  while (remaining.length > 0) {
+    if (remaining.length <= maxChars) {
+      chunks.push({
+        text: remaining,
+        ratio: remaining.length / totalLength
+      })
+      break
+    }
+
+    // Find the best break point within maxChars
+    let breakPoint = maxChars
+    const searchText = remaining.substring(0, maxChars + 1)
+
+    // Look for punctuation followed by space (natural break)
+    const punctuationPattern = /[.!?,;:]\s/g
+    let lastMatch = -1
+    let match
+
+    while ((match = punctuationPattern.exec(searchText)) !== null) {
+      lastMatch = match.index + 1 // +1 to include the punctuation
+    }
+
+    if (lastMatch > maxChars * 0.5) {
+      // Found good punctuation break in the latter half
+      breakPoint = lastMatch
+    } else {
+      // Look for last space in the limit
+      const lastSpace = searchText.lastIndexOf(' ', maxChars)
+      if (lastSpace > maxChars * 0.3) {
+        // Found a space in acceptable range
+        breakPoint = lastSpace
+      }
+    }
+
+    const chunk = remaining.substring(0, breakPoint).trim()
+    chunks.push({
+      text: chunk,
+      ratio: chunk.length / totalLength
+    })
+    remaining = remaining.substring(breakPoint).trim()
+  }
+
+  return chunks
+}
+
+/**
  * Create natural phrases (clauses) from segments
+ * Also splits long segments into smaller chunks
  */
 function createPhrases(segments: Segment[]): Segment[] {
   const phrases: Segment[] = []
@@ -61,11 +124,46 @@ function createPhrases(segments: Segment[]): Segment[] {
 
     if (!text || !speakerId) continue
 
+    // If segment is too long, split it first
+    if (text.length > GROUP_TARGET_CHARS) {
+      // Push any current phrase first
+      if (currentPhrase) {
+        phrases.push(currentPhrase)
+        currentPhrase = null
+      }
+
+      // Split the long segment
+      const chunks = splitSegmentText(segment, GROUP_TARGET_CHARS)
+      const segmentDuration = segment.to - segment.from
+
+      let accumulatedRatio = 0
+      for (let i = 0; i < chunks.length; i += 1) {
+        const chunk = chunks[i]
+        if (!chunk) continue
+
+        const chunkStartTime = segment.from + segmentDuration * accumulatedRatio
+        const chunkEndTime =
+          segment.from + segmentDuration * (accumulatedRatio + chunk.ratio)
+
+        phrases.push({
+          from: chunkStartTime,
+          to: chunkEndTime,
+          text: chunk.text,
+          speaker: speakerId
+        })
+
+        accumulatedRatio += chunk.ratio
+      }
+
+      continue
+    }
+
+    // Normal phrase building logic
     if (currentPhrase === null || currentPhrase.speaker !== speakerId) {
       if (currentPhrase) phrases.push(currentPhrase)
-      currentPhrase = { ...segment }
+      currentPhrase = { ...segment, text }
     } else {
-      currentPhrase.text += ' ' + text
+      currentPhrase.text = `${currentPhrase.text} ${text}`
       currentPhrase.to = segment.to
     }
 
@@ -82,12 +180,25 @@ function createPhrases(segments: Segment[]): Segment[] {
 
 /**
  * Group phrases into larger, efficient segments
+ * Ensures no group exceeds GROUP_TARGET_CHARS
  */
 function groupPhrases(phrases: Segment[]): Segment[] {
   const groups: Segment[] = []
   let currentGroup: Segment | null = null
 
   for (const phrase of phrases) {
+    // If phrase itself is too long, split it into the current group
+    if (phrase.text.length > GROUP_TARGET_CHARS) {
+      // If we have a current group, push it first
+      if (currentGroup) {
+        groups.push(currentGroup)
+        currentGroup = null
+      }
+      // Push the long phrase as its own group (no choice)
+      groups.push({ ...phrase })
+      continue
+    }
+
     if (currentGroup === null) {
       currentGroup = { ...phrase }
     } else {
@@ -103,7 +214,7 @@ function groupPhrases(phrases: Segment[]): Segment[] {
         groups.push(currentGroup)
         currentGroup = { ...phrase }
       } else {
-        currentGroup.text += ' ' + phrase.text
+        currentGroup.text = `${currentGroup.text} ${phrase.text}`
         currentGroup.to = phrase.to
       }
     }
@@ -378,12 +489,18 @@ export const run: ActionFunction = async function (
         continue
       }
 
-      // Get the generated audio duration
-      const generatedStats = await fs.promises.stat(rawAudioPath)
-      // Rough estimation: 16-bit PCM, 22.05kHz, mono = 44.1 KB/s
-      const estimatedGeneratedDurationMs =
-        (generatedStats.size / 44_100) * 1_000
-      const generatedDurationMs = Math.max(estimatedGeneratedDurationMs, 100) // Minimum 100ms
+      // Get the actual generated audio duration using ffprobe for accuracy
+      let generatedDurationMs: number
+      try {
+        generatedDurationMs = await ffmpegTool.getAudioDuration(rawAudioPath)
+      } catch {
+        // Fallback to file size estimation if ffprobe fails
+        const generatedStats = await fs.promises.stat(rawAudioPath)
+        generatedDurationMs = Math.max(
+          (generatedStats.size / 44_100) * 1_000,
+          100
+        )
+      }
 
       const finalSegmentPath = path.join(
         processedSegmentsDir,
@@ -417,11 +534,35 @@ export const run: ActionFunction = async function (
           }
 
           try {
+            // Create temp file for tempo-adjusted audio
+            const tempAdjustedPath = path.join(
+              processedSegmentsDir,
+              `segment_${index}_adjusted.wav`
+            )
+
             await ffmpegTool.adjustTempo(
               rawAudioPath,
-              finalSegmentPath,
+              tempAdjustedPath,
               speedFactor
             )
+
+            // Trim to exact original duration to ensure precise timing
+            const startTime = '00:00:00.000'
+            const endTime = new Date(originalDurationMs)
+              .toISOString()
+              .substr(11, 12)
+
+            await ffmpegTool.trimMedia(
+              tempAdjustedPath,
+              finalSegmentPath,
+              startTime,
+              endTime
+            )
+
+            // Clean up temp file
+            await fs.promises.unlink(tempAdjustedPath).catch(() => {
+              /* ignore */
+            })
           } catch (error) {
             leon.answer({
               key: 'tempo_adjustment_failed',

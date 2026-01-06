@@ -347,6 +347,41 @@ export default class FfmpegTool extends Tool {
   }
 
   /**
+   * Get the duration of an audio/video file in milliseconds using ffprobe.
+   * @param filePath The path to the audio or video file
+   * @returns A promise that resolves with the duration in milliseconds
+   */
+  async getAudioDuration(filePath: string): Promise<number> {
+    try {
+      const result = await this.executeCommand({
+        binaryName: 'ffprobe',
+        args: [
+          '-v',
+          'error',
+          '-show_entries',
+          'format=duration',
+          '-of',
+          'default=noprint_wrappers=1:nokey=1',
+          filePath
+        ],
+        options: { sync: true }
+      })
+
+      // Parse the duration from stdout
+      const durationSeconds = parseFloat(result.toString().trim())
+      if (isNaN(durationSeconds)) {
+        throw new Error('Could not parse duration from ffprobe output')
+      }
+
+      return Math.round(durationSeconds * 1000)
+    } catch (error: unknown) {
+      throw new Error(
+        `Failed to get audio duration: ${(error as Error).message}`
+      )
+    }
+  }
+
+  /**
    * Assembles multiple audio segments into a single audio file with precise timing.
    * Each segment is placed at its exact timestamp with silence padding where needed.
    * Similar to pydub's overlay functionality but using FFmpeg.
@@ -384,10 +419,19 @@ export default class FfmpegTool extends Tool {
         filterParts.push(`[${i}:a]adelay=${delayMs}|${delayMs}[a${i}]`)
       }
 
-      // Mix all delayed streams together
+      // Mix all delayed streams together with normalization
+      // Use amix with normalize=0 and weights=1 to prevent volume reduction
       const mixInputs = segments.map((_, i) => `[a${i}]`).join('')
       filterParts.push(
-        `${mixInputs}amix=inputs=${segments.length}:duration=longest[aout]`
+        `${mixInputs}amix=inputs=${segments.length}:duration=longest:dropout_transition=0:normalize=0[mixed]`
+      )
+
+      // Apply dynamic normalization and compression to maintain consistent volume
+      filterParts.push(`[mixed]dynaudnorm=f=150:g=15:p=0.9:s=5[normalized]`)
+
+      // Apply a slight compression to even out volume levels
+      filterParts.push(
+        `[normalized]acompressor=threshold=0.089:ratio=4:attack=20:release=250[aout]`
       )
 
       const filterComplex = filterParts.join(';')

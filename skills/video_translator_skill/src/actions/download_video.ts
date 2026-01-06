@@ -19,7 +19,7 @@ export const run: ActionFunction = async function (
     core: {
       context_data: {
         video_path:
-          '/tmp/video_translator/1767626951356/How to create custom AI evaluators in Stax.mp4',
+          '/tmp/video_translator/1767687261298/DuckDB in 100 Seconds.mp4',
         target_language: 'French',
         quality: '480p'
       }

@@ -196,6 +196,34 @@ class FfmpegTool(BaseTool):
         except Exception as e:
             raise Exception(f"Video compression failed: {str(e)}")
 
+    def get_audio_duration(self, file_path: str) -> int:
+        """
+        Get the duration of an audio/video file in milliseconds using ffprobe.
+        
+        Args:
+            file_path: The path to the audio or video file
+            
+        Returns:
+            The duration in milliseconds
+        """
+        try:
+            result = self.execute_command(ExecuteCommandOptions(
+                binary_name='ffprobe',
+                args=[
+                    '-v', 'error',
+                    '-show_entries', 'format=duration',
+                    '-of', 'default=noprint_wrappers=1:nokey=1',
+                    file_path
+                ],
+                options={'sync': True}
+            ))
+            
+            # Parse the duration from stdout
+            duration_seconds = float(result.strip())
+            return round(duration_seconds * 1000)
+        except Exception as e:
+            raise Exception(f"Failed to get audio duration: {str(e)}")
+
     def adjust_tempo(self, input_path: str, output_path: str, speed_factor: float, sample_rate: int = None) -> str:
         """
         Adjusts the tempo (speed) of an audio file using the atempo filter.
@@ -289,9 +317,16 @@ class FfmpegTool(BaseTool):
                 # adelay takes delay in milliseconds
                 filter_parts.append(f'[{i}:a]adelay={delay_ms}|{delay_ms}[a{i}]')
 
-            # Mix all delayed streams together
+            # Mix all delayed streams together with normalization
+            # Use amix with normalize=0 and weights=1 to prevent volume reduction
             mix_inputs = ''.join([f'[a{i}]' for i in range(len(segments))])
-            filter_parts.append(f'{mix_inputs}amix=inputs={len(segments)}:duration=longest[aout]')
+            filter_parts.append(f'{mix_inputs}amix=inputs={len(segments)}:duration=longest:dropout_transition=0:normalize=0[mixed]')
+
+            # Apply dynamic normalization and compression to maintain consistent volume
+            filter_parts.append('[mixed]dynaudnorm=f=150:g=15:p=0.9:s=5[normalized]')
+
+            # Apply a slight compression to even out volume levels
+            filter_parts.append('[normalized]acompressor=threshold=0.089:ratio=4:attack=20:release=250[aout]')
 
             filter_complex = ';'.join(filter_parts)
 
