@@ -220,7 +220,7 @@ export default class YtdlpTool extends Tool {
               // Parse download progress
               if (line.includes('[download]')) {
                 const progressMatch = line.match(
-                  /\[download\]\s+(\d+\.?\d*)%\s+of\s+([\d.]+\w+)\s+at\s+([\d.]+\w+\/s)\s+ETA\s+([\d:]+)/
+                  /\[download\]\s+(\d+\.?\d*)%\s+of\s+(?:~?\s*)([\d.]+\w+)\s+at\s+([\d.]+\w+\/s)\s+ETA\s+([\d:]+)/
                 )
                 if (
                   progressMatch &&

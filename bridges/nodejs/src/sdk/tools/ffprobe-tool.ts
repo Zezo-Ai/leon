@@ -89,6 +89,7 @@ export default class FfprobeTool extends Tool {
       const result = await this.executeCommand({
         binaryName: 'ffprobe',
         args: [
+          '-hide_banner',
           '-v',
           'quiet',
           '-print_format',
@@ -131,6 +132,7 @@ export default class FfprobeTool extends Tool {
       const result = await this.executeCommand({
         binaryName: 'ffprobe',
         args: [
+          '-hide_banner',
           '-v',
           'quiet',
           '-print_format',
@@ -208,6 +210,7 @@ export default class FfprobeTool extends Tool {
         const result = await this.executeCommand({
           binaryName: 'ffprobe',
           args: [
+            '-hide_banner',
             '-v',
             'error',
             '-select_streams',
@@ -234,6 +237,7 @@ export default class FfprobeTool extends Tool {
       const result = await this.executeCommand({
         binaryName: 'ffprobe',
         args: [
+          '-hide_banner',
           '-v',
           'error',
           '-select_streams',
@@ -264,6 +268,7 @@ export default class FfprobeTool extends Tool {
       const result = await this.executeCommand({
         binaryName: 'ffprobe',
         args: [
+          '-hide_banner',
           '-v',
           'quiet',
           '-print_format',

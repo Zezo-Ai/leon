@@ -29,6 +29,13 @@ export default class FfmpegTool extends Tool {
   }
 
   /**
+   * Get global FFmpeg arguments to hide banner and set log level to error
+   */
+  private getGlobalArgs(): string[] {
+    return ['-hide_banner', '-loglevel', 'error']
+  }
+
+  /**
    * Converts a video file to a different format.
    * @param inputPath The file path of the video to be converted.
    * @param outputPath The desired file path for the converted video.
@@ -41,7 +48,7 @@ export default class FfmpegTool extends Tool {
     try {
       await this.executeCommand({
         binaryName: 'ffmpeg',
-        args: ['-i', inputPath, outputPath],
+        args: [...this.getGlobalArgs(), '-i', inputPath, outputPath],
         options: { sync: true }
       })
 
@@ -62,6 +69,7 @@ export default class FfmpegTool extends Tool {
       // Keep it simple: do not force codec/bitrate. Let ffmpeg choose defaults based on extension.
       // Add -progress to emit periodic key=value lines we can log as progress.
       const args = [
+        ...this.getGlobalArgs(),
         '-y',
         '-i',
         videoPath,
@@ -126,6 +134,7 @@ export default class FfmpegTool extends Tool {
       await this.executeCommand({
         binaryName: 'ffmpeg',
         args: [
+          ...this.getGlobalArgs(),
           '-i',
           inputPath,
           '-ss',
@@ -162,7 +171,14 @@ export default class FfmpegTool extends Tool {
     try {
       await this.executeCommand({
         binaryName: 'ffmpeg',
-        args: ['-i', inputPath, '-vf', `scale=${width}:${height}`, outputPath],
+        args: [
+          ...this.getGlobalArgs(),
+          '-i',
+          inputPath,
+          '-vf',
+          `scale=${width}:${height}`,
+          outputPath
+        ],
         options: { sync: true }
       })
 
@@ -188,6 +204,7 @@ export default class FfmpegTool extends Tool {
       await this.executeCommand({
         binaryName: 'ffmpeg',
         args: [
+          ...this.getGlobalArgs(),
           '-i',
           videoPath,
           '-i',
@@ -230,6 +247,7 @@ export default class FfmpegTool extends Tool {
       await this.executeCommand({
         binaryName: 'ffmpeg',
         args: [
+          ...this.getGlobalArgs(),
           '-y', // Overwrite output file if it exists
           '-i',
           videoPath,
@@ -274,7 +292,14 @@ export default class FfmpegTool extends Tool {
     try {
       await this.executeCommand({
         binaryName: 'ffmpeg',
-        args: ['-i', inputPath, '-b:v', bitrate, outputPath],
+        args: [
+          ...this.getGlobalArgs(),
+          '-i',
+          inputPath,
+          '-b:v',
+          bitrate,
+          outputPath
+        ],
         options: { sync: true }
       })
 
@@ -324,7 +349,14 @@ export default class FfmpegTool extends Tool {
       atempoFilters.push(`atempo=${remainingSpeed.toFixed(6)}`)
 
       const filterComplex = atempoFilters.join(',')
-      const args = ['-y', '-i', inputPath, '-filter:a', filterComplex]
+      const args = [
+        ...this.getGlobalArgs(),
+        '-y',
+        '-i',
+        inputPath,
+        '-filter:a',
+        filterComplex
+      ]
 
       if (sampleRate) {
         args.push('-ar', sampleRate.toString())
@@ -355,25 +387,22 @@ export default class FfmpegTool extends Tool {
     try {
       const result = await this.executeCommand({
         binaryName: 'ffprobe',
-        args: [
-          '-v',
-          'error',
-          '-show_entries',
-          'format=duration',
-          '-of',
-          'default=noprint_wrappers=1:nokey=1',
-          filePath
-        ],
+        args: ['-hide_banner', '-v', 'error', '-show_format', filePath],
         options: { sync: true }
       })
 
-      // Parse the duration from stdout
-      const durationSeconds = parseFloat(result.toString().trim())
-      if (isNaN(durationSeconds)) {
-        throw new Error('Could not parse duration from ffprobe output')
+      // Parse the duration from stdout (format: duration=123.456)
+      const lines = result.split('\n')
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (trimmed.startsWith('duration=')) {
+          const durationSeconds = parseFloat(trimmed.split('=')[1] || '')
+          if (!isNaN(durationSeconds)) {
+            return Math.round(durationSeconds * 1_000)
+          }
+        }
       }
-
-      return Math.round(durationSeconds * 1000)
+      throw new Error('Could not parse duration from ffprobe output')
     } catch (error: unknown) {
       throw new Error(
         `Failed to get audio duration: ${(error as Error).message}`
@@ -397,6 +426,7 @@ export default class FfmpegTool extends Tool {
       await this.executeCommand({
         binaryName: 'ffmpeg',
         args: [
+          ...this.getGlobalArgs(),
           '-y',
           '-i',
           firstAudioPath,
@@ -474,6 +504,7 @@ export default class FfmpegTool extends Tool {
       const totalDurationS = totalDurationMs / 1000
 
       const args = [
+        ...this.getGlobalArgs(),
         '-y',
         ...inputs,
         '-filter_complex',

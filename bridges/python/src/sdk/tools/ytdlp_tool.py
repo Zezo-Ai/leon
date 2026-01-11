@@ -184,7 +184,7 @@ class YtdlpTool(BaseTool):
                         if '[download]' in line:
                             import re
                             progress_match = re.search(
-                                r'\[download\]\s+(\d+\.?\d*)%\s+of\s+([\d.]+\w+)\s+at\s+([\d.]+\w+/s)\s+ETA\s+([\d:]+)',
+                                r'\[download\]\s+(\d+\.?\d*)%\s+of\s+(?:~?\s*)([\d.]+\w+)\s+at\s+([\d.]+\w+/s)\s+ETA\s+([\d:]+)',
                                 line
                             )
                             if progress_match and on_progress:

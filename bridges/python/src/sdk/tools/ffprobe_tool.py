@@ -112,7 +112,7 @@ class FfprobeTool(BaseTool):
         try:
             result = self.execute_command(ExecuteCommandOptions(
                 binary_name='ffprobe',
-                args=['-v', 'quiet', '-print_format', 'json', '-show_format', file_path],
+                args=['-hide_banner', '-v', 'quiet', '-print_format', 'json', '-show_format', file_path],
                 options={'sync': True}
             ))
 
@@ -137,7 +137,7 @@ class FfprobeTool(BaseTool):
         try:
             result = self.execute_command(ExecuteCommandOptions(
                 binary_name='ffprobe',
-                args=['-v', 'quiet', '-print_format', 'json', '-show_streams', file_path],
+                args=['-hide_banner', '-v', 'quiet', '-print_format', 'json', '-show_streams', file_path],
                 options={'sync': True}
             ))
 
@@ -198,7 +198,7 @@ class FfprobeTool(BaseTool):
                 # Try to get nb_frames first
                 result = self.execute_command(ExecuteCommandOptions(
                     binary_name='ffprobe',
-                    args=['-v', 'error', '-select_streams', 'v:0', '-count_frames', '-show_entries', 'stream=nb_frames',
+                    args=['-hide_banner', '-v', 'error', '-select_streams', 'v:0', '-count_frames', '-show_entries', 'stream=nb_frames',
                           '-of', 'csv=p=0', file_path],
                     options={'sync': True}
                 ))
@@ -213,7 +213,7 @@ class FfprobeTool(BaseTool):
             # Fallback: count frames manually if nb_frames is not available
             result = self.execute_command(ExecuteCommandOptions(
                 binary_name='ffprobe',
-                args=['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'frame=n', '-of', 'csv=p=0', file_path],
+                args=['-hide_banner', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'frame=n', '-of', 'csv=p=0', file_path],
                 options={'sync': True}
             ))
 
@@ -236,7 +236,7 @@ class FfprobeTool(BaseTool):
         try:
             result = self.execute_command(ExecuteCommandOptions(
                 binary_name='ffprobe',
-                args=['-v', 'quiet', '-print_format', 'json', '-show_frames', '-select_streams', 'v:0', file_path],
+                args=['-hide_banner', '-v', 'quiet', '-print_format', 'json', '-show_frames', '-select_streams', 'v:0', file_path],
                 options={'sync': True}
             ))
 

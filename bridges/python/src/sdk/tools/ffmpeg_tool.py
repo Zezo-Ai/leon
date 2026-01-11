@@ -26,6 +26,10 @@ class FfmpegTool(BaseTool):
     def description(self) -> str:
         return self.config['description']
 
+    def _get_global_args(self) -> List[str]:
+        """Get global FFmpeg arguments to hide banner and set log level to error"""
+        return ['-hide_banner', '-loglevel', 'error']
+
     def convert_video_format(self, input_path: str, output_path: str) -> str:
         """
         Converts a video file to a different format.
@@ -40,7 +44,7 @@ class FfmpegTool(BaseTool):
         try:
             self.execute_command(ExecuteCommandOptions(
                 binary_name='ffmpeg',
-                args=['-i', input_path, output_path],
+                args=self._get_global_args() + ['-i', input_path, output_path],
                 options={'sync': True}
             ))
 
@@ -62,7 +66,7 @@ class FfmpegTool(BaseTool):
         try:
             # Keep it simple: don't force codec/bitrate, let ffmpeg decide from extension.
             # Use -progress pipe:2 to stream progress to stderr and log it.
-            args = [
+            args = self._get_global_args() + [
                 '-y',
                 '-i', video_path,
                 '-vn',
@@ -117,7 +121,7 @@ class FfmpegTool(BaseTool):
         try:
             self.execute_command(ExecuteCommandOptions(
                 binary_name='ffmpeg',
-                args=['-i', input_path, '-ss', start_time, '-to', end_time, '-c', 'copy', output_path],
+                args=self._get_global_args() + ['-i', input_path, '-ss', start_time, '-to', end_time, '-c', 'copy', output_path],
                 options={'sync': True}
             ))
 
@@ -141,7 +145,7 @@ class FfmpegTool(BaseTool):
         try:
             self.execute_command(ExecuteCommandOptions(
                 binary_name='ffmpeg',
-                args=['-i', input_path, '-vf', f'scale={width}:{height}', output_path],
+                args=self._get_global_args() + ['-i', input_path, '-vf', f'scale={width}:{height}', output_path],
                 options={'sync': True}
             ))
 
@@ -164,7 +168,7 @@ class FfmpegTool(BaseTool):
         try:
             self.execute_command(ExecuteCommandOptions(
                 binary_name='ffmpeg',
-                args=['-i', video_path, '-i', audio_path, '-c:v', 'copy', '-c:a', 'aac', '-strict', 'experimental',
+                args=self._get_global_args() + ['-i', video_path, '-i', audio_path, '-c:v', 'copy', '-c:a', 'aac', '-strict', 'experimental',
                       output_path],
                 options={'sync': True}
             ))
@@ -188,7 +192,7 @@ class FfmpegTool(BaseTool):
         try:
             self.execute_command(ExecuteCommandOptions(
                 binary_name='ffmpeg',
-                args=['-i', input_path, '-b:v', bitrate, output_path],
+                args=self._get_global_args() + ['-i', input_path, '-b:v', bitrate, output_path],
                 options={'sync': True}
             ))
 
@@ -209,18 +213,25 @@ class FfmpegTool(BaseTool):
         try:
             result = self.execute_command(ExecuteCommandOptions(
                 binary_name='ffprobe',
-                args=[
+                args=self._get_global_args() + [
                     '-v', 'error',
-                    '-show_entries', 'format=duration',
-                    '-of', 'default=noprint_wrappers=1:nokey=1',
+                    '-show_format',
                     file_path
                 ],
                 options={'sync': True}
             ))
             
-            # Parse the duration from stdout
-            duration_seconds = float(result.strip())
-            return round(duration_seconds * 1000)
+            # Parse the duration from stdout (format: duration=123.456)
+            for line in result.split('\n'):
+                line = line.strip()
+                if line.startswith('duration='):
+                    try:
+                        duration_seconds = float(line.split('=')[1])
+                        if duration_seconds > 0:
+                            return round(duration_seconds * 1000)
+                    except (ValueError, IndexError):
+                        continue
+            raise Exception('Could not parse duration from ffprobe output')
         except Exception as e:
             raise Exception(f"Failed to get audio duration: {str(e)}")
 
@@ -259,7 +270,7 @@ class FfmpegTool(BaseTool):
             atempo_filters.append(f'atempo={remaining_speed:.6f}')
 
             filter_complex = ','.join(atempo_filters)
-            args = ['-y', '-i', input_path, '-filter:a', filter_complex]
+            args = self._get_global_args() + ['-y', '-i', input_path, '-filter:a', filter_complex]
 
             if sample_rate:
                 args.extend(['-ar', str(sample_rate)])
@@ -333,7 +344,7 @@ class FfmpegTool(BaseTool):
             # Calculate total duration in seconds for ffmpeg
             total_duration_s = total_duration_ms / 1000
 
-            args = [
+            args = self._get_global_args() + [
                 '-y',
                 *inputs,
                 '-filter_complex', filter_complex,
