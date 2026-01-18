@@ -41,7 +41,9 @@ export default class YtdlpTool extends Tool {
       '--sleep-interval',
       '0.5',
       '--max-sleep-interval',
-      '2'
+      '2',
+      '--extractor-args',
+      'youtube:player_client=default,-web_safari'
     ]
   }
 

@@ -32,7 +32,8 @@ class YtdlpTool(BaseTool):
         return [
             '--retries', '3',
             '--sleep-interval', '0.5',
-            '--max-sleep-interval', '2'
+            '--max-sleep-interval', '2',
+            '--extractor-args', 'youtube:player_client=default,-web_safari'
         ]
 
     def download_video(self, video_url: str, output_path: str) -> str:

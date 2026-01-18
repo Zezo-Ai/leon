@@ -506,6 +506,7 @@ export default class LLMManager {
          *    - Cf. https://chatgpt.com/c/68b5c2c6-ec88-832f-aa44-3b7ada3171a3 -> For projects that aren't already compiled (Pyannote, WhisperX, etc.), need to compile them ourselves via GitHub Actions + Pyinstaller or cx_freeze. Keep compile setup files in /tool_bins/ folder. E.g. /tool_bins/whisperx/setup.py, /tool_bins/whisperx/whisperx, etc.
          *    - Tool settings OR use skill settings? (OpenRouter API key, etc.)
          * TODO NEXT: B. Then create a Skill Writer skill where Leon can write a skill > actions by himself based on examples and given owner query (e.g. to_do list, video translator, etc.) and current architecture. Leon can also write tools by himself. If a skill is not found, then we can fallback so Leon can suggest to develop a skill for the owner
+         *  - Skill Writer skill: OpenCode uses GLM 4.7 via Cerebras. Implement "@" skill caller with autocompletion on webapp (e.g. @Skill Writer)
          *  - Use https://github.com/anomalyco/opencode for code generation?
          *  - Use https://zenmux.ai/volcengine/doubao-seed-code ?
          *  - Start by building simple skills:
