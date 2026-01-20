@@ -414,8 +414,7 @@ export default class LLMManager {
          *      [ok] create_new_audio -> max chars in segments are still not respected, I saw 700+ chars in one segment (the one before the last one)
          *      [ok] once the audio segments assembled, the sound is low and then in it tends to increase, fix it, the sound level must be consistent
          *      [ok] we can hear sound overlaps once the audio segments are assembled
-         *      [ ] Create action and tool about voice/instrumental audio separation
-         *      [ ] better prompting for the translation (provide more context)
+         *      [ok] Create action and tool about voice/instrumental audio separation
          *
          *      [ ] Try CosyVoice3 https://huggingface.co/FluffyBunnies/vibevoice-onnx-v2
          *      [ ] Try XTTS-v2

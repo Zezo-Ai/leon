@@ -4,6 +4,9 @@
   "tools": {
     "openrouter": {
       "description": "A tool for interacting with various LLMs through the OpenRouter API gateway."
+    },
+    "cerebras": {
+      "description": "A tool for interacting with Cerebras LLM APIs (e.g., GLM 4.7)."
     }
   }
 }
