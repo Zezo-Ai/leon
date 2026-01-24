@@ -1,9 +1,11 @@
 import platform
-from typing import List
+from typing import List, Optional
 import urllib.request
 import urllib.error
 import math
 from typing import Union
+import os
+import subprocess
 
 HUGGING_FACE_URL = 'https://huggingface.co'
 HUGGING_FACE_MIRROR_URL = 'https://hf-mirror.com'
@@ -237,3 +239,57 @@ def format_eta(eta_str: str) -> str:
         return eta_str
     except (ValueError, IndexError):
         return eta_str
+
+
+def extract_archive(
+    archive_path: str,
+    target_path: str,
+    strip_components: Optional[int] = 0
+) -> None:
+    """Extract archive file using native system commands
+    
+    Supports .zip, .tar, .tar.gz, .tar.xz, .tgz formats across all platforms
+    
+    Args:
+        archive_path: The path to the archive file
+        target_path: The path to extract to
+        strip_components: Number of leading path components to strip (for tar archives)
+        
+    Example:
+        extract_archive('archive.zip', 'output/dir')
+        extract_archive('archive.tar.xz', 'output/dir', strip_components=1)
+    """
+    # Ensure target directory exists
+    os.makedirs(target_path, exist_ok=True)
+    
+    ext = os.path.splitext(archive_path)[1].lower()
+    basename = os.path.basename(archive_path).lower()
+    
+    try:
+        if ext == '.zip':
+            # Use unzip for .zip files (available on all platforms)
+            # -o: overwrite files without prompting
+            # -q: quiet mode
+            # -d: extract to directory
+            subprocess.run(
+                ['unzip', '-o', '-q', archive_path, '-d', target_path],
+                check=True,
+                capture_output=True
+            )
+        elif (basename.endswith('.tar.gz') or 
+              basename.endswith('.tar.xz') or 
+              basename.endswith('.tgz') or 
+              ext == '.tar'):
+            # Use tar for .tar.* files (available on all platforms)
+            tar_args = ['tar', '-xf', archive_path, '-C', target_path]
+            if strip_components and strip_components > 0:
+                tar_args.append(f'--strip-components={strip_components}')
+            
+            subprocess.run(tar_args, check=True, capture_output=True)
+        else:
+            raise Exception(f"Unsupported archive format: {archive_path}")
+    except subprocess.CalledProcessError as e:
+        error_output = e.stderr.decode('utf-8') if e.stderr else str(e)
+        raise Exception(f"Failed to extract archive '{archive_path}': {error_output}")
+    except Exception as e:
+        raise Exception(f"Failed to extract archive '{archive_path}': {str(e)}")

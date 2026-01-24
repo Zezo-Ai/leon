@@ -164,6 +164,20 @@
       "Failed to retrieve binary file: {{ error }}.",
       "Download process failed: {{ error }}."
     ],
+    "bridges.tools.extracting_archive": [
+      "Extracting {{ archive_name }}...",
+      "Unpacking archive {{ archive_name }}...",
+      "Extracting binary from {{ archive_name }}...",
+      "Decompressing {{ archive_name }}...",
+      "Extracting files from {{ archive_name }}..."
+    ],
+    "bridges.tools.archive_extracted": [
+      "Archive extracted successfully to {{ binary_path }}.",
+      "Binary extracted and ready at {{ binary_path }}.",
+      "Successfully extracted binary to {{ binary_path }}.",
+      "Extraction complete: {{ binary_path }}.",
+      "Binary is now available at {{ binary_path }}."
+    ],
     "bridges.tools.quarantine_removed": [
       "Removed quarantine attribute from {{ file_name }}.",
       "Successfully cleared macOS quarantine for {{ file_name }}.",

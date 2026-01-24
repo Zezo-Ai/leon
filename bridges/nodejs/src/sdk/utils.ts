@@ -1,4 +1,7 @@
 import { platform, arch, cpus } from 'node:os'
+import fs from 'node:fs'
+import path from 'node:path'
+import { execSync } from 'node:child_process'
 
 import axios from 'axios'
 
@@ -200,4 +203,61 @@ export function formatETA(eta: string | number): string {
   }
 
   return `${seconds}s`
+}
+
+/**
+ * Extract archive file using native system commands
+ * Supports .zip, .tar, .tar.gz, .tar.xz, .tgz formats across all platforms
+ * @param archivePath The path to the archive file
+ * @param targetPath The path to extract to
+ * @param options Extraction options
+ * @example extractArchive('archive.zip', 'output/dir')
+ * @example extractArchive('archive.tar.xz', 'output/dir', { stripComponents: 1 })
+ */
+export async function extractArchive(
+  archivePath: string,
+  targetPath: string,
+  options?: {
+    stripComponents?: number
+  }
+): Promise<void> {
+  const stripComponents = options?.stripComponents ?? 0
+
+  // Ensure target directory exists
+  await fs.promises.mkdir(targetPath, { recursive: true })
+
+  const ext = path.extname(archivePath).toLowerCase()
+  const basename = path.basename(archivePath).toLowerCase()
+
+  try {
+    if (ext === '.zip') {
+      // Use unzip for .zip files (available on all platforms)
+      // -o: overwrite files without prompting
+      // -q: quiet mode
+      // -d: extract to directory
+      execSync(`unzip -o -q "${archivePath}" -d "${targetPath}"`, {
+        stdio: 'inherit'
+      })
+    } else if (
+      basename.endsWith('.tar.gz') ||
+      basename.endsWith('.tar.xz') ||
+      basename.endsWith('.tgz') ||
+      ext === '.tar'
+    ) {
+      // Use tar for .tar.* files (available on all platforms)
+      const stripFlag =
+        stripComponents > 0 ? `--strip-components=${stripComponents}` : ''
+      execSync(`tar -xf "${archivePath}" -C "${targetPath}" ${stripFlag}`, {
+        stdio: 'inherit'
+      })
+    } else {
+      throw new Error(`Unsupported archive format: ${archivePath}`)
+    }
+  } catch (error) {
+    throw new Error(
+      `Failed to extract archive "${archivePath}": ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
+  }
 }

@@ -1,7 +1,5 @@
 import fs from 'node:fs'
 
-import extractZip from 'extract-zip'
-
 import {
   CUDA_RUNTIME_PATH,
   CUDA_CUBLAS_PATH,
@@ -33,17 +31,6 @@ function readManifest(manifestPath) {
   } catch {
     return null
   }
-}
-
-/**
- * Extract tar.xz file using system tar command
- */
-async function extractTarXz(archivePath, targetPath) {
-  const { execSync } = await import('node:child_process')
-
-  execSync(`tar -xf "${archivePath}" -C "${targetPath}" --strip-components=1`, {
-    stdio: 'inherit'
-  })
 }
 
 /**
@@ -104,12 +91,10 @@ async function installCUDALibrary(
       LogHelper.success(`${library} downloaded`)
       LogHelper.info(`Extracting ${library}...`)
 
-      // Extract archive
-      if (SystemHelper.isWindows()) {
-        await extractZip(archivePath, { dir: targetPath })
-      } else {
-        await extractTarXz(archivePath, targetPath)
-      }
+      // Extract archive using unified method
+      await FileHelper.extractArchive(archivePath, targetPath, {
+        stripComponents: 1
+      })
 
       LogHelper.success(`${library} extracted`)
 

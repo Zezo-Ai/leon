@@ -95,15 +95,17 @@ class CerebrasTool(BaseTool):
         if max_tokens:
             payload['max_tokens'] = max_tokens
 
-        if use_structured_output and json_schema:
+        if use_structured_output:
             payload['response_format'] = {
-                'type': 'json_schema',
-                'json_schema': {
-                    'name': json_schema.get('name', 'response'),
-                    'strict': True,
-                    'schema': json_schema['schema']
-                }
+                'type': 'json_object'
             }
+            if json_schema:
+                schema_text = json.dumps(json_schema)
+                schema_prompt = (
+                    "You must return a valid JSON object that matches this schema:\n"
+                    f"{schema_text}"
+                )
+                payload['messages'] = [{'role': 'system', 'content': schema_prompt}] + request_messages
 
         try:
             response = self.network.request({

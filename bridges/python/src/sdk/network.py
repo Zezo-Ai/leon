@@ -1,5 +1,7 @@
+import json
 import requests
 import socket
+import sys
 from typing import Any, Dict, TypedDict, Union, Literal, Optional
 
 from ..constants import LEON_VERSION, PYTHON_BRIDGE_VERSION
@@ -18,7 +20,17 @@ class NetworkResponse(TypedDict):
 class NetworkError(Exception):
     def __init__(self, response: NetworkResponse) -> None:
         self.response = response
-        super().__init__(f"[NetworkError]: {response['status_code']} {response['data']}")
+        super().__init__(f"[NetworkError]: {response['status_code']}")
+
+    @staticmethod
+    def _format_error_data(data: Any) -> str:
+        if isinstance(data, str):
+            return data
+
+        try:
+            return json.dumps(data)
+        except Exception:
+            return str(data)
 
 
 class NetworkRequestOptions(TypedDict, total=False):
@@ -87,6 +99,14 @@ class Network:
             if response.ok:
                 return network_response
             else:
+                print(
+                    '[NetworkError]',
+                    network_response['status_code'],
+                    options.get('method'),
+                    options.get('url'),
+                    NetworkError._format_error_data(network_response['data']),
+                    file=sys.stderr
+                )
                 raise NetworkError(network_response)
         except requests.exceptions.RequestException as error:
             status_code = 500
@@ -99,11 +119,22 @@ class Network:
                 except Exception:
                     raw_data = error.response.text
 
-            raise NetworkError({
+            response_payload: NetworkResponse = {
                 'data': raw_data,
                 'status_code': status_code,
                 'options': {**self.options, **options}
-            }) from error
+            }
+
+            print(
+                '[NetworkError]',
+                response_payload['status_code'],
+                options.get('method'),
+                options.get('url'),
+                NetworkError._format_error_data(response_payload['data']),
+                file=sys.stderr
+            )
+
+            raise NetworkError(response_payload) from error
 
     def is_network_error(self, error: Exception) -> bool:
         return isinstance(error, NetworkError)

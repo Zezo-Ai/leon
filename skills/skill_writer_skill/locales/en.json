@@ -1,0 +1,24 @@
+{
+  "$schema": "../../../schemas/skill-schemas/skill-locale-config.json",
+  "actions": {
+    "create_skill": {
+      "answers": {
+        "missing_description": [
+          "Please describe the skill you want me to build."
+        ],
+        "missing_api_key": [
+          "I need your {{ provider }} API key. Please set it in my settings (opencode_{{ provider }}_api_key)."
+        ],
+        "generating_skill": [
+          "Let me build that skill using OpenCode with {{ provider }}... This may take a minute as I iterate to get it right."
+        ],
+        "skill_created": [
+          "Done! I created \"{{ skill_name }}\" with OpenCode ({{ provider }}/{{ model }}).\n\nFiles: {{ files_created }}\n\nRun `npm run train` to register it with Leon and then try it out!"
+        ],
+        "generation_failed": [
+          "I couldn't generate the skill. Error: {{ error }}"
+        ]
+      }
+    }
+  }
+}
