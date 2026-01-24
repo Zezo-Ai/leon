@@ -13,7 +13,8 @@ import {
   formatBytes,
   formatSpeed,
   formatETA,
-  formatFilePath
+  formatFilePath,
+  extractArchive
 } from '@sdk/utils'
 import { leon } from '@sdk/leon'
 
@@ -364,7 +365,17 @@ export abstract class Tool {
 
     // Extract the actual filename from the URL
     const urlPath = new URL(binaryUrl).pathname
-    const actualFilename = path.basename(urlPath)
+    let actualFilename = path.basename(urlPath)
+
+    // Strip archive extensions to get the base binary name
+    const archiveExtensions = ['.tar.gz', '.tar.xz', '.tgz', '.zip', '.tar']
+    for (const ext of archiveExtensions) {
+      if (actualFilename.toLowerCase().endsWith(ext)) {
+        actualFilename = actualFilename.slice(0, -ext.length)
+        break
+      }
+    }
+
     const executable =
       isWindows() && !actualFilename.endsWith('.exe')
         ? `${actualFilename}.exe`
@@ -667,25 +678,124 @@ export abstract class Tool {
   }
 
   /**
+   * Check if a file is an archive based on its extension
+   */
+  private isArchive(filePath: string): boolean {
+    const ext = path.extname(filePath).toLowerCase()
+    const basename = path.basename(filePath).toLowerCase()
+
+    return (
+      ext === '.zip' ||
+      ext === '.tar' ||
+      basename.endsWith('.tar.gz') ||
+      basename.endsWith('.tar.xz') ||
+      basename.endsWith('.tgz')
+    )
+  }
+
+  /**
    * Download binary from URL using ipull (faster parallel downloader)
+   * If the downloaded file is an archive, it will be extracted automatically
    */
   private async downloadBinary(url: string, outputPath: string): Promise<void> {
     try {
       await this.report('bridges.tools.downloading_from_url')
 
-      // Download the file directly to the output path using ipull
+      // Determine if the URL points to an archive
+      const urlPath = new URL(url).pathname
+      const isArchiveDownload = this.isArchive(urlPath)
+
+      // If it's an archive, download to a temporary path with proper extension
+      let downloadPath = outputPath
+      if (isArchiveDownload) {
+        // Preserve the archive extension for proper extraction
+        const urlBasename = path.basename(urlPath)
+        const archiveExt = urlBasename.includes('.tar.gz')
+          ? '.tar.gz'
+          : urlBasename.includes('.tar.xz')
+            ? '.tar.xz'
+            : urlBasename.includes('.tgz')
+              ? '.tgz'
+              : path.extname(urlPath)
+        downloadPath = outputPath + archiveExt
+      }
+
+      // Download the file directly to the download path using ipull
       const engine = await downloadFile({
         url: url,
-        savePath: outputPath,
+        savePath: downloadPath,
         cliProgress: false,
         parallelStreams: 3,
         skipExisting: false
       })
 
-      this.listenDownloadProgress(engine, path.basename(outputPath))
+      this.listenDownloadProgress(engine, path.basename(downloadPath))
 
       // Actually start the download
       await engine.download()
+
+      // If it's an archive, extract it
+      if (isArchiveDownload) {
+        await this.report('bridges.tools.extracting_archive', {
+          archive_name: path.basename(downloadPath)
+        })
+
+        // Create a temporary extraction directory
+        const tempExtractPath = outputPath + '.extracted'
+
+        // Try extracting without strip first to see the structure
+        await extractArchive(downloadPath, tempExtractPath)
+
+        // Find the binary in the extracted directory (recursively if needed)
+        let binaryFilePath: string | null = null
+
+        const findBinaryFile = (dir: string): string | null => {
+          const entries = fs.readdirSync(dir, { withFileTypes: true })
+
+          // First, look for files in the current directory
+          for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name)
+            if (entry.isFile()) {
+              return fullPath
+            }
+          }
+
+          // If no files found, look in subdirectories (one level deep)
+          for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name)
+            if (entry.isDirectory()) {
+              const foundFile = findBinaryFile(fullPath)
+              if (foundFile) {
+                return foundFile
+              }
+            }
+          }
+
+          return null
+        }
+
+        binaryFilePath = findBinaryFile(tempExtractPath)
+
+        if (!binaryFilePath) {
+          throw new Error('Archive extraction resulted in no files')
+        }
+
+        // Move the binary to the final output path
+        fs.renameSync(binaryFilePath, outputPath)
+
+        // Report successful extraction
+        await this.report('bridges.tools.archive_extracted', {
+          binary_path: outputPath
+        })
+
+        // Clean up temporary files
+        fs.rmSync(downloadPath, { force: true })
+        fs.rmSync(tempExtractPath, { recursive: true, force: true })
+
+        await this.report('bridges.tools.archive_extracted', {
+          binary_name: path.basename(outputPath)
+        })
+      }
     } catch (error) {
       await this.report('bridges.tools.download_url_failed', {
         error: (error as Error).message

@@ -1,3 +1,16 @@
 {
-  "name": "Coding & Development"
+  "name": "Coding & Development",
+  "description": "Tools for code generation, development, and automation.",
+  "tools": {
+    "opencode": {
+      "description": "An AI-powered coding agent tool that generates skills using multiple LLM providers (Cerebras, MiniMax, Anthropic, OpenAI, Gemini).",
+      "binaries": {
+        "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/opencode_1.1.34/opencode_1.1.34-linux-x86_64.tar.gz",
+        "linux-aarch64": "https://github.com/leon-ai/leon-binaries/releases/download/opencode_1.1.34/opencode_1.1.34-linux-aarch64.tar.gz",
+        "macosx-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/opencode_1.1.34/opencode_1.1.34-macosx-x86_64.tar.gz",
+        "macosx-arm64": "https://github.com/leon-ai/leon-binaries/releases/download/opencode_1.1.34/opencode_1.1.34-macosx-arm64.tar.gz",
+        "win-amd64": "https://github.com/leon-ai/leon-binaries/releases/download/opencode_1.1.34/opencode_1.1.34-win-amd64.zip"
+      }
+    }
+  }
 }

@@ -1,0 +1,13 @@
+{
+  "opencode_provider": "cerebras",
+  "opencode_cerebras_api_key": "csk-...",
+  "opencode_cerebras_model": "cerebras/llama-3.3-70b",
+  "opencode_minimax_api_key": "",
+  "opencode_minimax_model": "minimax/abab6.5s-chat",
+  "opencode_anthropic_api_key": "",
+  "opencode_anthropic_model": "anthropic/claude-sonnet-4",
+  "opencode_openai_api_key": "",
+  "opencode_openai_model": "openai/gpt-4o",
+  "opencode_gemini_api_key": "",
+  "opencode_gemini_model": "google/gemini-2.0-flash-exp"
+}

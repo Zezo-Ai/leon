@@ -2,7 +2,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { command } from 'execa'
-import extractZip from 'extract-zip'
 
 import {
   BINARIES_FOLDER_NAME,
@@ -111,8 +110,7 @@ const setupBinaries = async (key) => {
       LogHelper.success(`${name} downloaded`)
       LogHelper.info(`Extracting ${name}...`)
 
-      const absoluteDistPath = path.resolve(distPath)
-      await extractZip(archivePath, { dir: absoluteDistPath })
+      await FileHelper.extractArchive(archivePath, distPath)
 
       LogHelper.success(`${name} extracted`)
 

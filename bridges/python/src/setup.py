@@ -13,7 +13,8 @@ options = {
             'timeit',
             'dataclasses',
             'abc',
-            'platform'
+            'platform',
+            'pypdl'
         ],
         'include_files': [(requests.certs.where(), 'cacert.pem')]
     }

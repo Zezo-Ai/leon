@@ -56,7 +56,9 @@ export default class CerebrasTool extends Tool {
 
   // Popular Cerebras-hosted models (override with full model IDs if needed)
   private readonly popular_models = {
-    'glm-4.7': 'glm-4.7'
+    'glm-4.7': 'zai-glm-4.7',
+    'qwen-3-32b': 'qwen-3-32b',
+    'qwen-3-235b': 'qwen-3-235b-a22b-instruct-2507'
   }
 
   constructor(apiKey?: string) {
@@ -146,14 +148,15 @@ export default class CerebrasTool extends Tool {
       payload.max_tokens = max_tokens
     }
 
-    if (use_structured_output && json_schema) {
-      payload.response_format = {
-        type: 'json_schema',
-        json_schema: {
-          name: json_schema['name'] || 'response',
-          strict: true,
-          schema: json_schema['schema']
-        }
+    if (use_structured_output) {
+      payload.response_format = { type: 'json_object' }
+      if (json_schema) {
+        const schemaText = JSON.stringify(json_schema)
+        const schemaPrompt = `You must return a valid JSON object that matches this schema:\n${schemaText}`
+        payload.messages = [
+          { role: 'system', content: schemaPrompt },
+          ...requestMessages
+        ]
       }
     }
 

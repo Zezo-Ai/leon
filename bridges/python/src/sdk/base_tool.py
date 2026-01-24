@@ -6,7 +6,7 @@ from pypdl import Pypdl
 from urllib.parse import urlparse
 from .toolkit_config import ToolkitConfig
 from .leon import leon
-from .utils import is_windows, is_macos, set_hugging_face_url, format_bytes, format_speed, format_eta, format_file_path
+from .utils import is_windows, is_macos, set_hugging_face_url, format_bytes, format_speed, format_eta, format_file_path, extract_archive
 from ..constants import TOOLKITS_PATH
 import subprocess
 import sys
@@ -260,6 +260,14 @@ class BaseTool(ABC):
         # Extract the actual filename from the URL
         parsed_url = urlparse(binary_url)
         actual_filename = os.path.basename(parsed_url.path)
+        
+        # Strip archive extensions to get the base binary name
+        archive_extensions = ['.tar.gz', '.tar.xz', '.tgz', '.zip', '.tar']
+        for ext in archive_extensions:
+            if actual_filename.lower().endswith(ext):
+                actual_filename = actual_filename[:-len(ext)]
+                break
+        
         executable = f"{actual_filename}.exe" if is_windows() and not actual_filename.endswith(
             '.exe') else actual_filename
 
@@ -547,8 +555,22 @@ class BaseTool(ABC):
                 'error': str(e)
             })
 
+    def _is_archive(self, file_path: str) -> bool:
+        """Check if a file is an archive based on its extension"""
+        ext = os.path.splitext(file_path)[1].lower()
+        basename = os.path.basename(file_path).lower()
+        
+        return (
+            ext == '.zip' or
+            ext == '.tar' or
+            basename.endswith('.tar.gz') or
+            basename.endswith('.tar.xz') or
+            basename.endswith('.tgz')
+        )
+
     def _download_binary(self, url: str, output_path: str) -> None:
-        """Download binary from URL using pypdl (faster parallel downloader)"""
+        """Download binary from URL using pypdl (faster parallel downloader)
+        If the downloaded file is an archive, it will be extracted automatically"""
 
         try:
             self.report('bridges.tools.downloading_from_url', {})
@@ -558,21 +580,95 @@ class BaseTool(ABC):
             if not os.path.exists(file_dir):
                 os.makedirs(file_dir, exist_ok=True)
 
+            # Determine if the URL points to an archive
+            parsed_url = urlparse(url)
+            is_archive_download = self._is_archive(parsed_url.path)
+            
+            # If it's an archive, download to a temporary path with proper extension
+            download_path = output_path
+            if is_archive_download:
+                # Preserve the archive extension for proper extraction
+                url_basename = os.path.basename(parsed_url.path)
+                if '.tar.gz' in url_basename:
+                    archive_ext = '.tar.gz'
+                elif '.tar.xz' in url_basename:
+                    archive_ext = '.tar.xz'
+                elif '.tgz' in url_basename:
+                    archive_ext = '.tgz'
+                else:
+                    archive_ext = os.path.splitext(url_basename)[1]
+                download_path = output_path + archive_ext
+
             # Use pypdl to download the file
             dl = Pypdl()
 
             if self.cli_progress:
                 # Start download without blocking and with custom progress tracking
-                dl.start(url=url, file_path=output_path, display=False, block=False)
+                dl.start(url=url, file_path=download_path, display=False, block=False)
 
-                self._handle_download_progress(dl, os.path.basename(output_path))
+                self._handle_download_progress(dl, os.path.basename(download_path))
             else:
                 # Use standard download with display=False
-                dl.start(url=url, file_path=output_path, display=False)
+                dl.start(url=url, file_path=download_path, display=False)
 
             # Verify the file was downloaded correctly
-            if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+            if not os.path.exists(download_path) or os.path.getsize(download_path) == 0:
                 raise Exception(f"Downloaded binary is empty or was not created properly")
+
+            # If it's an archive, extract it
+            if is_archive_download:
+                self.report('bridges.tools.extracting_archive', {
+                    'archive_name': os.path.basename(download_path)
+                })
+                
+                # Create a temporary extraction directory
+                temp_extract_path = output_path + '.extracted'
+                
+                # Try extracting without strip first to see the structure
+                extract_archive(download_path, temp_extract_path)
+                
+                # Find the binary in the extracted directory (recursively if needed)
+                def find_binary_file(dir_path):
+                    """Find the first file in the directory tree"""
+                    try:
+                        entries = os.listdir(dir_path)
+                        
+                        # First, look for files in the current directory
+                        for entry in entries:
+                            full_path = os.path.join(dir_path, entry)
+                            if os.path.isfile(full_path):
+                                return full_path
+                        
+                        # If no files found, look in subdirectories (one level deep)
+                        for entry in entries:
+                            full_path = os.path.join(dir_path, entry)
+                            if os.path.isdir(full_path):
+                                found_file = find_binary_file(full_path)
+                                if found_file:
+                                    return found_file
+                    except Exception:
+                        pass
+                    
+                    return None
+                
+                binary_file_path = find_binary_file(temp_extract_path)
+                
+                if not binary_file_path:
+                    raise Exception('Archive extraction resulted in no files')
+                
+                # Move the binary to the final output path
+                import shutil
+                shutil.move(binary_file_path, output_path)
+                
+                # Clean up temporary files
+                if os.path.exists(download_path):
+                    os.remove(download_path)
+                if os.path.exists(temp_extract_path):
+                    shutil.rmtree(temp_extract_path)
+                
+                self.report('bridges.tools.archive_extracted', {
+                    'binary_path': output_path
+                })
 
         except Exception as e:
             self.report('bridges.tools.download_url_failed', {

@@ -50,11 +50,23 @@ interface NetworkResponse<ResponseData> {
   options: NetworkRequestOptions & NetworkOptions
 }
 
+const formatErrorData = (data: unknown): string => {
+  if (typeof data === 'string') {
+    return data
+  }
+
+  try {
+    return JSON.stringify(data)
+  } catch {
+    return String(data)
+  }
+}
+
 export class NetworkError<ResponseErrorData = unknown> extends Error {
   public readonly response: NetworkResponse<ResponseErrorData>
 
   constructor(response: NetworkResponse<ResponseErrorData>) {
-    super(`[NetworkError]: ${response.statusCode} ${response.data}`)
+    super(`[NetworkError]: ${response.statusCode}`)
     this.response = response
     Object.setPrototypeOf(this, NetworkError.prototype)
   }
@@ -137,14 +149,24 @@ export class Network {
         data = dataRawText as ResponseErrorData
       }
 
-      throw new NetworkError<ResponseErrorData>({
+      const response: NetworkResponse<ResponseErrorData> = {
         data,
         statusCode,
         options: {
           ...this.options,
           ...options
         }
-      })
+      }
+
+      console.error(
+        '[NetworkError]',
+        response.statusCode,
+        options.method,
+        options.url,
+        formatErrorData(response.data)
+      )
+
+      throw new NetworkError<ResponseErrorData>(response)
     }
   }
 
