@@ -106,12 +106,72 @@ class OpenCodeTool(BaseTool):
         with open(auth_file, 'w') as f:
             json.dump(auth_data, f, indent=2)
 
-    def _scan_available_toolkits(self) -> str:
-        """Scan available toolkits and their tools"""
+    def _analyze_relevant_toolkits(self, description: str) -> set:
+        """Analyze skill description to determine relevant toolkits"""
+        description_lower = description.lower()
+        relevant_toolkits = set()
+        toolkits_dir = Path('bridges/toolkits')
+
+        if not toolkits_dir.exists():
+            # Default to coding_development if toolkits directory doesn't exist
+            relevant_toolkits.add('coding_development')
+            return relevant_toolkits
+
+        try:
+            for toolkit_dir in toolkits_dir.iterdir():
+                if not toolkit_dir.is_dir():
+                    continue
+
+                toolkit_json = toolkit_dir / 'toolkit.json'
+                if not toolkit_json.exists():
+                    continue
+
+                try:
+                    with open(toolkit_json) as f:
+                        toolkit_data = json.load(f)
+
+                    if not toolkit_data.get('description'):
+                        continue
+
+                    # Extract meaningful words from toolkit description
+                    toolkit_desc_lower = toolkit_data['description'].lower()
+                    toolkit_words = [
+                        word for word in toolkit_desc_lower.split()
+                        if len(word) > 3  # Filter out short words
+                    ]
+
+                    # Also extract words from toolkit name
+                    toolkit_name_words = [
+                        word for word in (toolkit_data.get('name', '')).lower().split()
+                        if len(word) > 3
+                    ]
+
+                    # Check if any meaningful words from toolkit match the skill description
+                    all_words = toolkit_words + toolkit_name_words
+                    for word in all_words:
+                        if word in description_lower:
+                            relevant_toolkits.add(toolkit_dir.name)
+                            break
+
+                except (json.JSONDecodeError, KeyError):
+                    continue
+
+            # If no specific toolkits matched, include coding_development as a default
+            if not relevant_toolkits:
+                relevant_toolkits.add('coding_development')
+
+        except Exception:
+            # If we can't scan toolkits, default to coding_development
+            relevant_toolkits.add('coding_development')
+
+        return relevant_toolkits
+
+    def _scan_available_toolkits(self, relevant_toolkits: set = None) -> str:
+        """Scan available toolkits and their tools (optionally filtered)"""
         toolkits_dir = Path('bridges/toolkits')
         toolkit_info = "# Available Leon Tools & Toolkits\n\n"
         toolkit_info += "**IMPORTANT**: You must USE existing tools instead of creating duplicate functionality.\n"
-        toolkit_info += "NEVER modify existing tools - only use them in your skill actions.\n\n"
+        toolkit_info += "You can EXTEND existing tools with new methods OR create NEW tools when necessary.\n\n"
 
         if not toolkits_dir.exists():
             toolkit_info += "Could not scan available toolkits. Use existing tools when possible.\n\n"
@@ -120,6 +180,10 @@ class OpenCodeTool(BaseTool):
         try:
             for toolkit_dir in toolkits_dir.iterdir():
                 if not toolkit_dir.is_dir():
+                    continue
+
+                # Skip if filtering is enabled and this toolkit is not relevant
+                if relevant_toolkits is not None and toolkit_dir.name not in relevant_toolkits:
                     continue
 
                 toolkit_json = toolkit_dir / 'toolkit.json'
@@ -207,10 +271,232 @@ class OpenCodeTool(BaseTool):
         except Exception:
             return []
 
+    def _scan_aurora_components(self) -> str:
+        """Scan Aurora SDK components and document their usage"""
+        aurora_dir = Path('bridges/nodejs/src/sdk/aurora')
+        aurora_doc = ""
+
+        aurora_doc += "# Aurora UI Components\n\n"
+        aurora_doc += "# Aurora UI Components\n\n"
+        aurora_doc += "Focus on **non-interactive components** (Text, Image, Lists, Loaders, Progress).\n\n"
+
+        try:
+            if not aurora_dir.exists():
+                aurora_doc += "Could not scan Aurora components. Use Card, Text, Flexbox, List, ListItem, CircularProgress, Progress, and Loader.\n\n"
+                return aurora_doc
+
+            component_files = list(aurora_dir.iterdir())
+            non_interactive_components = [
+                'card', 'circular-progress', 'flexbox', 'icon', 'image', 'link',
+                'list', 'list-header', 'list-item', 'loader', 'progress',
+                'scroll-container', 'status', 'text', 'widget-wrapper'
+            ]
+
+            aurora_doc += "## Available Components\n\n"
+            aurora_doc += "**Layout**: Card, Flexbox, ScrollContainer\n"
+            aurora_doc += "**Display**: Text, Image, Icon, Link, Status\n"
+            aurora_doc += "**Lists**: List, ListItem, ListHeader\n"
+            aurora_doc += "**Feedback**: Loader, Progress, CircularProgress\n\n"
+            aurora_doc += "**Import**: `from bridges.python.src.sdk.aurora.component_name import ComponentName`\n\n"
+
+            aurora_doc += "## Widget Pattern (Python)\n\n"
+            aurora_doc += "```python\n"
+            aurora_doc += "from bridges.python.src.sdk.widget import Widget, WidgetOptions\n"
+            aurora_doc += "from bridges.python.src.sdk.aurora.flexbox import Flexbox\n"
+            aurora_doc += "from bridges.python.src.sdk.aurora.text import Text\n\n"
+            aurora_doc += "class MyWidget(Widget[Params]):\n"
+            aurora_doc += "    def render(self):\n"
+            aurora_doc += "        # Use Flexbox or List as root (NOT Card!)\n"
+            aurora_doc += "        return Flexbox({'children': [Text({'children': 'Hello'})]})\n"
+            aurora_doc += "```\n\n"
+
+            aurora_doc += "## Common Component Props\n\n"
+            aurora_doc += "### Flexbox Props\n"
+            aurora_doc += "- `flexDirection`: 'row' | 'column'\n"
+            aurora_doc += "- `gap`: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl'\n"
+            aurora_doc += "- `alignItems`: 'start' | 'center' | 'end' | 'stretch'\n"
+            aurora_doc += "- `justifyContent`: 'start' | 'center' | 'end' | 'between' | 'around'\n"
+            aurora_doc += "- `children`: Array of components\n\n"
+
+            aurora_doc += "### Text Props\n"
+            aurora_doc += "- `children`: string (the text content)\n"
+            aurora_doc += "- `fontSize`: 'xs' | 'sm' | 'md' | 'lg' | 'xl'\n"
+            aurora_doc += "- `fontWeight`: 'normal' | 'medium' | 'semi-bold' | 'bold'\n"
+            aurora_doc += "- `secondary`: boolean (muted color)\n\n"
+
+            aurora_doc += "### Card Props\n"
+            aurora_doc += "- `children`: Array of components\n"
+            aurora_doc += "- `padding`: 'none' | 'sm' | 'md' | 'lg'\n\n"
+
+            aurora_doc += "### CircularProgress Props\n"
+            aurora_doc += "- `value`: number (0-100)\n"
+            aurora_doc += "- `size`: 'sm' | 'md' | 'lg'\n"
+            aurora_doc += "- `children`: string (center text, optional)\n\n"
+
+            aurora_doc += "### Progress Props\n"
+            aurora_doc += "- `value`: number (0-100)\n"
+            aurora_doc += "- `size`: 'sm' | 'md' | 'lg'\n\n"
+
+            aurora_doc += "### Loader Props\n"
+            aurora_doc += "- `size`: 'sm' | 'md' | 'lg'\n\n"
+
+            aurora_doc += "### List Props\n"
+            aurora_doc += "- `children`: Array of ListItem components\n\n"
+
+            aurora_doc += "### ListItem Props\n"
+            aurora_doc += "- `children`: string | component\n\n"
+
+            aurora_doc += "### ListHeader Props\n"
+            aurora_doc += "- `children`: string\n\n"
+
+            aurora_doc += "## Critical Rules (Python)\n\n"
+            aurora_doc += "- Root: Flexbox or List (NOT Card!)\n"
+            aurora_doc += "- Image props: use 'backgroundSize', 'shape', 'radiusTop'/'radiusBottom' (booleans)\n"
+            aurora_doc += "- File: src/widgets/widget_name.py\n\n"
+
+        except Exception:
+            aurora_doc += "Could not scan Aurora components. Use Card, Text, Flexbox, List, ListItem, CircularProgress, Progress, and Loader.\n\n"
+
+        return aurora_doc
+
+    def _get_tool_creation_guidelines(self, bridge: str) -> str:
+        """Get tool creation and extension guidelines"""
+        guidelines = ""
+
+        guidelines += "# Creating New Tools or Extending Existing Tools\n\n"
+        guidelines += "You have the ability to create NEW tools or EXTEND existing tools with new methods.\n\n"
+
+        guidelines += "## Decision: When to Create vs Extend\n\n"
+        guidelines += "- **Use existing tools**: If a tool already provides the functionality needed\n"
+        guidelines += "- **Extend existing tools**: If a tool exists in the right domain but lacks a specific method\n"
+        guidelines += "- **Create new tools**: When no existing toolkit/tool covers the domain\n\n"
+
+        guidelines += "## Creating a New Tool\n\n"
+
+        if bridge == 'nodejs':
+            guidelines += "### TypeScript Tool Structure\n\n"
+            guidelines += "Create a new file at `bridges/nodejs/src/sdk/tools/{tool-name}-tool.ts`:\n\n"
+            guidelines += "```typescript\n"
+            guidelines += "import { Tool } from '@sdk/base-tool'\n"
+            guidelines += "import { ToolkitConfig } from '@sdk/toolkit-config'\n\n"
+            guidelines += "export default class MyNewTool extends Tool {\n"
+            guidelines += "  private static readonly TOOLKIT = 'toolkit_name'  // e.g., 'music_audio'\n"
+            guidelines += "  private readonly config: ReturnType<typeof ToolkitConfig.load>\n\n"
+            guidelines += "  constructor() {\n"
+            guidelines += "    super()\n"
+            guidelines += "    const toolConfigName = this.constructor.name.toLowerCase().replace('tool', '')\n"
+            guidelines += "    this.config = ToolkitConfig.load(MyNewTool.TOOLKIT, toolConfigName)\n"
+            guidelines += "  }\n\n"
+            guidelines += "  get toolName(): string {\n"
+            guidelines += "    return this.constructor.name\n"
+            guidelines += "  }\n\n"
+            guidelines += "  get toolkit(): string {\n"
+            guidelines += "    return MyNewTool.TOOLKIT\n"
+            guidelines += "  }\n\n"
+            guidelines += "  get description(): string {\n"
+            guidelines += "    return this.config['description']\n"
+            guidelines += "  }\n\n"
+            guidelines += "  /**\n"
+            guidelines += "   * Your tool method\n"
+            guidelines += "   */\n"
+            guidelines += "  async myMethod(param: string): Promise<string> {\n"
+            guidelines += "    // Implementation\n"
+            guidelines += "    // If the tool needs a binary, use this.executeCommand()\n"
+            guidelines += "    return 'result'\n"
+            guidelines += "  }\n"
+            guidelines += "}\n"
+            guidelines += "```\n\n"
+        else:
+            guidelines += "### Python Tool Structure\n\n"
+            guidelines += "Create a new file at `bridges/python/src/sdk/tools/{tool_name}_tool.py`:\n\n"
+            guidelines += "```python\n"
+            guidelines += "from ..base_tool import BaseTool\n"
+            guidelines += "from ..toolkit_config import ToolkitConfig\n\n"
+            guidelines += "class MyNewTool(BaseTool):\n"
+            guidelines += "    TOOLKIT = 'toolkit_name'  # e.g., 'music_audio'\n\n"
+            guidelines += "    def __init__(self):\n"
+            guidelines += "        super().__init__()\n"
+            guidelines += "        self.config = ToolkitConfig.load(self.TOOLKIT, self.tool_name)\n\n"
+            guidelines += "    @property\n"
+            guidelines += "    def tool_name(self) -> str:\n"
+            guidelines += "        return 'mynew'\n\n"
+            guidelines += "    @property\n"
+            guidelines += "    def toolkit(self) -> str:\n"
+            guidelines += "        return self.TOOLKIT\n\n"
+            guidelines += "    @property\n"
+            guidelines += "    def description(self) -> str:\n"
+            guidelines += "        return self.config['description']\n\n"
+            guidelines += "    def my_method(self, param: str) -> str:\n"
+            guidelines += "        # Implementation\n"
+            guidelines += "        return 'result'\n"
+            guidelines += "```\n\n"
+
+        guidelines += "### Register New Tool in toolkit.json\n\n"
+        guidelines += "Add to `bridges/toolkits/{toolkit_name}/toolkit.json`:\n\n"
+        guidelines += "```json\n"
+        guidelines += "{\n"
+        guidelines += "  \"name\": \"Toolkit Name\",\n"
+        guidelines += "  \"description\": \"Description\",\n"
+        guidelines += "  \"tools\": {\n"
+        guidelines += "    \"mynew\": {\n"
+        guidelines += "      \"description\": \"My new tool description\",\n"
+        guidelines += "      \"binaries\": {  // Optional: only if tool needs a binary\n"
+        guidelines += "        \"linux-x86_64\": \"https://url-to-binary.tar.gz\"\n"
+        guidelines += "      }\n"
+        guidelines += "    }\n"
+        guidelines += "  }\n"
+        guidelines += "}\n"
+        guidelines += "```\n\n"
+
+        guidelines += "## Extending an Existing Tool\n\n"
+        guidelines += "To add a new method to an existing tool:\n\n"
+
+        if bridge == 'nodejs':
+            guidelines += "1. Open the existing tool file (e.g., `bridges/nodejs/src/sdk/tools/ytdlp-tool.ts`)\n"
+            guidelines += "2. Add your new method to the class:\n\n"
+            guidelines += "```typescript\n"
+            guidelines += "  /**\n"
+            guidelines += "   * My new method description\n"
+            guidelines += "   */\n"
+            guidelines += "  async myNewMethod(param: string): Promise<string> {\n"
+            guidelines += "    // Use this.executeCommand() for binary tools\n"
+            guidelines += "    const result = await this.executeCommand({\n"
+            guidelines += "      binaryName: 'yt-dlp',\n"
+            guidelines += "      args: ['--param', param],\n"
+            guidelines += "      options: { sync: true }\n"
+            guidelines += "    })\n"
+            guidelines += "    return result\n"
+            guidelines += "  }\n"
+            guidelines += "```\n\n"
+        else:
+            guidelines += "1. Open the existing tool file (e.g., `bridges/python/src/sdk/tools/ytdlp_tool.py`)\n"
+            guidelines += "2. Add your new method to the class:\n\n"
+            guidelines += "```python\n"
+            guidelines += "    def my_new_method(self, param: str) -> str:\n"
+            guidelines += "        \"\"\"My new method description\"\"\"\n"
+            guidelines += "        # Use self.execute_command() for binary tools\n"
+            guidelines += "        result = self.execute_command(\n"
+            guidelines += "            binary_name='yt-dlp',\n"
+            guidelines += "            args=['--param', param]\n"
+            guidelines += "        )\n"
+            guidelines += "        return result\n"
+            guidelines += "```\n\n"
+
+        guidelines += "## Important Notes\n\n"
+        guidelines += "- **Never duplicate**: Check existing tools first before creating new ones\n"
+        guidelines += "- **Toolkit placement**: Choose the right toolkit (e.g., audio tools go in music_audio)\n"
+        guidelines += "- **Binary tools**: If your tool wraps a CLI binary, use `executeCommand()`\n"
+        guidelines += "- **Pure code tools**: If no binary is needed, implement the logic directly\n"
+        guidelines += "- **Method naming**: Use clear, descriptive names (e.g., `downloadVideo`, `extractAudio`)\n\n"
+
+        return guidelines
+
     def _build_leon_context(
         self,
+        description: str,
         system_prompt: Optional[str] = None,
-        context_files: Optional[List[str]] = None
+        context_files: Optional[List[str]] = None,
+        bridge: str = 'nodejs'
     ) -> str:
         """Build Leon-specific context for OpenCode"""
         context = ''
@@ -218,28 +504,334 @@ class OpenCodeTool(BaseTool):
         if system_prompt:
             context += f"# System Instructions\n\n{system_prompt}\n\n"
         
-        # Add available toolkits and tools information
-        context += self._scan_available_toolkits()
+        # Analyze and determine relevant toolkits based on skill description
+        relevant_toolkits = self._analyze_relevant_toolkits(description)
+        
+        # Add available toolkits and tools information (filtered by relevance)
+        context += self._scan_available_toolkits(relevant_toolkits)
+        
+        language = 'TypeScript' if bridge == 'nodejs' else 'Python'
+        file_extension = '.ts' if bridge == 'nodejs' else '.py'
         
         context += "# Leon Skill Development Guidelines\n\n"
-        context += "You are generating code for Leon AI assistant. Follow these guidelines:\n\n"
+        context += f"You are generating code for Leon AI assistant using **{language}**. Follow these guidelines:\n\n"
+        context += f"- **Language**: CRITICAL - Write ALL skill source code in {language} (actions, widgets, utilities, everything)\n"
+        context += f"- **Bridge**: Use the {'Node.js' if bridge == 'nodejs' else 'Python'} bridge\n"
+        context += f"- **Consistency**: The bridge setting ({bridge}) applies to the ENTIRE skill - all actions, widgets, and utilities must use {language}\n"
+        context += "- **Skill Location**: CRITICAL - Create skills directly in the `skills/` folder, NOT in subfolders\n"
         context += "- **Use existing tools**: Check the tools listed above first! Don't recreate functionality.\n"
         context += "- **DON'T modify tools**: Never edit existing tool files. Only use them in your actions.\n"
-        context += "- **Tool usage**: Import tools like `import YtdlpTool from '@sdk/tools/ytdlp-tool'`\n"
-        context += "- **SDK imports**: @sdk/types, @sdk/leon, @sdk/params-helper\n"
-        context += "- **Action structure**: Export a `run` function as the action entry point\n"
-        context += "- **Responses**: Use leon.answer() to respond to users\n"
-        context += "- **File structure**: skill.json + locales/en.json + src/actions/*.ts\n"
+        
+        if bridge == 'nodejs':
+            context += "- **Tool usage**: Import tools like `import YtdlpTool from '@sdk/tools/ytdlp-tool'`\n"
+            context += "- **SDK imports**: @sdk/types, @sdk/leon, @sdk/params-helper\n"
+            context += "- **Action structure**: Export a `run` function as the action entry point\n"
+            context += "- **Responses**: Use leon.answer() to respond to users\n"
+            context += f"- **File extensions**: ALL files MUST use {file_extension} (actions, widgets, utilities)\n"
+            context += f"- **File structure**: skill.json + locales/en.json + src/actions/*{file_extension} + src/widgets/*{file_extension}\n"
+        else:
+            context += "- **Tool usage**: Import tools like `from sdk.tools.ytdlp_tool import YtdlpTool`\n"
+            context += "- **SDK imports**: from sdk import leon, ParamsHelper\n"
+            context += "- **Action structure**: Define a `run` function as the action entry point\n"
+            context += "- **Responses**: Use leon.answer() to respond to users\n"
+            context += f"- **File extensions**: ALL files MUST use {file_extension} (actions, widgets, utilities)\n"
+            context += f"- **File structure**: skill.json + locales/en.json + src/actions/*{file_extension} + src/widgets/*{file_extension}\n"
+        
         context += "- **Validation**: Validate against schemas in ../../schemas/skill-schemas/\n\n"
 
-        context += "# Tool Usage Example\n\n"
-        context += "```typescript\n"
-        context += "import YtdlpTool from '@sdk/tools/ytdlp-tool'\n"
-        context += "import FfmpegTool from '@sdk/tools/ffmpeg-tool'\n\n"
-        context += "// In your action:\n"
-        context += "const ytdlp = new YtdlpTool()\n"
-        context += "const videoPath = await ytdlp.downloadVideo(url, outputDir)\n"
+        context += "# Skill Directory Structure - CRITICAL\n\n"
+        context += "**IMPORTANT**: Skills must be created directly in the `skills/` root folder.\n\n"
+        context += "## Correct Structure\n\n"
+        context += "```\n"
+        context += "skills/\n"
+        context += "├── my_skill_name/           # ✅ Directly in skills/ folder\n"
+        context += "│   ├── skill.json\n"
+        context += "│   ├── locales/\n"
+        context += "│   │   └── en.json\n"
+        context += "│   └── src/\n"
+        context += "│       ├── settings.sample.json\n"
+        context += "│       ├── settings.json\n"
+        context += "│       ├── actions/\n"
+        context += f"│       │   └── action_name{file_extension}\n"
+        context += "│       └── widgets/         # Optional\n"
+        context += f"│           └── widget_name{file_extension}\n"
         context += "```\n\n"
+        context += "## WRONG - Do NOT Create Skills in Subfolders\n\n"
+        context += "```\n"
+        context += "skills/\n"
+        context += "├── utilities/               # ❌ WRONG - Don't use category subfolders\n"
+        context += "│   └── my_skill/\n"
+        context += "├── entertainment/           # ❌ WRONG\n"
+        context += "│   └── my_skill/\n"
+        context += "```\n\n"
+        context += "**Key Rules:**\n"
+        context += "1. Skills go directly in `skills/skill_name/` (no intermediate folders)\n"
+        context += "2. Skill folder name should be lowercase with underscores (e.g., `video_translator_skill`)\n"
+        context += "3. Always end skill folder name with `_skill` suffix\n"
+        context += f"4. CRITICAL: ALL source files use {file_extension} - actions, widgets, utilities (bridge={bridge})\n\n"
+        
+        context += f"## Bridge Consistency - ABSOLUTELY CRITICAL\n\n"
+        context += f"**VERY IMPORTANT**: When bridge is set to \"{bridge}\", ALL skill source code MUST be in {language}.\n\n"
+        context += "**This means:**\n"
+        context += f"- Actions: {file_extension} ({language})\n"
+        context += f"- Widgets: {file_extension} ({language})\n"
+        context += f"- Utilities: {file_extension} ({language})\n"
+        context += f"- Helper functions: {file_extension} ({language})\n"
+        context += "- NEVER mix TypeScript and Python in the same skill!\n\n"
+        context += "**Wrong Example (DO NOT DO THIS):**\n"
+        context += "```\n"
+        context += "src/\n"
+        context += "├── actions/\n"
+        context += "│   └── my_action.py        # ❌ Python\n"
+        context += "└── widgets/\n"
+        context += "    └── my_widget.ts         # ❌ TypeScript - INCONSISTENT!\n"
+        context += "```\n\n"
+        context += "**Correct Example:**\n"
+        context += "```\n"
+        context += "src/\n"
+        context += "├── actions/\n"
+        context += f"│   └── my_action{file_extension}      # ✅ {language}\n"
+        context += "└── widgets/\n"
+        context += f"    └── my_widget{file_extension}       # ✅ {language} - CONSISTENT!\n"
+        context += "```\n\n"
+
+        # Add JSON file schema requirements
+        context += "# JSON File Schema References - CRITICAL\n\n"
+        context += "**IMPORTANT**: All JSON configuration files MUST include schema references at the beginning.\n\n"
+        
+        context += "## Required Schema References\n\n"
+        
+        context += "### skill.json\n"
+        context += "```json\n"
+        context += "{\n"
+        context += '  "$schema": "../../schemas/skill-schemas/skill.json",\n'
+        context += '  "name": "Skill Name",\n'
+        context += '  "bridge": "nodejs",\n'
+        context += "  // ... rest of configuration\n"
+        context += "}\n"
+        context += "```\n\n"
+        
+        context += "### locales/en.json - CRITICAL STRUCTURE\n"
+        context += "**VERY IMPORTANT**: The locale file has a specific structure with top-level properties.\n"
+        context += "DO NOT put action names directly at the root level!\n\n"
+        context += "```json\n"
+        context += "{\n"
+        context += '  "$schema": "../../../schemas/skill-schemas/skill-locale-config.json",\n'
+        context += '  "actions": {\n'
+        context += '    "action_name_1": {\n'
+        context += '      "missing_param_follow_ups": {\n'
+        context += '        "param_name": ["Follow up question 1", "Follow up question 2"]\n'
+        context += "      },\n"
+        context += '      "answers": {\n'
+        context += '        "answer_key": ["Answer variation 1", "Answer variation 2"]\n'
+        context += "      }\n"
+        context += "    },\n"
+        context += '    "action_name_2": {\n'
+        context += "      // Same structure\n"
+        context += "    }\n"
+        context += "  },\n"
+        context += '  "common_answers": {\n'
+        context += '    "common_key": ["Shared answer 1", "Shared answer 2"]\n'
+        context += "  },\n"
+        context += '  "variables": {\n'
+        context += '    "var_name": "value"\n'
+        context += "  },\n"
+        context += '  "widget_contents": {\n'
+        context += '    "widget_key": "Widget content"\n'
+        context += "  }\n"
+        context += "}\n"
+        context += "```\n\n"
+        
+        context += "**Locale File Structure Rules:**\n"
+        context += "1. Must have `$schema` reference at the top\n"
+        context += "2. Must have `actions` object containing all action configurations\n"
+        context += "3. Can have optional `common_answers` for shared responses\n"
+        context += "4. Can have optional `variables` for reusable values\n"
+        context += "5. Can have optional `widget_contents` for widget text\n"
+        context += "6. Each action inside `actions` has `missing_param_follow_ups` and `answers`\n\n"
+
+        # Add settings files documentation
+        context += "# Skill Settings Files - REQUIRED\n\n"
+        context += "**CRITICAL**: Every skill MUST have both settings files, even if empty.\n\n"
+        
+        context += "## Required Files\n\n"
+        context += "1. **src/settings.sample.json** - Sample configuration template\n"
+        context += "2. **src/settings.json** - Actual configuration (initially identical to sample)\n\n"
+        
+        context += "Both files must be **identical** when created. Users will modify settings.json with their values.\n\n"
+        
+        context += "## Settings File Patterns\n\n"
+        
+        context += "### Pattern 1: No Configuration Needed\n\n"
+        context += "If the skill doesn't need any API keys or configuration:\n\n"
+        context += "```json\n"
+        context += "{}\n"
+        context += "```\n\n"
+        
+        context += "### Pattern 2: API Keys and Configuration\n\n"
+        context += "If the skill needs API keys, provider selection, or other settings:\n\n"
+        context += "```json\n"
+        context += "{\n"
+        context += '  "provider_api_key": "sk-...",\n'
+        context += '  "provider_model": "model-name",\n'
+        context += '  "max_tokens": 2000,\n'
+        context += '  "temperature": 0.7\n'
+        context += "}\n"
+        context += "```\n\n"
+        
+        context += "## Real Examples\n\n"
+        
+        context += "### Example 1: Simple Skill (No Settings)\n"
+        context += "```json\n"
+        context += "// src/settings.sample.json and src/settings.json\n"
+        context += "{}\n"
+        context += "```\n\n"
+        
+        context += "### Example 2: Skill with API Configuration\n"
+        context += "```json\n"
+        context += "// src/settings.sample.json and src/settings.json\n"
+        context += "{\n"
+        context += '  "translation_openrouter_api_key": "sk-or-v1-...",\n'
+        context += '  "translation_openrouter_model": "gemini-2.5-flash",\n'
+        context += '  "translation_max_tokens_per_request": 2000,\n'
+        context += '  "translation_segments_per_batch": 10,\n'
+        context += '  "speech_synthesis_provider": "chatterbox_onnx"\n'
+        context += "}\n"
+        context += "```\n\n"
+        
+        context += "## How to Use Settings in Actions\n\n"
+        
+        if bridge == 'nodejs':
+            context += "```typescript\n"
+            context += "import { Settings } from '@sdk/settings'\n\n"
+            context += "interface MySkillSettings extends Record<string, unknown> {\n"
+            context += "  provider_api_key?: string\n"
+            context += "  provider_model?: string\n"
+            context += "  max_tokens?: number\n"
+            context += "}\n\n"
+            context += "export const run: ActionFunction = async function (params, paramsHelper) {\n"
+            context += "  const settings = new Settings<MySkillSettings>()\n"
+            context += "  const apiKey = await settings.get('provider_api_key') as string | undefined\n"
+            context += "  const model = (await settings.get('provider_model')) || 'default-model'\n"
+            context += "  const maxTokens = (await settings.get('max_tokens')) || 1000\n\n"
+            context += "  if (!apiKey) {\n"
+            context += "    leon.answer({ key: 'missing_api_key' })\n"
+            context += "    return\n"
+            context += "  }\n\n"
+            context += "  // Use settings...\n"
+            context += "}\n"
+            context += "```\n\n"
+        else:
+            context += "```python\n"
+            context += "from sdk import Settings\n\n"
+            context += "def run(params, params_helper):\n"
+            context += "    settings = Settings()\n"
+            context += "    api_key = settings.get('provider_api_key')\n"
+            context += "    model = settings.get('provider_model') or 'default-model'\n"
+            context += "    max_tokens = settings.get('max_tokens') or 1000\n\n"
+            context += "    if not api_key:\n"
+            context += "        leon.answer({'key': 'missing_api_key'})\n"
+            context += "        return\n\n"
+            context += "    # Use settings...\n"
+            context += "```\n\n"
+        
+        context += "## Settings Best Practices\n\n"
+        context += "1. **Always create both files**: settings.sample.json AND settings.json (identical initially)\n"
+        context += "2. **Use descriptive keys**: `translation_api_key` not `key1`\n"
+        context += "3. **Provide placeholder values**: Show the format (e.g., `\"sk-...\"` for API keys)\n"
+        context += "4. **Include defaults**: For non-sensitive settings (model names, timeouts, etc.)\n"
+        context += "5. **Document in README**: Explain what each setting does\n"
+        context += "6. **Validate in action**: Check if required settings exist before using them\n"
+        context += "7. **Use empty object if no settings**: Don't skip the files, create `{}`\n\n"
+
+        # Add new tool creation and extension documentation
+        context += self._get_tool_creation_guidelines(bridge)
+
+        # Add Aurora UI components documentation
+        context += self._scan_aurora_components()
+
+        context += "# Understanding leon.answer() - Critical Information\n\n"
+        context += "The `leon.answer()` method is your primary way to communicate with users and pass data between actions.\n\n"
+        context += "## Basic Usage\n\n"
+        
+        if bridge == 'nodejs':
+            context += "```typescript\n"
+            context += "// Simple text response with localized message key\n"
+            context += "leon.answer({\n"
+            context += "  key: 'success_message',\n"
+            context += "  data: {\n"
+            context += "    file_name: 'example.mp4',\n"
+            context += "    file_size: '25 MB'\n"
+            context += "  }\n"
+            context += "})\n"
+            context += "```\n\n"
+        else:
+            context += "```python\n"
+            context += "# Simple text response with localized message key\n"
+            context += "leon.answer({\n"
+            context += "  'key': 'success_message',\n"
+            context += "  'data': {\n"
+            context += "    'file_name': 'example.mp4',\n"
+            context += "    'file_size': '25 MB'\n"
+            context += "  }\n"
+            context += "})\n"
+            context += "```\n\n"
+
+        context += "## Passing Data to Next Action (context_data)\n\n"
+        context += "Use `core.context_data` to pass data between actions in a multi-step workflow:\n\n"
+        
+        if bridge == 'nodejs':
+            context += "```typescript\n"
+            context += "// Action 1: Download video and pass path to next action\n"
+            context += "leon.answer({\n"
+            context += "  key: 'download_completed',\n"
+            context += "  data: {\n"
+            context += "    file_path: formatFilePath(videoPath)\n"
+            context += "  },\n"
+            context += "  core: {\n"
+            context += "    context_data: {\n"
+            context += "      video_path: videoPath,           // Pass full path\n"
+            context += "      target_language: targetLanguage, // Pass other needed data\n"
+            context += "      quality: quality\n"
+            context += "    }\n"
+            context += "  }\n"
+            context += "})\n\n"
+            context += "// Action 2: Retrieve data from previous action\n"
+            context += "const videoPath = paramsHelper.getContextData<string>('video_path')\n"
+            context += "const targetLanguage = paramsHelper.getContextData<string>('target_language')\n"
+            context += "```\n\n"
+        else:
+            context += "```python\n"
+            context += "# Action 1: Download video and pass path to next action\n"
+            context += "leon.answer({\n"
+            context += "  'key': 'download_completed',\n"
+            context += "  'data': {\n"
+            context += "    'file_path': format_file_path(video_path)\n"
+            context += "  },\n"
+            context += "  'core': {\n"
+            context += "    'context_data': {\n"
+            context += "      'video_path': video_path,           # Pass full path\n"
+            context += "      'target_language': target_language, # Pass other needed data\n"
+            context += "      'quality': quality\n"
+            context += "    }\n"
+            context += "  }\n"
+            context += "})\n\n"
+            context += "# Action 2: Retrieve data from previous action\n"
+            context += "video_path = params_helper.get_context_data('video_path')\n"
+            context += "target_language = params_helper.get_context_data('target_language')\n"
+            context += "```\n\n"
+
+        context += "## Widget Usage\n\n"
+        context += "**Show**: `leon.answer({ widget: myWidget })` (no key/data!)\n"
+        context += "**Update**: Use `replaceMessageId` and keep same widget ID\n\n"
+
+        context += "## leon.answer() Options\n\n"
+        context += "- **key**: Localized message key\n"
+        context += "- **data**: Variables for message (user-visible)\n"
+        context += "- **widget**: UI component (MUST be alone, no key/data!)\n"
+        context += "- **core.context_data**: Data for next action\n"
+        context += "- **core.next_action**: Chain to 'skill:action'\n"
+        context += "- **replaceMessageId**: Update existing message\n\n"
         
         if context_files:
             context += "# Reference Files\n\n"
@@ -273,7 +865,8 @@ class OpenCodeTool(BaseTool):
         model: Optional[str] = None,
         api_key: Optional[str] = None,
         context_files: Optional[List[str]] = None,
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        bridge: str = 'nodejs'
     ) -> Dict[str, Any]:
         """
         Generate skill using OpenCode CLI with agentic loop
@@ -313,7 +906,7 @@ class OpenCodeTool(BaseTool):
         model_to_use = provider_data.get('model')
 
         # Build the OpenCode prompt with Leon-specific context
-        leon_context = self._build_leon_context(system_prompt, context_files or [])
+        leon_context = self._build_leon_context(description, system_prompt, context_files or [], bridge)
         full_prompt = f"{leon_context}\n\n{description}"
 
         # Create temporary prompt file

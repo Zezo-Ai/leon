@@ -6,6 +6,9 @@
         "missing_description": [
           "Please describe the skill you want me to build."
         ],
+        "invalid_bridge": [
+          "Invalid bridge '{{ bridge }}'. Please use 'nodejs' or 'python'."
+        ],
         "missing_api_key": [
           "I need your {{ provider }} API key. Please set it in my settings (opencode_{{ provider }}_api_key)."
         ],

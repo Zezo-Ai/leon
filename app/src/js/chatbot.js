@@ -327,7 +327,10 @@ export default class Chatbot {
   }
 
   formatMessage(message) {
-    if (typeof message === 'string') {
+    const isWidget =
+      message.includes && message.includes('"component":"WidgetWrapper"')
+
+    if (typeof message === 'string' && !isWidget) {
       message = message.replace(/\n/g, '<br />')
 
       // Handle HTTP/HTTPS URLs with simple regex

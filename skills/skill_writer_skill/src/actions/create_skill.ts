@@ -39,9 +39,20 @@ export const run: ActionFunction = async function (
   const description = paramsHelper.getActionArgument('description') as
     | string
     | undefined
+  const bridge =
+    (paramsHelper.getActionArgument('bridge') as string | undefined) || 'nodejs'
 
   if (!description) {
     leon.answer({ key: 'missing_description' })
+    return
+  }
+
+  // Validate bridge parameter
+  if (bridge !== 'nodejs' && bridge !== 'python') {
+    leon.answer({
+      key: 'invalid_bridge',
+      data: { bridge }
+    })
     return
   }
 
@@ -73,12 +84,19 @@ export const run: ActionFunction = async function (
   )
   const targetPath = path.join(process.cwd(), 'skills', skillName)
 
-  // Context files for OpenCode to learn from
-  const contextFiles = [
-    'skills/guess_the_number_skill/skill.json',
-    'skills/guess_the_number_skill/src/actions/set_up.py',
-    'schemas/skill-schemas/skill.json'
-  ]
+  // Context files for OpenCode to learn from (choose based on bridge)
+  const contextFiles =
+    bridge === 'nodejs'
+      ? [
+          'skills/leon/age/skill.json',
+          'skills/leon/age/src/actions/run.ts',
+          'schemas/skill-schemas/skill.json'
+        ]
+      : [
+          'skills/guess_the_number_skill/skill.json',
+          'skills/guess_the_number_skill/src/actions/set_up.py',
+          'schemas/skill-schemas/skill.json'
+        ]
 
   // Enhanced description with tool guidance
   const enhancedDescription = `${description}
@@ -99,7 +117,8 @@ IMPORTANT GUIDANCE:
     provider,
     target_path: targetPath,
     context_files: contextFiles,
-    system_prompt: SKILL_PLAN_SYSTEM_PROMPT
+    system_prompt: SKILL_PLAN_SYSTEM_PROMPT,
+    bridge
   }
 
   if (model) {

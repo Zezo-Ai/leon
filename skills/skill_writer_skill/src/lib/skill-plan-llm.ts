@@ -493,7 +493,7 @@ When generating code, you can use these existing tools (import from '@sdk/tools/
 - ALWAYS provide locale_answers with all answer keys used in the code
 - locale_answers format: { "action_name": { "answer_key": ["Answer text with {{ variable }}"] } }
 - Use {{ variable }} syntax in answers to inject data
-- prefer Python bridge unless user specifies otherwise
+- prefer Node.js bridge unless user specifies otherwise
 - Use flow when skill has multiple sequential steps
 - Use is_loop when action needs repeated user input
 - Use is_in_action_loop: false to exit loops
