@@ -39,47 +39,60 @@ interface GrokChatOptions {
   tools?: Array<WebSearchTool | XSearchTool>
 }
 
-interface InlineCitation {
-  id: number
-  url: string
+interface Annotation {
+  type: string
+  url?: string
+  start_index?: number
+  end_index?: number
   title?: string
-  position?: {
-    start: number
-    end: number
+}
+
+interface ContentItem {
+  type: string
+  text?: string
+  logprobs?: unknown[]
+  annotations?: Annotation[]
+}
+
+interface MessageOutput {
+  type: 'message'
+  id: string
+  role: string
+  status: string
+  content: ContentItem[]
+}
+
+interface ToolCallOutput {
+  id: string
+  type: 'web_search_call' | 'x_search_call'
+  status: string
+  action: {
+    type: string
+    query?: string
+    url?: string
+    sources?: unknown[]
   }
 }
 
-// Responses API uses "output" array instead of "choices"
-interface OutputItem {
-  type: string
-  text?: string
-  tool_call?: {
-    id: string
-    type: string
-    function: {
-      name: string
-      arguments: string
-    }
-  }
-}
+type OutputItem = MessageOutput | ToolCallOutput
 
 interface GrokResponse {
   success: boolean
   data?: {
     id: string
-    output: OutputItem[] // Array of output items
+    output: OutputItem[]
     usage: {
       input_tokens: number
       output_tokens: number
       total_tokens: number
       reasoning_tokens?: number
     }
-    citations?: string[]
-    inline_citations?: InlineCitation[]
   }
   error?: string
-  // Convenience helper to get the final text output
+  // Convenience helpers
   content?: string
+  citations?: string[]
+  annotations?: Annotation[]
 }
 
 export default class GrokTool extends Tool {
@@ -225,15 +238,31 @@ export default class GrokTool extends Tool {
 
       // Extract the final text output from the output array
       let content = ''
+      let annotations: Annotation[] = []
+      let citations: string[] = []
+
       if (data.output && Array.isArray(data.output)) {
-        // Find the last output_text item or the last text item
+        // Find the message item (type: "message")
         for (let i = data.output.length - 1; i >= 0; i--) {
           const item = data.output[i]
-          if (item.type === 'output_text' && item.text) {
-            content = item.text
+          if (
+            item.type === 'message' &&
+            item.content &&
+            Array.isArray(item.content)
+          ) {
+            // Find output_text in the content array
+            for (const contentItem of item.content) {
+              if (contentItem.type === 'output_text' && contentItem.text) {
+                content = contentItem.text
+                annotations = contentItem.annotations || []
+                // Extract URLs from annotations for citations
+                citations = annotations
+                  .filter((a) => a.url)
+                  .map((a) => a.url as string)
+                break
+              }
+            }
             break
-          } else if (item.text) {
-            content = item.text
           }
         }
       }
@@ -241,7 +270,9 @@ export default class GrokTool extends Tool {
       return {
         success: true,
         data,
-        content
+        content,
+        citations,
+        annotations
       }
     } catch (error: unknown) {
       return {

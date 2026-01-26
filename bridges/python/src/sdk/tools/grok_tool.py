@@ -134,16 +134,39 @@ class GrokTool(BaseTool):
 
             # Extract the final text output from the output array
             content = ""
-            if "output" in data and isinstance(data["output"], list):
-                # Find the last output_text item or the last text item
-                for item in reversed(data["output"]):
-                    if item.get("type") == "output_text" and item.get("text"):
-                        content = item["text"]
-                        break
-                    elif item.get("text"):
-                        content = item["text"]
+            annotations = []
+            citations = []
 
-            return {"success": True, "data": data, "content": content}
+            if "output" in data and isinstance(data["output"], list):
+                # Find the message item (type: "message")
+                for item in reversed(data["output"]):
+                    if item.get("type") == "message" and "content" in item:
+                        content_array = item.get("content", [])
+                        if isinstance(content_array, list):
+                            # Find output_text in the content array
+                            for content_item in content_array:
+                                if (
+                                    content_item.get("type") == "output_text"
+                                    and content_item.get("text")
+                                ):
+                                    content = content_item["text"]
+                                    annotations = content_item.get("annotations", [])
+                                    # Extract URLs from annotations for citations
+                                    citations = [
+                                        a["url"]
+                                        for a in annotations
+                                        if a.get("url")
+                                    ]
+                                    break
+                        break
+
+            return {
+                "success": True,
+                "data": data,
+                "content": content,
+                "citations": citations,
+                "annotations": annotations,
+            }
 
         except Exception as error:
             return {"success": False, "error": f"Failed to complete chat: {str(error)}"}

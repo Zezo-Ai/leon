@@ -100,7 +100,7 @@ export const run: ActionFunction = async function (
 
       // Extract content and citations from Responses API
       const content = result.content || ''
-      const citations = result.data?.citations || []
+      const citations = result.citations || []
 
       leon.answer({
         key: 'deep_research_complete',
@@ -142,7 +142,7 @@ export const run: ActionFunction = async function (
 
       // Extract content and citations from Responses API
       const content = result.content || ''
-      const citations = result.data?.citations || []
+      const citations = result.citations || []
 
       leon.answer({
         key: 'web_search_complete',
@@ -184,7 +184,7 @@ export const run: ActionFunction = async function (
 
       // Extract content and citations from Responses API
       const content = result.content || ''
-      const citations = result.data?.citations || []
+      const citations = result.citations || []
 
       leon.answer({
         key: 'x_search_complete',
@@ -226,7 +226,7 @@ export const run: ActionFunction = async function (
 
       // Extract content and citations from Responses API
       const content = result.content || ''
-      const citations = result.data?.citations || []
+      const citations = result.citations || []
 
       leon.answer({
         key: 'combined_search_complete',

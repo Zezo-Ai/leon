@@ -29,6 +29,58 @@ interface PodcastScript {
   segments: PodcastSegment[]
 }
 
+/**
+ * Split text at punctuation boundaries to ensure no segment exceeds max characters
+ * @param text The text to split
+ * @param maxChars Maximum characters per segment (default: 272)
+ * @returns Array of text chunks split at punctuation
+ */
+function splitAtPunctuation(text: string, maxChars: number = 272): string[] {
+  if (text.length <= maxChars) {
+    return [text]
+  }
+
+  const chunks: string[] = []
+  let remaining = text
+
+  while (remaining.length > maxChars) {
+    // Find the last punctuation mark before maxChars
+    const segment = remaining.substring(0, maxChars)
+
+    // Look for punctuation marks in reverse order
+    const punctuationRegex = /[.!?;:,]\s/g
+    let lastPunctuationIndex = -1
+    let match: RegExpExecArray | null
+
+    while ((match = punctuationRegex.exec(segment)) !== null) {
+      lastPunctuationIndex = match.index + 1 // Include the punctuation
+    }
+
+    if (lastPunctuationIndex > 0) {
+      // Split at the punctuation
+      chunks.push(remaining.substring(0, lastPunctuationIndex).trim())
+      remaining = remaining.substring(lastPunctuationIndex).trim()
+    } else {
+      // No punctuation found, force split at last space
+      const lastSpaceIndex = segment.lastIndexOf(' ')
+      if (lastSpaceIndex > 0) {
+        chunks.push(remaining.substring(0, lastSpaceIndex).trim())
+        remaining = remaining.substring(lastSpaceIndex).trim()
+      } else {
+        // No space either, force split at maxChars
+        chunks.push(remaining.substring(0, maxChars).trim())
+        remaining = remaining.substring(maxChars).trim()
+      }
+    }
+  }
+
+  if (remaining.length > 0) {
+    chunks.push(remaining.trim())
+  }
+
+  return chunks
+}
+
 export const run: ActionFunction = async function (
   _params,
   paramsHelper: ParamsHelper
@@ -204,16 +256,32 @@ Generate the script as a JSON object with this structure:
       `${topic.replace(/[^a-z0-9]/gi, '_')}_podcast.wav`
     )
 
-    // Prepare batch synthesis tasks
-    const synthesisTasks = script.segments.map((segment, index) => ({
-      text: segment.text,
-      audio_path: path.join(
-        outputDir,
-        `segment_${index.toString().padStart(4, '0')}.wav`
-      ),
-      voice_name: segment.speaker === 'host' ? hostVoice : guestVoice,
-      temperature: 0.7
-    }))
+    // Prepare batch synthesis tasks, splitting long segments at punctuation
+    const synthesisTasks: Array<{
+      text: string
+      audio_path: string
+      voice_name: string
+      temperature: number
+    }> = []
+
+    let taskIndex = 0
+    for (const segment of script.segments) {
+      // Split long segments at punctuation (max 272 chars)
+      const textChunks = splitAtPunctuation(segment.text, 272)
+
+      for (const chunk of textChunks) {
+        synthesisTasks.push({
+          text: chunk,
+          audio_path: path.join(
+            outputDir,
+            `segment_${taskIndex.toString().padStart(4, '0')}.wav`
+          ),
+          voice_name: segment.speaker === 'host' ? hostVoice : guestVoice,
+          temperature: 0.7
+        })
+        taskIndex++
+      }
+    }
 
     // Batch synthesize all segments at once (EFFICIENT!)
     await chatterbox.synthesizeSpeechToFiles(synthesisTasks)
