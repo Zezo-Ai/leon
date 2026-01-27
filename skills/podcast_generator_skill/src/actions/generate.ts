@@ -29,58 +29,6 @@ interface PodcastScript {
   segments: PodcastSegment[]
 }
 
-/**
- * Split text at punctuation boundaries to ensure no segment exceeds max characters
- * @param text The text to split
- * @param maxChars Maximum characters per segment (default: 272)
- * @returns Array of text chunks split at punctuation
- */
-function splitAtPunctuation(text: string, maxChars: number = 272): string[] {
-  if (text.length <= maxChars) {
-    return [text]
-  }
-
-  const chunks: string[] = []
-  let remaining = text
-
-  while (remaining.length > maxChars) {
-    // Find the last punctuation mark before maxChars
-    const segment = remaining.substring(0, maxChars)
-
-    // Look for punctuation marks in reverse order
-    const punctuationRegex = /[.!?;:,]\s/g
-    let lastPunctuationIndex = -1
-    let match: RegExpExecArray | null
-
-    while ((match = punctuationRegex.exec(segment)) !== null) {
-      lastPunctuationIndex = match.index + 1 // Include the punctuation
-    }
-
-    if (lastPunctuationIndex > 0) {
-      // Split at the punctuation
-      chunks.push(remaining.substring(0, lastPunctuationIndex).trim())
-      remaining = remaining.substring(lastPunctuationIndex).trim()
-    } else {
-      // No punctuation found, force split at last space
-      const lastSpaceIndex = segment.lastIndexOf(' ')
-      if (lastSpaceIndex > 0) {
-        chunks.push(remaining.substring(0, lastSpaceIndex).trim())
-        remaining = remaining.substring(lastSpaceIndex).trim()
-      } else {
-        // No space either, force split at maxChars
-        chunks.push(remaining.substring(0, maxChars).trim())
-        remaining = remaining.substring(maxChars).trim()
-      }
-    }
-  }
-
-  if (remaining.length > 0) {
-    chunks.push(remaining.trim())
-  }
-
-  return chunks
-}
-
 export const run: ActionFunction = async function (
   _params,
   paramsHelper: ParamsHelper
@@ -112,7 +60,8 @@ export const run: ActionFunction = async function (
     | string
     | undefined
   const scriptModel =
-    ((await settings.get('script_model')) as string) || 'gemini-2.5-flash'
+    ((await settings.get('script_model')) as string) ||
+    'google/gemini-3-flash-preview'
   const hostVoice =
     ((await settings.get('host_voice')) as string) || 'default_female'
   const guestVoice =
@@ -181,6 +130,9 @@ REQUIREMENTS:
 - Include transitions, reactions, and natural speech patterns
 - Make it educational but entertaining
 - Alternate between host and guest naturally
+- Keep each segment's text under 250 characters to avoid issues with text-to-speech synthesis
+
+IMPORTANT: Generate valid JSON only. Do not include any explanations or markdown code blocks.
 
 Generate the script as a JSON object with this structure:
 {
@@ -213,7 +165,9 @@ Generate the script as a JSON object with this structure:
                 },
                 text: {
                   type: 'string',
-                  description: 'What the speaker says'
+                  description:
+                    'What the speaker says (keep under 250 characters)',
+                  maxLength: 250
                 }
               },
               required: ['speaker', 'text'],
@@ -231,7 +185,7 @@ Generate the script as a JSON object with this structure:
       json_schema: scriptSchema,
       model: scriptModel,
       temperature: 0.8,
-      max_tokens: targetWordCount * 2 // Allow enough tokens
+      max_tokens: targetWordCount * 3 // Increased to prevent truncation
     })
 
     if (!scriptResult.success || !scriptResult.data) {
@@ -256,7 +210,7 @@ Generate the script as a JSON object with this structure:
       `${topic.replace(/[^a-z0-9]/gi, '_')}_podcast.wav`
     )
 
-    // Prepare batch synthesis tasks, splitting long segments at punctuation
+    // Prepare batch synthesis tasks (chatterbox automatically splits long text)
     const synthesisTasks: Array<{
       text: string
       audio_path: string
@@ -264,34 +218,32 @@ Generate the script as a JSON object with this structure:
       temperature: number
     }> = []
 
-    let taskIndex = 0
-    for (const segment of script.segments) {
-      // Split long segments at punctuation (max 272 chars)
-      const textChunks = splitAtPunctuation(segment.text, 272)
+    for (let i = 0; i < script.segments.length; i += 1) {
+      const segment = script.segments[i]
+      if (!segment) continue
 
-      for (const chunk of textChunks) {
-        synthesisTasks.push({
-          text: chunk,
-          audio_path: path.join(
-            outputDir,
-            `segment_${taskIndex.toString().padStart(4, '0')}.wav`
-          ),
-          voice_name: segment.speaker === 'host' ? hostVoice : guestVoice,
-          temperature: 0.7
-        })
-        taskIndex++
-      }
+      synthesisTasks.push({
+        text: segment.text, // Chatterbox automatically splits if >272 chars
+        audio_path: path.join(
+          outputDir,
+          `segment_${i.toString().padStart(4, '0')}.wav`
+        ),
+        voice_name: segment.speaker === 'host' ? hostVoice : guestVoice,
+        temperature: 0.7
+      })
     }
 
     // Batch synthesize all segments at once (EFFICIENT!)
-    await chatterbox.synthesizeSpeechToFiles(synthesisTasks)
+    // Chatterbox automatically handles text splitting for long segments
+    const processedTasks =
+      await chatterbox.synthesizeSpeechToFiles(synthesisTasks)
 
     // Step 4: Merge all audio segments into final podcast
     const ffmpeg = new FfmpegTool()
     const ffprobe = new FfprobeTool()
 
-    // Get all segment paths in order
-    const segmentPaths = synthesisTasks.map((task) => task.audio_path)
+    // Get all generated segment paths (including auto-split parts)
+    const segmentPaths = processedTasks.map((task) => task.audio_path)
 
     // Calculate total duration by measuring each segment
     let totalDurationMs = 0

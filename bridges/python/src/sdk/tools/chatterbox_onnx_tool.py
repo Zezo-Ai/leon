@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import tempfile
 from typing import Optional, Union, List, TypedDict
 
@@ -9,6 +10,63 @@ from ..utils import get_platform_name
 from ...constants import CUDA_RUNTIME_PATH
 
 MODEL_NAME = 'chatterbox-multilingual-onnx'
+DEFAULT_MAX_CHARS = 272  # Character limit to avoid hallucination
+
+
+def split_text_at_punctuation(text: str, max_chars: int = DEFAULT_MAX_CHARS) -> List[str]:
+    """
+    Split text at natural punctuation boundaries to avoid hallucination.
+    
+    This function ensures no text segment exceeds max_chars by breaking at
+    punctuation marks when possible, falling back to spaces or forced splits.
+    
+    Args:
+        text: The text to split
+        max_chars: Maximum characters per segment (default: 272)
+        
+    Returns:
+        List of text chunks split at natural boundaries
+    """
+    text = text.strip()
+    if len(text) <= max_chars:
+        return [text]
+    
+    chunks = []
+    remaining = text
+    
+    while len(remaining) > max_chars:
+        # Get segment up to max_chars
+        segment = remaining[:max_chars + 1]
+        
+        # Look for punctuation followed by space (natural break)
+        punctuation_pattern = re.compile(r'[.!?,;:]\s')
+        matches = list(punctuation_pattern.finditer(segment))
+        
+        if matches:
+            # Use the last punctuation match within max_chars
+            last_match = matches[-1]
+            break_point = last_match.end() - 1  # Don't include the space after punctuation
+            
+            # Check if it's in a reasonable position (latter half)
+            if break_point > max_chars * 0.5:
+                chunks.append(remaining[:break_point].strip())
+                remaining = remaining[break_point:].strip()
+                continue
+        
+        # No good punctuation found, look for last space
+        last_space = segment[:max_chars].rfind(' ')
+        if last_space > max_chars * 0.3:
+            chunks.append(remaining[:last_space].strip())
+            remaining = remaining[last_space:].strip()
+        else:
+            # Force split at max_chars
+            chunks.append(remaining[:max_chars].strip())
+            remaining = remaining[max_chars:].strip()
+    
+    if remaining:
+        chunks.append(remaining.strip())
+    
+    return chunks
 
 
 class SynthesisTask(TypedDict, total=False):
@@ -22,6 +80,8 @@ class SynthesisTask(TypedDict, total=False):
     cfg_strength: Optional[float]
     exaggeration: Optional[float]
     temperature: Optional[float]
+    # Control automatic text splitting (default: True)
+    auto_split: Optional[bool]
 
 
 class ChatterboxONNXTool(BaseTool):
@@ -54,9 +114,13 @@ class ChatterboxONNXTool(BaseTool):
         self,
         tasks: Union[SynthesisTask, List[SynthesisTask]],
         cuda_runtime_path: Optional[str] = None
-    ) -> None:
+    ) -> List[dict]:
         """
         Synthesize speech from text using Chatterbox ONNX
+        
+        By default, automatically splits long text (>272 chars) at punctuation boundaries
+        to prevent hallucination. Split segments generate separate audio files with
+        _part_N suffixes (e.g., output_part_0.wav, output_part_1.wav).
 
         Args:
             tasks: A single synthesis task or a list of synthesis tasks.
@@ -69,14 +133,48 @@ class ChatterboxONNXTool(BaseTool):
                    - cfg_strength: Optional classifier-free guidance strength (default: 0.5)
                    - exaggeration: Optional exaggeration factor (default: 0.5)
                    - temperature: Optional temperature for sampling (controls randomness)
+                   - auto_split: Optional flag to enable/disable automatic text splitting (default: True)
             cuda_runtime_path: Optional path to CUDA runtime for GPU acceleration (auto-detected if not provided)
 
         Returns:
-            None
+            List of processed tasks (may include split tasks with _part_N suffixes)
         """
         try:
             # Normalize tasks to list
             task_list = tasks if isinstance(tasks, list) else [tasks]
+            
+            # Process tasks: split long text into multiple tasks with _part_N suffixes
+            tasks_to_synthesize = []
+            
+            for task in task_list:
+                auto_split = task.get('auto_split', True)  # Default: enabled
+                text = task['text'].strip()
+                max_chars = DEFAULT_MAX_CHARS
+                
+                # If auto_split disabled or text is short, pass through as-is
+                if not auto_split or len(text) <= max_chars:
+                    clean_task = {k: v for k, v in task.items() if k != 'auto_split'}
+                    tasks_to_synthesize.append(clean_task)
+                    continue
+                
+                # Split long text at punctuation boundaries
+                text_chunks = split_text_at_punctuation(text, max_chars)
+                
+                # If only one chunk after splitting, no need for special handling
+                if len(text_chunks) == 1:
+                    clean_task = {k: v for k, v in task.items() if k != 'auto_split'}
+                    tasks_to_synthesize.append(clean_task)
+                    continue
+                
+                # Multiple chunks: create separate tasks with _part_N suffixes
+                audio_path = task['audio_path']
+                base_path, ext = os.path.splitext(audio_path)
+                
+                for i, chunk in enumerate(text_chunks):
+                    chunk_task = {k: v for k, v in task.items() if k not in ['text', 'audio_path', 'auto_split']}
+                    chunk_task['text'] = chunk
+                    chunk_task['audio_path'] = f"{base_path}_part_{i}{ext}"
+                    tasks_to_synthesize.append(chunk_task)
 
             # Get model path using the generic resource system
             model_path = self.get_resource_path(MODEL_NAME)
@@ -89,7 +187,7 @@ class ChatterboxONNXTool(BaseTool):
                 encoding='utf-8'
             ) as temp_file:
                 json_file_path = temp_file.name
-                json.dump(task_list, temp_file, indent=2, ensure_ascii=False)
+                json.dump(tasks_to_synthesize, temp_file, indent=2, ensure_ascii=False)
 
             try:
                 args = [
@@ -111,8 +209,12 @@ class ChatterboxONNXTool(BaseTool):
                     args=args,
                     options={'sync': True}
                 ))
+                
+                # Return the processed tasks so caller knows which files were created
+                return tasks_to_synthesize
+                        
             finally:
-                # Clean up temporary file
+                # Clean up temporary JSON file
                 if os.path.exists(json_file_path):
                     os.remove(json_file_path)
 

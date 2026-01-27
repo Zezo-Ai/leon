@@ -1,7 +1,7 @@
 {
   "research_grok_api_key": "xai-...",
   "script_openrouter_api_key": "sk-or-v1-...",
-  "script_model": "gemini-2.5-flash",
+  "script_model": "google/gemini-3-flash-preview",
   "host_voice": "default_female",
   "guest_voice": "default_male"
 }

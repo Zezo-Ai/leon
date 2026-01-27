@@ -373,6 +373,7 @@ export const run: ActionFunction = async function (
       exaggeration: number
       cfg_strength: number
       temperature: number
+      auto_split: boolean
     }> = []
     const validGroupTasks: GroupTask[] = []
 
@@ -428,7 +429,8 @@ export const run: ActionFunction = async function (
         speaker_reference_path: speakerRef.reference1_path,
         exaggeration: 0.4,
         cfg_strength: 0.1,
-        temperature: 0.5
+        temperature: 0.5,
+        auto_split: false // Video translator handles its own grouping logic
       })
     }
 
@@ -445,6 +447,7 @@ export const run: ActionFunction = async function (
       try {
         if (provider === 'chatterbox_onnx') {
           const chatterboxTool = new ChatterboxONNXTool()
+          // Note: auto_split is disabled for video translator, so processedTasks === synthesisTasks
           await chatterboxTool.synthesizeSpeechToFiles(synthesisTasks)
         } else {
           throw new Error(`Unsupported speech synthesis provider: ${provider}`)

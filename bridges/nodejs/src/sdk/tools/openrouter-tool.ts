@@ -330,8 +330,8 @@ export default class OpenRouterTool extends Tool {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const content = (response.data as any).choices[0].message.content
-      // With structured outputs, content is already valid JSON
-      const parsedData = JSON.parse(content)
+      const parsedData =
+        typeof content === 'string' ? JSON.parse(content) : content
 
       return {
         success: true,
@@ -339,10 +339,19 @@ export default class OpenRouterTool extends Tool {
         model_used: response.model_used
       }
     } catch (error: unknown) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const content = (response.data as any).choices[0]?.message?.content
+
       if (error instanceof SyntaxError) {
+        // Show raw response preview to help debug JSON parsing errors
+        const preview =
+          typeof content === 'string'
+            ? content.substring(0, 500)
+            : JSON.stringify(content ?? 'null').substring(0, 500)
+
         return {
           success: false,
-          error: `Failed to parse JSON response: ${error.message}`
+          error: `Failed to parse JSON response: ${error.message}. Response preview: ${preview}`
         }
       } else {
         return {
