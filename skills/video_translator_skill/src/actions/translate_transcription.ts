@@ -199,8 +199,11 @@ Do not include any explanations or additional text.`
         }
 
         if (translatedContent) {
+          const originalSegment = translatedSegments[globalIdx]
           translatedSegments[globalIdx] = {
-            ...translatedSegments[globalIdx],
+            from: originalSegment?.from || 0,
+            to: originalSegment?.to || 0,
+            speaker: originalSegment?.speaker || null,
             text: translatedContent
           }
         }
