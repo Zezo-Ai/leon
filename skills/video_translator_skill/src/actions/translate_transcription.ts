@@ -45,7 +45,7 @@ export const run: ActionFunction = async function (
     )) as string | undefined
     const openrouterModel = ((await settings.get(
       'translation_openrouter_model'
-    )) || 'gemini-2.5-flash') as string
+    )) || 'google/gemini-3-flash-preview') as string
     const maxTokens = ((await settings.get(
       'translation_max_tokens_per_request'
     )) || 2_000) as number
