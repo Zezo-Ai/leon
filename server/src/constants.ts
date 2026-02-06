@@ -52,24 +52,26 @@ export const SERVER_CORE_PATH = path.join(SERVER_PATH, 'core')
 export const LEON_FILE_PATH = path.join(process.cwd(), 'leon.json')
 
 /**
- * CUDA Runtime paths and versions
+ * NVIDIA paths and versions
  */
-export const CUDA_RUNTIME_PATH = path.join(BIN_PATH, 'cuda')
-export const CUDA_CUBLAS_PATH = path.join(CUDA_RUNTIME_PATH, 'cublas')
-export const CUDA_CUDNN_PATH = path.join(CUDA_RUNTIME_PATH, 'cudnn')
-export const CUDA_VERSIONS_PATH = path.join(CUDA_RUNTIME_PATH, 'versions.json')
-export const CUDA_CUBLAS_MANIFEST_PATH = path.join(
-  CUDA_CUBLAS_PATH,
+export const NVIDIA_LIBS_PATH = path.join(BIN_PATH, 'nvidia')
+export const NVIDIA_CUBLAS_PATH = path.join(NVIDIA_LIBS_PATH, 'cublas')
+export const NVIDIA_CUDNN_PATH = path.join(NVIDIA_LIBS_PATH, 'cudnn')
+export const NVIDIA_VERSIONS_PATH = path.join(NVIDIA_LIBS_PATH, 'versions.json')
+export const NVIDIA_CUBLAS_MANIFEST_PATH = path.join(
+  NVIDIA_CUBLAS_PATH,
   'manifest.json'
 )
-export const CUDA_CUDNN_MANIFEST_PATH = path.join(
-  CUDA_CUDNN_PATH,
+export const NVIDIA_CUDNN_MANIFEST_PATH = path.join(
+  NVIDIA_CUDNN_PATH,
   'manifest.json'
 )
-const CUDA_VERSIONS = JSON.parse(fs.readFileSync(CUDA_VERSIONS_PATH, 'utf8'))
-export const CUDA_VERSION = CUDA_VERSIONS.cuda
-export const CUDA_CUDNN_VERSION = CUDA_VERSIONS.cudnn
-export const CUDA_CUBLAS_VERSION = CUDA_VERSIONS.cublas
+const NVIDIA_VERSIONS = JSON.parse(
+  fs.readFileSync(NVIDIA_VERSIONS_PATH, 'utf8')
+)
+export const NVIDIA_CUDA_VERSION = NVIDIA_VERSIONS.cuda
+export const NVIDIA_CUDNN_VERSION = NVIDIA_VERSIONS.cudnn
+export const NVIDIA_CUBLAS_VERSION = NVIDIA_VERSIONS.cublas
 
 /**
  * Binaries / distribution

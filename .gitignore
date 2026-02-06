@@ -12,7 +12,7 @@ logs/*
 core/config/**/*.json
 bin/coqui/*
 bin/flite/*
-bin/cuda/*
+bin/nvidia/*
 
 package-lock.json
 *.pyc

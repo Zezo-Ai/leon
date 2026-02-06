@@ -30,7 +30,7 @@ export const INTENT_OBJECT: IntentObject = JSON.parse(
   fs.readFileSync(INTENT_OBJ_FILE_PATH as string, 'utf8')
 )
 
-export const CUDA_RUNTIME_PATH = path.join(BIN_PATH, 'cuda')
+export const NVIDIA_LIBS_PATH = path.join(BIN_PATH, 'nvidia')
 
 export const SKILLS_PATH = path.join(process.cwd(), 'skills')
 export const SKILL_PATH = path.join(SKILLS_PATH, INTENT_OBJECT.skill_name)

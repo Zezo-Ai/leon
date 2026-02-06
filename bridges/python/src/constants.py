@@ -22,7 +22,7 @@ BRIDGES_PATH = os.path.join(
     'bridges'
 )
 
-CUDA_RUNTIME_PATH = os.path.join(BIN_PATH, 'cuda')
+NVIDIA_LIBS_PATH = os.path.join(BIN_PATH, 'nvidia')
 
 TOOLKITS_PATH = os.path.join(BRIDGES_PATH, 'toolkits')
 

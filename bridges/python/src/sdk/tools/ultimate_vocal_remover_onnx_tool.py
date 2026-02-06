@@ -6,7 +6,7 @@ from typing import Optional, Union, List, TypedDict
 from ..base_tool import BaseTool, ExecuteCommandOptions
 from ..toolkit_config import ToolkitConfig
 from ..utils import get_platform_name
-from ...constants import CUDA_RUNTIME_PATH
+from ...constants import NVIDIA_LIBS_PATH
 
 MODEL_NAME = 'ultimate-vocal-remover-onnx'
 
@@ -92,7 +92,7 @@ class UltimateVocalRemoverONNXTool(BaseTool):
                 # Auto-detect CUDA runtime path if not provided
                 platform_name = get_platform_name()
                 should_use_cuda = platform_name in ['linux-x86_64', 'win-amd64']
-                final_cuda_runtime_path = cuda_runtime_path if cuda_runtime_path is not None else (CUDA_RUNTIME_PATH if should_use_cuda else None)
+                final_cuda_runtime_path = cuda_runtime_path if cuda_runtime_path is not None else (NVIDIA_LIBS_PATH if should_use_cuda else None)
 
                 if final_cuda_runtime_path:
                     args.extend(['--cuda_runtime_path', final_cuda_runtime_path])

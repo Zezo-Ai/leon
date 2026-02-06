@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { CUDA_RUNTIME_PATH } from '@bridge/constants'
+import { NVIDIA_LIBS_PATH } from '@bridge/constants'
 import { Tool } from '@sdk/base-tool'
 import { ToolkitConfig } from '@sdk/toolkit-config'
 import { getPlatformName } from '@sdk/utils'
@@ -86,7 +86,7 @@ export default class UltimateVocalRemoverONNXTool extends Tool {
       const shouldUseCuda =
         platformName === 'linux-x86_64' || platformName === 'win-amd64'
       const finalCudaRuntimePath =
-        cudaRuntimePath ?? (shouldUseCuda ? CUDA_RUNTIME_PATH : undefined)
+        cudaRuntimePath ?? (shouldUseCuda ? NVIDIA_LIBS_PATH : undefined)
 
       if (finalCudaRuntimePath) {
         args.push('--cuda_runtime_path', finalCudaRuntimePath)

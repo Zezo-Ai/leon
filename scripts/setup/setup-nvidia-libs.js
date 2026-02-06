@@ -1,14 +1,15 @@
 import fs from 'node:fs'
+import path from 'node:path'
 
 import {
-  CUDA_RUNTIME_PATH,
-  CUDA_CUBLAS_PATH,
-  CUDA_CUDNN_PATH,
-  CUDA_CUBLAS_MANIFEST_PATH,
-  CUDA_CUDNN_MANIFEST_PATH,
-  CUDA_VERSION,
-  CUDA_CUBLAS_VERSION,
-  CUDA_CUDNN_VERSION
+  NVIDIA_LIBS_PATH,
+  NVIDIA_CUBLAS_PATH,
+  NVIDIA_CUDNN_PATH,
+  NVIDIA_CUBLAS_MANIFEST_PATH,
+  NVIDIA_CUDNN_MANIFEST_PATH,
+  NVIDIA_CUDA_VERSION,
+  NVIDIA_CUBLAS_VERSION,
+  NVIDIA_CUDNN_VERSION
 } from '@/constants'
 import { FileHelper } from '@/helpers/file-helper'
 import { SystemHelper } from '@/helpers/system-helper'
@@ -50,17 +51,17 @@ function readManifest(manifestPath) {
 }
 
 /**
- * Get download URL for CUDA library
+ * Get download URL for NVIDIA libraries
  */
-function getCUDADownloadURL(library, version) {
+function getNVIDIADownloadURL(library, version) {
   const ext = SystemHelper.isWindows() ? 'zip' : 'tar.xz'
   const arch = mapToNvidiaArch(CPU_ARCH)
 
-  // NVIDIA CDN URLs for CUDA libraries
+  // NVIDIA CDN URLs for CUDA libraries and more
   if (library === 'cublas') {
     return `https://developer.download.nvidia.com/compute/cuda/redist/libcublas/${OS_TYPE}-${arch}/libcublas-${OS_TYPE}-${arch}-${version}-archive.${ext}`
   } else if (library === 'cudnn') {
-    return `https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/${OS_TYPE}-${arch}/cudnn-${OS_TYPE}-${arch}-${version}_cuda${CUDA_VERSION}-archive.${ext}`
+    return `https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/${OS_TYPE}-${arch}/cudnn-${OS_TYPE}-${arch}-${version}_cuda${NVIDIA_CUDA_VERSION}-archive.${ext}`
   }
 
   throw new Error(`Unknown library: ${library}`)
@@ -85,7 +86,10 @@ async function installCUDALibrary(
 
   if (!manifest || manifest.version !== requiredVersion) {
     const ext = SystemHelper.isWindows() ? 'zip' : 'tar.xz'
-    const archivePath = `${CUDA_RUNTIME_PATH}/${library}-${requiredVersion}.${ext}`
+    const archivePath = path.join(
+      NVIDIA_LIBS_PATH,
+      `${library}-${requiredVersion}.${ext}`
+    )
 
     // Clean up old version
     await fs.promises.rm(targetPath, { recursive: true, force: true })
@@ -95,7 +99,7 @@ async function installCUDALibrary(
     await fs.promises.mkdir(targetPath, { recursive: true })
 
     try {
-      const downloadURL = getCUDADownloadURL(library, requiredVersion)
+      const downloadURL = getNVIDIADownloadURL(library, requiredVersion)
 
       LogHelper.info(`Downloading ${library}...`)
 
@@ -147,7 +151,7 @@ async function installCUDALibrary(
 /**
  * Main setup function
  */
-async function setupCUDARuntime() {
+async function setupNvidiaLibs() {
   // Skip on macOS since there is no CUDA involved
   if (SystemHelper.isMacOS()) {
     return
@@ -173,24 +177,24 @@ async function setupCUDARuntime() {
     // Install/update cuBLAS
     await installCUDALibrary(
       'cublas',
-      CUDA_CUBLAS_VERSION,
-      CUDA_CUBLAS_PATH,
-      CUDA_CUBLAS_MANIFEST_PATH
+      NVIDIA_CUBLAS_VERSION,
+      NVIDIA_CUBLAS_PATH,
+      NVIDIA_CUBLAS_MANIFEST_PATH
     )
 
     // Install/update cuDNN
     await installCUDALibrary(
       'cudnn',
-      CUDA_CUDNN_VERSION,
-      CUDA_CUDNN_PATH,
-      CUDA_CUDNN_MANIFEST_PATH
+      NVIDIA_CUDNN_VERSION,
+      NVIDIA_CUDNN_PATH,
+      NVIDIA_CUDNN_MANIFEST_PATH
     )
 
-    LogHelper.success(`CUDA runtime setup complete in: ${CUDA_RUNTIME_PATH}`)
+    LogHelper.success(`CUDA runtime setup complete in: ${NVIDIA_LIBS_PATH}`)
   } catch (error) {
     LogHelper.error(`CUDA runtime setup failed: ${error}`)
     process.exit(1)
   }
 }
 
-export default setupCUDARuntime
+export default setupNvidiaLibs

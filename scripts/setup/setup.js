@@ -10,7 +10,7 @@ import setupDotenv from './setup-dotenv'
 import setupCore from './setup-core'
 import setupSkills from './setup-skills/setup-skills'
 import setupLLM from './setup-llm'
-import setupCUDARuntime from './setup-cuda-runtime.js'
+import setupNVIDIALibs from './setup-nvidia-libs.js'
 import setupBinaries from './setup-binaries'
 import setupTCPServerModels from './setup-tcp-server-models'
 import createInstanceID from './create-instance-id'
@@ -30,7 +30,7 @@ import setFfprobePermissions from './set-ffprobe-permissions'
     LoaderHelper.stop()
     if (!IS_GITHUB_ACTIONS) {
       await setupLLM()
-      await setupCUDARuntime()
+      await setupNVIDIALibs()
     } else {
       LogHelper.info('Skipping LLM and CUDA setups because it is running in CI')
     }
