@@ -57,6 +57,8 @@ export const LEON_FILE_PATH = path.join(process.cwd(), 'leon.json')
 export const NVIDIA_LIBS_PATH = path.join(BIN_PATH, 'nvidia')
 export const NVIDIA_CUBLAS_PATH = path.join(NVIDIA_LIBS_PATH, 'cublas')
 export const NVIDIA_CUDNN_PATH = path.join(NVIDIA_LIBS_PATH, 'cudnn')
+export const NVIDIA_CUSPARSE_PATH = path.join(NVIDIA_LIBS_PATH, 'cusparse')
+export const NVIDIA_NCCL_PATH = path.join(NVIDIA_LIBS_PATH, 'nccl')
 export const NVIDIA_VERSIONS_PATH = path.join(NVIDIA_LIBS_PATH, 'versions.json')
 export const NVIDIA_CUBLAS_MANIFEST_PATH = path.join(
   NVIDIA_CUBLAS_PATH,
@@ -66,12 +68,22 @@ export const NVIDIA_CUDNN_MANIFEST_PATH = path.join(
   NVIDIA_CUDNN_PATH,
   'manifest.json'
 )
+export const NVIDIA_CUSPARSE_MANIFEST_PATH = path.join(
+  NVIDIA_CUSPARSE_PATH,
+  'manifest.json'
+)
+export const NVIDIA_NCCL_MANIFEST_PATH = path.join(
+  NVIDIA_NCCL_PATH,
+  'manifest.json'
+)
 const NVIDIA_VERSIONS = JSON.parse(
   fs.readFileSync(NVIDIA_VERSIONS_PATH, 'utf8')
 )
 export const NVIDIA_CUDA_VERSION = NVIDIA_VERSIONS.cuda
 export const NVIDIA_CUDNN_VERSION = NVIDIA_VERSIONS.cudnn
 export const NVIDIA_CUBLAS_VERSION = NVIDIA_VERSIONS.cublas
+export const NVIDIA_CUSPARSE_VERSION = NVIDIA_VERSIONS.cusparse
+export const NVIDIA_NCCL_VERSION = NVIDIA_VERSIONS.nccl
 
 /**
  * Binaries / distribution

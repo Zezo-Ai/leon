@@ -5,11 +5,17 @@ import {
   NVIDIA_LIBS_PATH,
   NVIDIA_CUBLAS_PATH,
   NVIDIA_CUDNN_PATH,
+  NVIDIA_CUSPARSE_PATH,
+  NVIDIA_NCCL_PATH,
   NVIDIA_CUBLAS_MANIFEST_PATH,
   NVIDIA_CUDNN_MANIFEST_PATH,
+  NVIDIA_CUSPARSE_MANIFEST_PATH,
+  NVIDIA_NCCL_MANIFEST_PATH,
   NVIDIA_CUDA_VERSION,
   NVIDIA_CUBLAS_VERSION,
-  NVIDIA_CUDNN_VERSION
+  NVIDIA_CUDNN_VERSION,
+  NVIDIA_CUSPARSE_VERSION,
+  NVIDIA_NCCL_VERSION
 } from '@/constants'
 import { FileHelper } from '@/helpers/file-helper'
 import { SystemHelper } from '@/helpers/system-helper'
@@ -62,6 +68,15 @@ function getNVIDIADownloadURL(library, version) {
     return `https://developer.download.nvidia.com/compute/cuda/redist/libcublas/${OS_TYPE}-${arch}/libcublas-${OS_TYPE}-${arch}-${version}-archive.${ext}`
   } else if (library === 'cudnn') {
     return `https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/${OS_TYPE}-${arch}/cudnn-${OS_TYPE}-${arch}-${version}_cuda${NVIDIA_CUDA_VERSION}-archive.${ext}`
+  } else if (library === 'cusparse') {
+    return `https://developer.download.nvidia.com/compute/cusparselt/redist/libcusparse_lt/${OS_TYPE}-${arch}/libcusparse_lt-${OS_TYPE}-${arch}-${version}_cuda${NVIDIA_CUDA_VERSION}-archive.${ext}`
+  } else if (library === 'nccl') {
+    // NCCL is only available on Linux x86_64
+    if (!SystemHelper.isLinux() || arch !== 'x86_64') {
+      throw new Error('NCCL is only available on Linux x86_64')
+    }
+
+    return `https://developer.download.nvidia.com/compute/nccl/redist/nccl/${OS_TYPE}-${arch}/nccl-${OS_TYPE}-${arch}-${version}-archive.${ext}`
   }
 
   throw new Error(`Unknown library: ${library}`)
@@ -189,6 +204,34 @@ async function setupNvidiaLibs() {
       NVIDIA_CUDNN_PATH,
       NVIDIA_CUDNN_MANIFEST_PATH
     )
+
+    // Install/update cuSPARSE-Lt (Linux only, both x86_64 and aarch64)
+    if (SystemHelper.isLinux()) {
+      try {
+        await installCUDALibrary(
+          'cusparse',
+          NVIDIA_CUSPARSE_VERSION,
+          NVIDIA_CUSPARSE_PATH,
+          NVIDIA_CUSPARSE_MANIFEST_PATH
+        )
+      } catch (error) {
+        LogHelper.warning(`cuSPARSE-Lt installation skipped: ${error.message}`)
+      }
+    }
+
+    // Install/update NCCL (Linux x86_64 only)
+    if (SystemHelper.isLinux() && mapToNvidiaArch(CPU_ARCH) === 'x86_64') {
+      try {
+        await installCUDALibrary(
+          'nccl',
+          NVIDIA_NCCL_VERSION,
+          NVIDIA_NCCL_PATH,
+          NVIDIA_NCCL_MANIFEST_PATH
+        )
+      } catch (error) {
+        LogHelper.warning(`NCCL installation skipped: ${error.message}`)
+      }
+    }
 
     LogHelper.success(`CUDA runtime setup complete in: ${NVIDIA_LIBS_PATH}`)
   } catch (error) {
