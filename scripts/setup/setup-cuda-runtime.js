@@ -14,7 +14,23 @@ import { FileHelper } from '@/helpers/file-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 import { LogHelper } from '@/helpers/log-helper'
 
-const { type: OS_TYPE } = SystemHelper.getInformation()
+const { type: OS_TYPE, cpuArchitecture: CPU_ARCH } =
+  SystemHelper.getInformation()
+
+/**
+ * Map CPU architecture to NVIDIA's architecture naming convention
+ */
+function mapToNvidiaArch(cpuArch) {
+  // Map Node.js process.arch values to NVIDIA naming
+  if (cpuArch === 'arm64' || cpuArch === 'aarch64') {
+    return 'aarch64'
+  }
+  if (cpuArch === 'x64' || cpuArch === 'x86_64') {
+    return 'x86_64'
+  }
+
+  return 'x86_64'
+}
 
 /**
  * Read manifest file to get installed version
@@ -38,12 +54,13 @@ function readManifest(manifestPath) {
  */
 function getCUDADownloadURL(library, version) {
   const ext = SystemHelper.isWindows() ? 'zip' : 'tar.xz'
+  const arch = mapToNvidiaArch(CPU_ARCH)
 
   // NVIDIA CDN URLs for CUDA libraries
   if (library === 'cublas') {
-    return `https://developer.download.nvidia.com/compute/cuda/redist/libcublas/${OS_TYPE}-x86_64/libcublas-${OS_TYPE}-x86_64-${version}-archive.${ext}`
+    return `https://developer.download.nvidia.com/compute/cuda/redist/libcublas/${OS_TYPE}-${arch}/libcublas-${OS_TYPE}-${arch}-${version}-archive.${ext}`
   } else if (library === 'cudnn') {
-    return `https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/${OS_TYPE}-x86_64/cudnn-${OS_TYPE}-x86_64-${version}_cuda${CUDA_VERSION}-archive.${ext}`
+    return `https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/${OS_TYPE}-${arch}/cudnn-${OS_TYPE}-${arch}-${version}_cuda${CUDA_VERSION}-archive.${ext}`
   }
 
   throw new Error(`Unknown library: ${library}`)
