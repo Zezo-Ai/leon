@@ -2,6 +2,7 @@
   "transcription_provider": "faster_whisper",
   "faster_whisper_device": "auto",
   "faster_whisper_cpu_threads": 4,
+  "qwen3_asr_device": "auto",
   "openai_transcription_api_key": null,
   "openai_transcription_model": "gpt-4o-transcribe-diarize",
   "assemblyai_transcription_api_key": null,

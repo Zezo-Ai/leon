@@ -24,6 +24,9 @@ BRIDGES_PATH = os.path.join(
 
 NVIDIA_LIBS_PATH = os.path.join(BIN_PATH, 'nvidia')
 
+PYTORCH_PATH = os.path.join(BIN_PATH, 'pytorch')
+PYTORCH_TORCH_PATH = os.path.join(PYTORCH_PATH, 'torch')
+
 TOOLKITS_PATH = os.path.join(BRIDGES_PATH, 'toolkits')
 
 SKILL_PATH = os.path.join(

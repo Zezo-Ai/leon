@@ -6,6 +6,7 @@ import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
 import { Settings } from '@sdk/settings'
 import FasterWhisperTool from '@sdk/tools/faster_whisper-tool'
+import Qwen3ASRTool from '@sdk/tools/qwen3_asr-tool'
 import OpenAIAudioTool from '@sdk/tools/openai_audio-tool'
 import AssemblyAIAudioTool from '@sdk/tools/assemblyai_audio-tool'
 import ElevenLabsAudioTool from '@sdk/tools/elevenlabs_audio-tool'
@@ -14,11 +15,13 @@ import { formatFilePath } from '@sdk/utils'
 interface MusicAudioToolkitSkillSettings extends Record<string, unknown> {
   transcription_provider:
     | 'faster_whisper'
+    | 'qwen3_asr'
     | 'openai_audio'
     | 'assemblyai_audio'
     | 'elevenlabs_audio'
   faster_whisper_device?: 'auto' | 'cpu' | 'cuda'
   faster_whisper_cpu_threads?: number
+  qwen3_asr_device?: 'auto' | 'cpu' | 'cuda'
   openai_transcription_api_key?: string
   openai_transcription_model?: string
   assemblyai_transcription_api_key?: string
@@ -62,6 +65,8 @@ export const run: ActionFunction = async function (
     const fasterWhisperCPUThreads = (await settings.get(
       'faster_whisper_cpu_threads'
     )) as number | undefined
+    const qwen3ASRDevice = ((await settings.get('qwen3_asr_device')) ||
+      'auto') as NonNullable<MusicAudioToolkitSkillSettings['qwen3_asr_device']>
     const openaiAPIKey = (await settings.get(
       'openai_transcription_api_key'
     )) as string | undefined
@@ -112,6 +117,9 @@ export const run: ActionFunction = async function (
         fasterWhisperDevice,
         fasterWhisperCPUThreads
       )
+    } else if (provider === 'qwen3_asr') {
+      const tool = new Qwen3ASRTool()
+      await tool.transcribeToFile(audioPath, transcriptionPath, qwen3ASRDevice)
     } else if (provider === 'openai_audio') {
       const tool = new OpenAIAudioTool()
       const resolvedApiKey = openaiAPIKey || tool.apiKey

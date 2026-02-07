@@ -32,6 +32,9 @@ export const INTENT_OBJECT: IntentObject = JSON.parse(
 
 export const NVIDIA_LIBS_PATH = path.join(BIN_PATH, 'nvidia')
 
+export const PYTORCH_PATH = path.join(BIN_PATH, 'pytorch')
+export const PYTORCH_TORCH_PATH = path.join(PYTORCH_PATH, 'torch')
+
 export const SKILLS_PATH = path.join(process.cwd(), 'skills')
 export const SKILL_PATH = path.join(SKILLS_PATH, INTENT_OBJECT.skill_name)
 const SKILL_LOCALE_PATH = path.join(
