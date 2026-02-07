@@ -91,7 +91,7 @@ export class FileHelper {
     const basename = path.basename(archivePath).toLowerCase()
 
     try {
-      if (ext === '.zip') {
+      if (ext === '.zip' || ext === '.whl') {
         // Use unzip for .zip files (available on all platforms)
         execSync(`unzip -o -q "${archivePath}" -d "${targetPath}"`, {
           stdio: 'inherit'

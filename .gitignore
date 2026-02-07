@@ -13,6 +13,7 @@ core/config/**/*.json
 bin/coqui/*
 bin/flite/*
 bin/nvidia/*
+bin/pytorch/*
 
 package-lock.json
 *.pyc

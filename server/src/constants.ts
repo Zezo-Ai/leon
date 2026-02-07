@@ -52,7 +52,8 @@ export const SERVER_CORE_PATH = path.join(SERVER_PATH, 'core')
 export const LEON_FILE_PATH = path.join(process.cwd(), 'leon.json')
 
 /**
- * NVIDIA paths and versions
+ * NVIDIA paths and versions.
+ * Used as a common layer across tools
  */
 export const NVIDIA_LIBS_PATH = path.join(BIN_PATH, 'nvidia')
 export const NVIDIA_CUBLAS_PATH = path.join(NVIDIA_LIBS_PATH, 'cublas')
@@ -90,6 +91,22 @@ export const NVIDIA_CUBLAS_VERSION = NVIDIA_VERSIONS.cublas
 export const NVIDIA_CUSPARSE_VERSION = NVIDIA_VERSIONS.cusparse
 export const NVIDIA_NCCL_VERSION = NVIDIA_VERSIONS.nccl
 export const NVIDIA_NVSHMEM_VERSION = NVIDIA_VERSIONS.nvshmem
+
+/**
+ * PyTorch paths and versions.
+ * Used as a common layer across tools
+ */
+export const PYTORCH_PATH = path.join(BIN_PATH, 'pytorch')
+export const PYTORCH_TORCH_PATH = path.join(PYTORCH_PATH, 'torch')
+export const PYTORCH_VERSIONS_PATH = path.join(PYTORCH_PATH, 'versions.json')
+export const PYTORCH_MANIFEST_PATH = path.join(
+  PYTORCH_TORCH_PATH,
+  'manifest.json'
+)
+const PYTORCH_VERSIONS = JSON.parse(
+  fs.readFileSync(PYTORCH_VERSIONS_PATH, 'utf8')
+)
+export const PYTORCH_VERSION = PYTORCH_VERSIONS.torch
 
 /**
  * Binaries / distribution

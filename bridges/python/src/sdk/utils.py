@@ -266,7 +266,7 @@ def extract_archive(
     basename = os.path.basename(archive_path).lower()
     
     try:
-        if ext == '.zip':
+        if ext == '.zip' or ext == '.whl':
             # Use unzip for .zip files (available on all platforms)
             # -o: overwrite files without prompting
             # -q: quiet mode

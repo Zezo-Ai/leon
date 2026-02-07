@@ -11,6 +11,7 @@ import setupCore from './setup-core'
 import setupSkills from './setup-skills/setup-skills'
 import setupLLM from './setup-llm'
 import setupNVIDIALibs from './setup-nvidia-libs.js'
+import setupPyTorch from './setup-pytorch.js'
 import setupBinaries from './setup-binaries'
 import setupTCPServerModels from './setup-tcp-server-models'
 import createInstanceID from './create-instance-id'
@@ -31,8 +32,11 @@ import setFfprobePermissions from './set-ffprobe-permissions'
     if (!IS_GITHUB_ACTIONS) {
       await setupLLM()
       await setupNVIDIALibs()
+      await setupPyTorch()
     } else {
-      LogHelper.info('Skipping LLM and CUDA setups because it is running in CI')
+      LogHelper.info(
+        'Skipping LLM, NVIDIA, and PyTorch setups because it is running in CI'
+      )
     }
 
     await setupBinaries()

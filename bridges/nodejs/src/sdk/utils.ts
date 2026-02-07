@@ -230,7 +230,7 @@ export async function extractArchive(
   const basename = path.basename(archivePath).toLowerCase()
 
   try {
-    if (ext === '.zip') {
+    if (ext === '.zip' || ext === '.whl') {
       // Use unzip for .zip files (available on all platforms)
       // -o: overwrite files without prompting
       // -q: quiet mode
