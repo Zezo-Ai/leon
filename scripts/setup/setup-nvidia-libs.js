@@ -174,7 +174,7 @@ async function installNVIDIALibrary(
 /**
  * Main setup function
  */
-async function setupNvidiaLibs() {
+async function setupNVIDIALibs() {
   // Skip on macOS since there is no CUDA involved
   if (SystemHelper.isMacOS()) {
     return
@@ -262,4 +262,4 @@ async function setupNvidiaLibs() {
   }
 }
 
-export default setupNvidiaLibs
+export default setupNVIDIALibs

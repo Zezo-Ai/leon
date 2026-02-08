@@ -34,7 +34,8 @@ const TCP_SERVER_WARNINGS_TO_IGNORE = [
   'cls.seq_relationship.weight',
   'ALSA lib',
   'jack',
-  'server request channel'
+  'server request channel',
+  '[W:onnxruntime:Default'
 ]
 export function shouldIgnoreTCPServerError(error: string): boolean {
   return TCP_SERVER_WARNINGS_TO_IGNORE.some((warning) =>
