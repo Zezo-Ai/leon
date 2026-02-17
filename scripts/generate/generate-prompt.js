@@ -16,6 +16,14 @@ const TOOL_ALIAS_NAME = 'Qwen3-TTS'
 const TOOL_TS_FILE_NAME = 'qwen3_tts-tool.ts'
 const TOOL_PYTHON_FILE_NAME = 'qwen3_tts_tool.py'
 const TOOL_TOOLKIT_NAME = 'music_audio'
+const TOOL_DESCRIPTION = `${TOOL_ALIAS_NAME} is a tool designed to facilitate text-to-speech (TTS) and voice design using the Qwen3-TTS model. This tool allows owners to convert text into natural-sounding speech, with the option to clone voices for personalized voice design.`
+const TOOL_PURPOSE_REQUIREMENT = `The goal of this tool is to bind the functions of the CLI:
+- synthesize_speech
+- design_voice
+- custom_voice
+- design_then_synthesize
+
+It provides functionalities for text-to-speech (with voice cloning support) and voice design using the official Qwen3-TTS models.`
 
 const TEMPLATE_CONFIGS = {
   'create-tool': {
@@ -24,7 +32,9 @@ const TEMPLATE_CONFIGS = {
       '{TOOL_ALIAS_NAME}': TOOL_ALIAS_NAME,
       '{TOOL_TS_FILE_NAME}': TOOL_TS_FILE_NAME,
       '{TOOL_PYTHON_FILE_NAME}': TOOL_PYTHON_FILE_NAME,
-      '{TOOL_TOOLKIT_NAME}': TOOL_TOOLKIT_NAME
+      '{TOOL_TOOLKIT_NAME}': TOOL_TOOLKIT_NAME,
+      '{TOOL_DESCRIPTION}': TOOL_DESCRIPTION,
+      '{TOOL_PURPOSE_REQUIREMENT}': TOOL_PURPOSE_REQUIREMENT
     }
   },
   'create-skill': {

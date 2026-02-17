@@ -14,6 +14,7 @@ bin/coqui/*
 bin/flite/*
 bin/nvidia/*
 bin/pytorch/torch/*
+scripts/out/*.md
 
 package-lock.json
 *.pyc
