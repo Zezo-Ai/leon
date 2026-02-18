@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { ActionFunction, ActionParams } from '@sdk/types'
 import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
-import UltimateVocalRemoverONNXTool from '@sdk/tools/ultimate_vocal_remover_onnx-tool'
+import UltimateVocalRemoverONNXTool from '@sdk/tools/ultimate_vocal_remover_onnx'
 import { formatFilePath } from '@sdk/utils'
 
 export const run: ActionFunction = async function (

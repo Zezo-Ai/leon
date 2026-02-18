@@ -2,7 +2,7 @@ import type { ActionFunction, ActionParams } from '@sdk/types'
 import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
 import { Settings } from '@sdk/settings'
-import GrokTool from '@sdk/tools/grok-tool'
+import GrokTool from '@sdk/tools/grok'
 
 interface SearchSkillSettings extends Record<string, unknown> {
   search_provider?: string

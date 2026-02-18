@@ -2,10 +2,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import type { ActionFunction, ActionParams } from '@sdk/types'
-import type { TranscriptionOutput } from '@sdk/tools/schemas'
+import type { TranscriptionOutput } from '@sdk/tools/transcription-schema'
 import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
-import FfmpegTool from '@sdk/tools/ffmpeg-tool'
+import FfmpegTool from '@sdk/tools/ffmpeg'
 import { formatFilePath } from '@sdk/utils'
 
 interface SpeakerReference {

@@ -16,7 +16,7 @@
           "Let me build that skill using OpenCode with {{ provider }}... This may take a minute as I iterate to get it right."
         ],
         "skill_created": [
-          "Done! I created \"{{ skill_name }}\" with OpenCode ({{ provider }}/{{ model }}).\n\nFiles: {{ files_created }}\n\nRun `npm run train` to register it with Leon and then try it out!"
+          "Done! I created \"{{ skill_name }}\" with OpenCode ({{ provider }}/{{ model }}).\n\nFiles: {{ files_created }}\n\nPlease restart the server so I can learn about this new {{ skill_name }} skill... Yeah I know we can optimize this in the future :)"
         ],
         "generation_failed": [
           "I couldn't generate the skill. Error: {{ error }}"

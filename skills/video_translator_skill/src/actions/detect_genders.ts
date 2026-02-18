@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import type { ActionFunction, ActionParams } from '@sdk/types'
 import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
-import ECAPATool from '@sdk/tools/ecapa-tool'
+import ECAPATool from '@sdk/tools/ecapa'
 
 interface SpeakerReference {
   speaker: string

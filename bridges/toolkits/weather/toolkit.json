@@ -1,3 +1,9 @@
 {
-  "name": "Weather"
+  "name": "Weather",
+  "description": "Tools for weather lookup and forecasts.",
+  "tools": {
+    "openmeteo": {
+      "description": "Fetch current weather conditions using Open-Meteo API without an API key."
+    }
+  }
 }

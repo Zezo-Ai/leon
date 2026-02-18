@@ -5,7 +5,7 @@ import type { ActionFunction, ActionParams } from '@sdk/types'
 import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
 import { Settings } from '@sdk/settings'
-import ElevenLabsAudioTool from '@sdk/tools/elevenlabs_audio-tool'
+import ElevenLabsAudioTool from '@sdk/tools/elevenlabs_audio'
 import { formatBytes, formatFilePath } from '@sdk/utils'
 
 interface MusicAudioToolkitSkillSettings extends Record<string, unknown> {

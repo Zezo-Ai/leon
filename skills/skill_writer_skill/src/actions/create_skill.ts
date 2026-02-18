@@ -1,26 +1,22 @@
-import path from 'node:path'
-
 import type { ActionFunction, ActionParams } from '@sdk/types'
 import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
 import { Settings } from '@sdk/settings'
-import OpenCodeTool from '@sdk/tools/opencode-tool'
-
-import { SKILL_PLAN_SYSTEM_PROMPT } from '../lib/skill-plan-llm'
+import OpenCodeTool from '@sdk/tools/opencode'
 
 interface SkillWriterSettings extends Record<string, unknown> {
   opencode_openrouter_api_key?: string
   opencode_openrouter_model?: string
 }
 
-const normalizeSkillFolderName = (value: string): string => {
-  const sanitized = value
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '_')
-    .replace(/[^\w]/g, '_')
-
-  return sanitized.endsWith('_skill') ? sanitized : `${sanitized}_skill`
+const inferSkillNameFromFiles = (files: string[]): string | undefined => {
+  for (const file of files) {
+    const [root] = file.split(/[\\/]/)
+    if (root && root.endsWith('_skill')) {
+      return root
+    }
+  }
+  return undefined
 }
 
 export const run: ActionFunction = async function (
@@ -58,11 +54,7 @@ export const run: ActionFunction = async function (
 
   leon.answer({ key: 'generating_skill' })
 
-  // Extract skill name from description (simple heuristic)
-  const skillName = normalizeSkillFolderName(
-    description.split(' ').slice(0, 3).join(' ')
-  )
-  const targetPath = path.join(process.cwd(), 'skills', skillName)
+  const targetPath = process.cwd()
 
   // Context files for OpenCode to learn from (choose based on bridge)
   const contextFiles =
@@ -88,7 +80,8 @@ IMPORTANT GUIDANCE:
 - For file operations: Use file system tools
 - For audio processing: Use music_audio toolkit tools
 - NEVER create new tool functionality that already exists
-- Only implement the skill-specific business logic in actions`
+- Only implement the skill-specific business logic in actions
+- Choose a concise skill folder name in snake_case ending with _skill`
 
   const opencodeTool = new OpenCodeTool()
 
@@ -97,7 +90,6 @@ IMPORTANT GUIDANCE:
     provider,
     target_path: targetPath,
     context_files: contextFiles,
-    system_prompt: SKILL_PLAN_SYSTEM_PROMPT,
     bridge
   }
 
@@ -121,6 +113,7 @@ IMPORTANT GUIDANCE:
 
   // Extract created files info
   const filesCreated = response.files_created || []
+  const inferredSkillName = inferSkillNameFromFiles(filesCreated)
   const filesList = filesCreated.slice(0, 5).join(', ')
   const moreFiles =
     filesCreated.length > 5 ? ` and ${filesCreated.length - 5} more` : ''
@@ -128,7 +121,7 @@ IMPORTANT GUIDANCE:
   leon.answer({
     key: 'skill_created',
     data: {
-      skill_name: skillName,
+      skill_name: inferredSkillName || 'new_skill',
       files_created: `${filesList}${moreFiles}`,
       provider: response.provider_used || provider,
       model: response.model_used || model || 'default'

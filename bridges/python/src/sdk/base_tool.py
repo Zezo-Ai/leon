@@ -1,7 +1,7 @@
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, Optional, Union, List, Any
+from typing import Callable, Dict, Optional, Union, List, Any, cast
 from pypdl import Pypdl
 from urllib.parse import urlparse
 from .toolkit_config import ToolkitConfig
@@ -20,6 +20,8 @@ from ..constants import TOOLKITS_PATH
 import subprocess
 import sys
 import time
+import tempfile
+import shutil
 
 # Progress callback type for reporting tool progress
 ProgressCallback = Callable[[Dict[str, Optional[Union[str, int, float]]]], None]
@@ -121,6 +123,11 @@ class BaseTool(ABC):
             {"binary_name": binary_name, "command": command_string},
             tool_group_id,
         )
+
+        if exec_options and exec_options.get("open_in_terminal"):
+            return self._execute_terminal_command(
+                binary_path, args, command_string, exec_options, tool_group_id
+            )
 
         if sync:
             return self._execute_sync_command(
@@ -283,6 +290,157 @@ class BaseTool(ABC):
                 tool_group_id,
             )
             raise
+
+    def _execute_terminal_command(
+        self,
+        binary_path: str,
+        args: List[str],
+        command_string: str,
+        exec_options: Optional[Dict[str, Any]] = None,
+        tool_group_id: Optional[str] = None,
+    ) -> str:
+        cwd = exec_options.get("cwd") if exec_options else None
+        timeout = exec_options.get("timeout") if exec_options else None
+        timeout_seconds = int(timeout / 1000) if timeout else 600
+        wait_for_exit = (
+            exec_options.get("wait_for_exit", True) if exec_options else True
+        )
+        marker_file = os.path.join(
+            tempfile.gettempdir(),
+            f"{self.toolkit}_{self.tool_name}_{int(time.time() * 1000)}.done",
+        )
+
+        run_command = self._build_terminal_run_command(
+            binary_path, args, cwd or os.getcwd(), marker_file
+        )
+        self._launch_terminal(run_command)
+
+        if not wait_for_exit:
+            return ""
+
+        start_time = time.time()
+        exit_code = self._wait_for_marker(marker_file, timeout_seconds)
+        execution_time = int((time.time() - start_time) * 1000)
+
+        if exit_code is None:
+            self.report(
+                "bridges.tools.command_timeout",
+                {
+                    "command": command_string,
+                    "timeout": f"{timeout_seconds}s",
+                },
+                tool_group_id,
+            )
+            raise Exception(f"Command timed out after {timeout_seconds}s")
+
+        if exit_code != 0:
+            self.report(
+                "bridges.tools.command_failed",
+                {
+                    "command": command_string,
+                    "exit_code": str(exit_code),
+                    "execution_time": f"{execution_time}ms",
+                },
+                tool_group_id,
+            )
+            raise Exception(f"Command failed with exit code {exit_code}")
+
+        self.report(
+            "bridges.tools.command_completed",
+            {
+                "command": command_string,
+                "execution_time": f"{execution_time}ms",
+            },
+            tool_group_id,
+        )
+
+        return ""
+
+    def _build_terminal_run_command(
+        self, binary_path: str, args: List[str], cwd: str, marker_file: str
+    ) -> str:
+        if is_windows():
+            cwd_arg = self._escape_windows_arg(cwd)
+            marker_arg = self._escape_windows_arg(marker_file)
+            command = self._build_binary_command(binary_path, args)
+            return f"cd /d {cwd_arg} && {command} & echo %ERRORLEVEL% > {marker_arg}"
+
+        cwd_arg = self._escape_shell_arg(cwd)
+        marker_arg = self._escape_shell_arg(marker_file)
+        command = self._build_binary_command(binary_path, args)
+        return f"cd {cwd_arg} && {command}; echo $? > {marker_arg}"
+
+    def _build_binary_command(self, binary_path: str, args: List[str]) -> str:
+        binary_arg = self._escape_shell_arg(binary_path)
+        arg_string = " ".join(self._escape_shell_arg(arg) for arg in args)
+        return f"{binary_arg} {arg_string}".strip()
+
+    def _launch_terminal(self, command: str) -> None:
+        if is_macos():
+            term_program = os.environ.get("TERM_PROGRAM", "")
+            escaped = self._escape_applescript(command)
+            if "iterm" in term_program.lower():
+                script = "\n".join(
+                    [
+                        'tell application "iTerm"',
+                        "  create window with default profile",
+                        f'  tell current session of current window to write text "{escaped}"',
+                        "end tell",
+                    ]
+                )
+                subprocess.Popen(["osascript", "-e", script])
+                return
+
+            script = f'tell application "Terminal" to do script "{escaped}"'
+            subprocess.Popen(["osascript", "-e", script])
+            return
+
+        if is_windows():
+            if os.environ.get("WT_SESSION") or self._command_exists("wt"):
+                subprocess.Popen(["wt", "cmd", "/k", command])
+                return
+            subprocess.Popen(["cmd", "/c", "start", "", "cmd", "/k", command])
+            return
+
+        linux_command = f"{command}; echo Command finished.; exec $SHELL"
+        linux_candidates = [
+            ("gnome-terminal", ["--", "bash", "-lc", linux_command]),
+            ("x-terminal-emulator", ["-e", "bash", "-lc", linux_command]),
+            ("konsole", ["-e", "bash", "-lc", linux_command]),
+            ("xfce4-terminal", ["--command", f'bash -lc "{linux_command}"']),
+            ("xterm", ["-e", "bash", "-lc", linux_command]),
+            ("kitty", ["bash", "-lc", linux_command]),
+        ]
+
+        for command_name, args in linux_candidates:
+            if not self._command_exists(command_name):
+                continue
+            subprocess.Popen([command_name, *args])
+            return
+
+        raise Exception("No supported terminal emulator found to launch command.")
+
+    def _wait_for_marker(self, marker_file: str, timeout_seconds: int) -> Optional[int]:
+        start_time = time.time()
+        while time.time() - start_time < timeout_seconds:
+            if os.path.exists(marker_file):
+                try:
+                    with open(marker_file, "r", encoding="utf-8") as handle:
+                        content = handle.read().strip()
+                    return int(content) if content else 1
+                except Exception:
+                    return 1
+            time.sleep(0.5)
+        return None
+
+    def _escape_applescript(self, value: str) -> str:
+        return value.replace("\\", "\\\\").replace('"', '\\"')
+
+    def _escape_windows_arg(self, value: str) -> str:
+        return '"' + value.replace('"', '""') + '"'
+
+    def _command_exists(self, command: str) -> bool:
+        return shutil.which(command) is not None
 
     def get_binary_path(
         self, binary_name: str, skip_binary_download: bool = False
@@ -816,7 +974,9 @@ class BaseTool(ABC):
         LOG_INTERVAL_MS = 2000  # Log every 2 seconds at most
         PERCENTAGE_THRESHOLD = 5  # Log every 5% progress
 
-        while dl.progress < 100 and not dl.Failed:
+        dl_any = cast(Any, dl)
+        failed = bool(getattr(dl_any, "Failed", False))
+        while dl.progress < 100 and not failed:
             current_progress = int(dl.progress)
             current_time = int(time.time() * 1000)
 
@@ -829,19 +989,24 @@ class BaseTool(ABC):
 
             if should_log:
                 speed_info = ""
-                if dl.speed and dl.speed > 0:
-                    speed_info = f" at {format_speed(dl.speed)}"
+                speed_value = getattr(dl_any, "speed", None)
+                if speed_value and speed_value > 0:
+                    speed_info = f" at {format_speed(speed_value)}"
 
                 eta_info = ""
-                if dl.eta:
-                    formatted_eta = format_eta(dl.eta)
+                eta_value = getattr(dl_any, "eta", None)
+                if eta_value:
+                    eta_value_str: str = str(eta_value)
+                    formatted_eta = format_eta(eta_value_str)
                     if formatted_eta != "∞":
                         eta_info = f" (ETA: {formatted_eta})"
 
                 size_info = ""
-                if dl.totalMB and dl.doneMB:
-                    total_bytes = dl.totalMB * 1024 * 1024
-                    done_bytes = dl.doneMB * 1024 * 1024
+                total_mb = getattr(dl_any, "totalMB", None)
+                done_mb = getattr(dl_any, "doneMB", None)
+                if total_mb and done_mb:
+                    total_bytes = total_mb * 1024 * 1024
+                    done_bytes = done_mb * 1024 * 1024
                     size_info = (
                         f" [{format_bytes(done_bytes)}/{format_bytes(total_bytes)}]"
                     )
@@ -854,11 +1019,12 @@ class BaseTool(ABC):
 
             # Small delay to prevent busy waiting
             time.sleep(0.1)
+            failed = bool(getattr(dl_any, "Failed", False))
 
         # Log completion
         self.log(f"Download completed: {file_name}")
 
-        if dl.Failed:
+        if bool(getattr(dl_any, "Failed", False)):
             raise Exception("Download failed")
 
     def report(

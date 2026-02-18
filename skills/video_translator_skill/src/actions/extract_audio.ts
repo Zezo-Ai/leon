@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { ActionFunction, ActionParams } from '@sdk/types'
 import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
-import FfmpegTool from '@sdk/tools/ffmpeg-tool'
+import FfmpegTool from '@sdk/tools/ffmpeg'
 import { formatBytes, formatFilePath } from '@sdk/utils'
 
 export const run: ActionFunction = async function (

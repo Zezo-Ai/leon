@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { spawn, execSync } from 'node:child_process'
+import os from 'node:os'
+import { spawn, execSync, spawnSync } from 'node:child_process'
 
 import { downloadFile } from 'ipull'
 
@@ -36,6 +37,8 @@ export interface ExecuteCommandOptions {
     timeout?: number
     encoding?: BufferEncoding
     sync?: boolean
+    openInTerminal?: boolean
+    waitForExit?: boolean
   }
   onProgress?: ProgressCallback
   onOutput?: (data: string, isError?: boolean) => void
@@ -153,6 +156,16 @@ export abstract class Tool {
       },
       toolGroupId
     )
+
+    if (execOptions.openInTerminal) {
+      return this.executeTerminalCommand(
+        binaryPath,
+        args,
+        commandString,
+        execOptions,
+        toolGroupId
+      )
+    }
 
     if (sync) {
       return this.executeSyncCommand(
@@ -650,6 +663,189 @@ export abstract class Tool {
         error: (error as Error).message
       })
     }
+  }
+
+  /**
+   * Execute command in a new terminal window
+   */
+  private async executeTerminalCommand(
+    binaryPath: string,
+    args: string[],
+    commandString: string,
+    execOptions: ExecuteCommandOptions['options'] = {},
+    toolGroupId: string
+  ): Promise<string> {
+    const cwd = execOptions.cwd || process.cwd()
+    const timeout = execOptions.timeout ?? 600_000
+    const waitForExit = execOptions.waitForExit ?? true
+    const startTime = Date.now()
+    const markerFile = path.join(
+      os.tmpdir(),
+      `${this.toolkit}_${this.toolName}_${Date.now()}.done`
+    )
+
+    const runCommand = this.buildTerminalRunCommand(
+      binaryPath,
+      args,
+      cwd,
+      markerFile
+    )
+
+    this.launchTerminal(runCommand)
+
+    if (!waitForExit) {
+      return ''
+    }
+
+    const exitCode = await this.waitForMarker(markerFile, timeout)
+    const executionTime = `${Date.now() - startTime}ms`
+
+    if (exitCode === null) {
+      await this.report(
+        'bridges.tools.command_timeout',
+        {
+          command: commandString,
+          timeout: `${timeout}ms`
+        },
+        toolGroupId
+      )
+      throw new Error(`Command timed out after ${timeout}ms`)
+    }
+
+    if (exitCode !== 0) {
+      await this.report(
+        'bridges.tools.command_failed',
+        {
+          command: commandString,
+          exit_code: exitCode.toString(),
+          execution_time: executionTime
+        },
+        toolGroupId
+      )
+      throw new Error(`Command failed with exit code ${exitCode}`)
+    }
+
+    await this.report(
+      'bridges.tools.command_completed',
+      {
+        command: commandString,
+        execution_time: executionTime
+      },
+      toolGroupId
+    )
+
+    return ''
+  }
+
+  private buildTerminalRunCommand(
+    binaryPath: string,
+    args: string[],
+    cwd: string,
+    markerFile: string
+  ): string {
+    if (isWindows()) {
+      const cwdArg = this.escapeWindowsArg(cwd)
+      const markerArg = this.escapeWindowsArg(markerFile)
+      const command = this.buildBinaryCommand(binaryPath, args)
+      return `cd /d ${cwdArg} && ${command} & echo %ERRORLEVEL% > ${markerArg}`
+    }
+
+    const cwdArg = this.escapeShellArg(cwd)
+    const markerArg = this.escapeShellArg(markerFile)
+    const command = this.buildBinaryCommand(binaryPath, args)
+    return `cd ${cwdArg} && ${command}; echo $? > ${markerArg}`
+  }
+
+  private buildBinaryCommand(binaryPath: string, args: string[]): string {
+    const binaryArg = this.escapeShellArg(binaryPath)
+    const argString = args.map((arg) => this.escapeShellArg(arg)).join(' ')
+    return `${binaryArg} ${argString}`.trim()
+  }
+
+  private launchTerminal(command: string): void {
+    if (isMacOS()) {
+      const termProgram = process.env['TERM_PROGRAM'] || ''
+      const escaped = this.escapeForAppleScript(command)
+      if (termProgram.toLowerCase().includes('iterm')) {
+        const script = [
+          'tell application "iTerm"',
+          '  create window with default profile',
+          `  tell current session of current window to write text "${escaped}"`,
+          'end tell'
+        ].join('\n')
+        this.spawnDetached('osascript', ['-e', script])
+        return
+      }
+
+      const script = `tell application "Terminal" to do script "${escaped}"`
+      this.spawnDetached('osascript', ['-e', script])
+      return
+    }
+
+    if (isWindows()) {
+      if (process.env['WT_SESSION'] || this.commandExists('wt')) {
+        this.spawnDetached('wt', ['cmd', '/k', command])
+        return
+      }
+      this.spawnDetached('cmd', ['/c', 'start', '', 'cmd', '/k', command])
+      return
+    }
+
+    const linuxCommand = `${command}; echo Command finished.; exec bash`
+    const candidates: Array<{ cmd: string; args: string[] }> = [
+      { cmd: 'gnome-terminal', args: ['--', 'bash', '-lc', linuxCommand] },
+      { cmd: 'x-terminal-emulator', args: ['-e', 'bash', '-lc', linuxCommand] },
+      { cmd: 'konsole', args: ['-e', 'bash', '-lc', linuxCommand] },
+      {
+        cmd: 'xfce4-terminal',
+        args: ['--command', `bash -lc "${linuxCommand}"`]
+      },
+      { cmd: 'xterm', args: ['-e', 'bash', '-lc', linuxCommand] },
+      { cmd: 'kitty', args: ['bash', '-lc', linuxCommand] }
+    ]
+
+    for (const candidate of candidates) {
+      if (!this.commandExists(candidate.cmd)) continue
+      this.spawnDetached(candidate.cmd, candidate.args)
+      return
+    }
+
+    throw new Error('No supported terminal emulator found to launch command.')
+  }
+
+  private async waitForMarker(
+    markerFile: string,
+    timeoutMs: number
+  ): Promise<number | null> {
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+      if (fs.existsSync(markerFile)) {
+        const content = await fs.promises.readFile(markerFile, 'utf-8')
+        const exitCode = Number.parseInt(content.trim(), 10)
+        return Number.isFinite(exitCode) ? exitCode : 1
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
+    return null
+  }
+
+  private spawnDetached(command: string, args: string[]): void {
+    const child = spawn(command, args, { detached: true, stdio: 'ignore' })
+    child.unref()
+  }
+
+  private commandExists(command: string): boolean {
+    const checker = isWindows() ? 'where' : 'which'
+    const result = spawnSync(checker, [command], { stdio: 'ignore' })
+    return result.status === 0
+  }
+
+  private escapeWindowsArg(value: string): string {
+    return `"${value.replace(/"/g, '""')}"`
+  }
+
+  private escapeForAppleScript(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   }
 
   /**

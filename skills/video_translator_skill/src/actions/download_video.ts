@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import type { ActionFunction, ActionParams } from '@sdk/types'
 import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
-import YtdlpTool from '@sdk/tools/ytdlp-tool'
+import YtdlpTool from '@sdk/tools/ytdlp'
 import { formatFilePath } from '@sdk/utils'
 
 import { DownloadProgressWidget } from '../widgets/download-progress-widget'
