@@ -183,33 +183,22 @@ export class WeatherForecastWidget extends Widget<Params> {
 
   private getWeatherIcon(description: string): string {
     const desc = description.toLowerCase()
+    const iconMap: Array<{ keywords: string[]; icon: string }> = [
+      { keywords: ['clear', 'sunny'], icon: 'sun' },
+      { keywords: ['cloud', 'overcast'], icon: 'cloud' },
+      { keywords: ['drizzle'], icon: 'drizzle' },
+      { keywords: ['shower'], icon: 'heavy-showers' },
+      { keywords: ['rain'], icon: 'rainy' },
+      { keywords: ['snow'], icon: 'snowy' },
+      { keywords: ['thunder', 'storm'], icon: 'thunderstorms' },
+      { keywords: ['fog', 'mist'], icon: 'foggy' },
+      { keywords: ['wind'], icon: 'windy' }
+    ]
 
-    if (desc.includes('clear') || desc.includes('sunny')) {
-      return 'sun'
-    }
-    if (desc.includes('cloud') || desc.includes('overcast')) {
-      return 'cloud'
-    }
-    if (desc.includes('drizzle')) {
-      return 'drizzle'
-    }
-    if (desc.includes('shower')) {
-      return 'heavy-showers'
-    }
-    if (desc.includes('rain')) {
-      return 'rainy'
-    }
-    if (desc.includes('snow')) {
-      return 'snowy'
-    }
-    if (desc.includes('thunder') || desc.includes('storm')) {
-      return 'thunderstorms'
-    }
-    if (desc.includes('fog') || desc.includes('mist')) {
-      return 'foggy'
-    }
-    if (desc.includes('wind')) {
-      return 'windy'
+    for (const { keywords, icon } of iconMap) {
+      if (keywords.some((keyword) => desc.includes(keyword))) {
+        return icon
+      }
     }
 
     return 'sun-cloudy'
