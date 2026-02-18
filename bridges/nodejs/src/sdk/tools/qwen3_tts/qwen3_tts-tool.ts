@@ -10,10 +10,23 @@ const MODEL_BASE_NAME = 'Qwen3-TTS-12Hz-1.7B-Base'
 const MODEL_DESIGN_NAME = 'Qwen3-TTS-12Hz-1.7B-VoiceDesign'
 const MODEL_CUSTOM_NAME = 'Qwen3-TTS-12Hz-1.7B-CustomVoice'
 
+type SupportedLanguage =
+  | 'Auto'
+  | 'Chinese'
+  | 'English'
+  | 'Japanese'
+  | 'Korean'
+  | 'German'
+  | 'French'
+  | 'Russian'
+  | 'Portuguese'
+  | 'Spanish'
+  | 'Italian'
+
 interface SynthesizeSpeechTask {
   text: string
-  target_language?: string
-  language?: string
+  target_language?: SupportedLanguage
+  language?: SupportedLanguage
   audio_path?: string
   output_path?: string
   speaker_reference_path?: string
@@ -35,8 +48,8 @@ interface SynthesizeSpeechTask {
 
 interface DesignVoiceTask {
   text: string
-  target_language?: string
-  language?: string
+  target_language?: SupportedLanguage
+  language?: SupportedLanguage
   instruct?: string
   audio_path?: string
   output_path?: string
@@ -55,9 +68,23 @@ interface DesignVoiceTask {
 
 interface CustomVoiceTask {
   text: string
-  target_language?: string
-  language?: string
-  speaker: string
+  target_language?: SupportedLanguage
+  language?: SupportedLanguage
+  /**
+   * Vivian for Chinese; Serena for Chinese; Uncle_Fu for Chinese;
+   * Dylan for Chinese (Beijing dialect); Eric for Chinese (Sichuan dialect);
+   * Ryan for English; Aiden for English; Ono_Anna for Japanese; Sohee for Korean
+   */
+  speaker:
+    | 'Vivian'
+    | 'Serena'
+    | 'Uncle_Fu'
+    | 'Dylan'
+    | 'Eric'
+    | 'Ryan'
+    | 'Aiden'
+    | 'Ono_Anna'
+    | 'Sohee'
   instruct?: string
   audio_path?: string
   output_path?: string
@@ -76,10 +103,10 @@ interface CustomVoiceTask {
 
 interface DesignThenSynthesizeTask {
   design_text: string
-  design_language?: string
+  design_language?: SupportedLanguage
   design_instruct?: string
   texts: string[]
-  languages?: string[]
+  languages?: SupportedLanguage[]
   output_paths: string[]
   design_max_new_tokens?: number
   design_do_sample?: boolean

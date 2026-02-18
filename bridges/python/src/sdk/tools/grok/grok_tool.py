@@ -8,8 +8,8 @@ import json
 from typing import Dict, Any, List, Optional
 import requests
 
-from ..base_tool import BaseTool
-from ..toolkit_config import ToolkitConfig
+from ...base_tool import BaseTool
+from ...toolkit_config import ToolkitConfig
 
 # Hardcoded default settings for Grok tool
 # These can be overridden by toolkit settings.json per toolkit.

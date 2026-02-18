@@ -1,3 +1,3 @@
-from .ecapa_tool import EcapaTool
+from .ecapa_tool import ECAPATool
 
-__all__ = ["EcapaTool"]
+__all__ = ["ECAPATool"]

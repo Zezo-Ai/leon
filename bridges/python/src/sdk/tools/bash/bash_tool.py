@@ -1,7 +1,7 @@
 import os
 from typing import Dict, Any, Optional
-from ..base_tool import BaseTool, ExecuteCommandOptions
-from ..toolkit_config import ToolkitConfig
+from ...base_tool import BaseTool, ExecuteCommandOptions
+from ...toolkit_config import ToolkitConfig
 
 
 class BashTool(BaseTool):

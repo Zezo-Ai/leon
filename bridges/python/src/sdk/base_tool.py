@@ -97,6 +97,30 @@ class BaseTool(ABC):
             # Unix/Linux: escape special characters with backslashes
             return re.sub(r'(["\s\'$`\\(){}[\]|&;<>*?!])', r"\\\1", arg)
 
+    def _format_command_output(self, output: str) -> Optional[str]:
+        trimmed = output.strip()
+        if not trimmed:
+            return None
+
+        max_length = 4000
+        if len(trimmed) <= max_length:
+            return trimmed
+
+        return f"{trimmed[:max_length]}\n... (truncated)"
+
+    def _report_command_output(
+        self, output: str, command: str, tool_group_id: Optional[str]
+    ) -> None:
+        formatted = self._format_command_output(output)
+        if not formatted:
+            return
+
+        self.report(
+            "bridges.tools.command_output",
+            {"command": command, "output": formatted},
+            tool_group_id,
+        )
+
     def execute_command(self, options: ExecuteCommandOptions) -> str:
         """Execute a command with proper Leon messaging and progress tracking"""
 
@@ -177,6 +201,8 @@ class BaseTool(ABC):
                     },
                     tool_group_id,
                 )
+                output = "".join([result.stdout or "", result.stderr or ""])
+                self._report_command_output(output, command_string, tool_group_id)
                 return result.stdout
             else:
                 self.report(
@@ -189,6 +215,8 @@ class BaseTool(ABC):
                     },
                     tool_group_id,
                 )
+                output = "".join([result.stdout or "", result.stderr or ""])
+                self._report_command_output(output, command_string, tool_group_id)
                 raise Exception(
                     f"Command failed with exit code {result.returncode}: {result.stderr}"
                 )
@@ -266,6 +294,9 @@ class BaseTool(ABC):
                     },
                     tool_group_id,
                 )
+                self._report_command_output(
+                    output_buffer, command_string, tool_group_id
+                )
                 if on_progress:
                     on_progress({"status": "completed", "percentage": 100})
                 return output_buffer
@@ -278,6 +309,9 @@ class BaseTool(ABC):
                         "execution_time": f"{execution_time}ms",
                     },
                     tool_group_id,
+                )
+                self._report_command_output(
+                    output_buffer, command_string, tool_group_id
                 )
                 raise Exception(
                     f"Command failed with exit code {process.returncode}: {output_buffer}"

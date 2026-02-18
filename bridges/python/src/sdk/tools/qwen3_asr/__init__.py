@@ -1,3 +1,3 @@
-from .qwen3_asr_tool import Qwen3AsrTool
+from .qwen3_asr_tool import Qwen3ASRTool
 
-__all__ = ["Qwen3AsrTool"]
+__all__ = ["Qwen3ASRTool"]

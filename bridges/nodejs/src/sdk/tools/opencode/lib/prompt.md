@@ -61,4 +61,8 @@ skills/skill_name/
 - Do not use `Card` as the parent component. The `WidgetWrapper` is already applied by default.
 - For icons, use only the icon name without the `ri-` prefix and `-line` suffix. The system automatically completes them to `ri-{icon-name}-line`. For example, use `snow` instead of `ri-snow-line`.
 
+## Action Parameters
+
+{{ACTION_PARAMS_EXAMPLE}}
+
 {{REFERENCE_FILES_SECTION}}

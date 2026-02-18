@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
 import type { ActionFunction, ActionParams } from '@sdk/types'
 import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
@@ -17,6 +20,54 @@ const inferSkillNameFromFiles = (files: string[]): string | undefined => {
     }
   }
   return undefined
+}
+
+const getSkillDirectories = async (
+  skillsRoot: string
+): Promise<Set<string>> => {
+  try {
+    const entries = await fs.promises.readdir(skillsRoot, {
+      withFileTypes: true
+    })
+    return new Set(
+      entries
+        .filter((entry) => entry.isDirectory() && entry.name.endsWith('_skill'))
+        .map((entry) => entry.name)
+    )
+  } catch {
+    return new Set()
+  }
+}
+
+const getNewestSkillDirectory = async (
+  skillsRoot: string,
+  exclude: Set<string>
+): Promise<string | undefined> => {
+  try {
+    const entries = await fs.promises.readdir(skillsRoot, {
+      withFileTypes: true
+    })
+    const candidates = entries.filter(
+      (entry) =>
+        entry.isDirectory() &&
+        entry.name.endsWith('_skill') &&
+        !exclude.has(entry.name)
+    )
+
+    if (candidates.length === 0) return undefined
+
+    const candidatesWithStats = await Promise.all(
+      candidates.map(async (entry) => {
+        const stat = await fs.promises.stat(path.join(skillsRoot, entry.name))
+        return { name: entry.name, mtimeMs: stat.mtimeMs }
+      })
+    )
+
+    candidatesWithStats.sort((a, b) => b.mtimeMs - a.mtimeMs)
+    return candidatesWithStats[0]?.name
+  } catch {
+    return undefined
+  }
 }
 
 export const run: ActionFunction = async function (
@@ -52,9 +103,11 @@ export const run: ActionFunction = async function (
     | string
     | undefined
 
-  leon.answer({ key: 'generating_skill' })
+  leon.answer({ key: 'generating_skill', data: { provider } })
 
   const targetPath = process.cwd()
+  const skillsRoot = path.join(targetPath, 'skills')
+  const existingSkills = await getSkillDirectories(skillsRoot)
 
   // Context files for OpenCode to learn from (choose based on bridge)
   const contextFiles =
@@ -114,15 +167,15 @@ IMPORTANT GUIDANCE:
   // Extract created files info
   const filesCreated = response.files_created || []
   const inferredSkillName = inferSkillNameFromFiles(filesCreated)
-  const filesList = filesCreated.slice(0, 5).join(', ')
-  const moreFiles =
-    filesCreated.length > 5 ? ` and ${filesCreated.length - 5} more` : ''
+  const newestSkillName = await getNewestSkillDirectory(
+    skillsRoot,
+    existingSkills
+  )
 
   leon.answer({
     key: 'skill_created',
     data: {
-      skill_name: inferredSkillName || 'new_skill',
-      files_created: `${filesList}${moreFiles}`,
+      skill_name: inferredSkillName || newestSkillName || 'new_skill',
       provider: response.provider_used || provider,
       model: response.model_used || model || 'default'
     }

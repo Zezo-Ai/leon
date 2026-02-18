@@ -1,3 +1,3 @@
-from .assemblyai_audio_tool import AssemblyaiAudioTool
+from .assemblyai_audio_tool import AssemblyAIAudioTool
 
-__all__ = ["AssemblyaiAudioTool"]
+__all__ = ["AssemblyAIAudioTool"]

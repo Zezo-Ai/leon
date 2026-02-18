@@ -2,8 +2,8 @@ import json
 import re
 from typing import Optional
 
-from ..base_tool import BaseTool, ExecuteCommandOptions
-from ..toolkit_config import ToolkitConfig
+from ...base_tool import BaseTool, ExecuteCommandOptions
+from ...toolkit_config import ToolkitConfig
 from .schemas import TranscriptionOutput, TranscriptionSegment
 
 MODEL_NAME = 'faster-whisper-large-v3'

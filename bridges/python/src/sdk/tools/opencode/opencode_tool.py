@@ -12,7 +12,7 @@ from ...toolkit_config import ToolkitConfig
 # Hardcoded default settings for OpenCode tool
 # These can be overridden by toolkit settings.json per toolkit.
 OPENCODE_OPENROUTER_API_KEY = None
-OPENCODE_OPENROUTER_MODEL = "openrouter/z-ai/glm-5"
+OPENCODE_OPENROUTER_MODEL = "openrouter/openai/gpt-5.2-codex"
 
 
 class OpenCodeTool(BaseTool):
@@ -33,7 +33,7 @@ class OpenCodeTool(BaseTool):
         self.provider_configs = {
             "openrouter": {
                 "name": "OpenRouter",
-                "default_model": "openrouter/z-ai/glm-5",
+                "default_model": "openrouter/openai/gpt-5.2-codex",
             }
         }
 
@@ -451,10 +451,10 @@ class OpenCodeTool(BaseTool):
             guidelines += "```\n\n"
         else:
             guidelines += "### Python Tool Structure\n\n"
-            guidelines += "Create a new file at `bridges/python/src/sdk/tools/{tool_name}_tool.py`:\n\n"
+            guidelines += "Create a new file at `bridges/python/src/sdk/tools/{tool_name}/{tool_name}_tool.py`:\n\n"
             guidelines += "```python\n"
-            guidelines += "from ..base_tool import BaseTool\n"
-            guidelines += "from ..toolkit_config import ToolkitConfig\n\n"
+            guidelines += "from ...base_tool import BaseTool\n"
+            guidelines += "from ...toolkit_config import ToolkitConfig\n\n"
             guidelines += "class MyNewTool(BaseTool):\n"
             guidelines += "    TOOLKIT = 'toolkit_name'  # e.g., 'music_audio'\n\n"
             guidelines += "    def __init__(self):\n"
@@ -512,7 +512,7 @@ class OpenCodeTool(BaseTool):
             guidelines += "  }\n"
             guidelines += "```\n\n"
         else:
-            guidelines += "1. Open the existing tool file (e.g., `bridges/python/src/sdk/tools/ytdlp_tool.py`)\n"
+            guidelines += "1. Open the existing tool file (e.g., `bridges/python/src/sdk/tools/ytdlp/ytdlp_tool.py`)\n"
             guidelines += "2. Add your new method to the class:\n\n"
             guidelines += "```python\n"
             guidelines += "    def my_new_method(self, param: str) -> str:\n"
@@ -586,6 +586,7 @@ class OpenCodeTool(BaseTool):
                         bridge
                     ),
                     "CONTEXT_DATA_EXAMPLE": self._build_context_data_example(bridge),
+                    "ACTION_PARAMS_EXAMPLE": self._build_action_params_example(bridge),
                     "REFERENCE_FILES_SECTION": reference_files_section,
                 },
             )
@@ -619,7 +620,7 @@ class OpenCodeTool(BaseTool):
 
         return (
             "- **Tool usage**: Import tools like `from sdk.tools.ytdlp import YtdlpTool`\n"
-            "- **SDK imports**: from sdk import leon, ParamsHelper\n"
+            "- **SDK imports**: from bridges.python.src.sdk.leon import leon; from bridges.python.src.sdk.types import ActionParams; from bridges.python.src.sdk.params_helper import ParamsHelper\n"
             "- **Action structure**: Define a `run` function as the action entry point\n"
             "- **Responses**: Use leon.answer() to respond to users\n"
             f"- **File extensions**: ALL files MUST use {file_extension} (actions, widgets, utilities)\n"
@@ -652,8 +653,10 @@ class OpenCodeTool(BaseTool):
 
         return (
             "```python\n"
-            "from sdk import Settings\n\n"
-            "def run(params, params_helper):\n"
+            "from bridges.python.src.sdk.leon import leon\n"
+            "from bridges.python.src.sdk.types import ActionParams\n"
+            "from bridges.python.src.sdk.settings import Settings\n\n"
+            "def run(params: ActionParams, params_helper: ParamsHelper) -> None:\n"
             "    settings = Settings()\n"
             "    api_key = settings.get('provider_api_key')\n"
             "    model = settings.get('provider_model') or 'default-model'\n"
@@ -786,6 +789,42 @@ class OpenCodeTool(BaseTool):
             "```\n\n"
         )
 
+    def _build_action_params_example(self, bridge: str) -> str:
+        if bridge == "nodejs":
+            return (
+                "```typescript\n"
+                "import type { ActionFunction } from '@sdk/types'\n"
+                "import { leon } from '@sdk/leon'\n"
+                "import { ParamsHelper } from '@sdk/params-helper'\n\n"
+                "export const run: ActionFunction = async function (\n"
+                "  params,\n"
+                "  paramsHelper: ParamsHelper\n"
+                ") {\n"
+                "  // Get action arguments defined in skill.json parameters\n"
+                "  const location = paramsHelper.getActionArgument('location') as string\n"
+                "  const units = paramsHelper.getActionArgument('units') as string | undefined\n\n"
+                "  // Access raw params if needed\n"
+                "  const utterance = params.utterance\n"
+                "  const lang = params.lang\n"
+                "}\n"
+                "```\n\n"
+            )
+
+        return (
+            "```python\n"
+            "from bridges.python.src.sdk.leon import leon\n"
+            "from bridges.python.src.sdk.types import ActionParams\n"
+            "from bridges.python.src.sdk.params_helper import ParamsHelper\n\n"
+            "def run(params: ActionParams, params_helper: ParamsHelper) -> None:\n"
+            "    # Get action arguments defined in skill.json parameters\n"
+            "    location = params_helper.get_action_argument('location')\n"
+            "    units = params_helper.get_action_argument('units')\n\n"
+            "    # Access raw params if needed\n"
+            "    utterance = params.get('utterance')\n"
+            "    lang = params.get('lang')\n"
+            "```\n\n"
+        )
+
     def _build_reference_files_section(self, context_files: List[str]) -> str:
         if not context_files:
             return ""
@@ -899,7 +938,7 @@ class OpenCodeTool(BaseTool):
             context += f"- **File structure**: skill.json + locales/en.json + src/actions/*{file_extension} + src/widgets/*{file_extension}\n"
         else:
             context += "- **Tool usage**: Import tools like `from sdk.tools.ytdlp import YtdlpTool`\n"
-            context += "- **SDK imports**: from sdk import leon, ParamsHelper\n"
+            context += "- **SDK imports**: from bridges.python.src.sdk.leon import leon; from bridges.python.src.sdk.types import ActionParams; from bridges.python.src.sdk.params_helper import ParamsHelper\n"
             context += "- **Action structure**: Define a `run` function as the action entry point\n"
             context += "- **Responses**: Use leon.answer() to respond to users\n"
             context += f"- **File extensions**: ALL files MUST use {file_extension} (actions, widgets, utilities)\n"
@@ -1368,8 +1407,12 @@ class OpenCodeTool(BaseTool):
             context += "```\n\n"
         else:
             context += "```python\n"
-            context += "from sdk import Settings\n\n"
-            context += "def run(params, params_helper):\n"
+            context += "from bridges.python.src.sdk.leon import leon\n"
+            context += "from bridges.python.src.sdk.types import ActionParams\n"
+            context += "from bridges.python.src.sdk.settings import Settings\n\n"
+            context += (
+                "def run(params: ActionParams, params_helper: ParamsHelper) -> None:\n"
+            )
             context += "    settings = Settings()\n"
             context += "    api_key = settings.get('provider_api_key')\n"
             context += "    model = settings.get('provider_model') or 'default-model'\n"
@@ -1678,6 +1721,9 @@ class OpenCodeTool(BaseTool):
         os.makedirs(target_path, exist_ok=True)
 
         try:
+            skills_dir = Path(target_path) / "skills"
+            existing_skills = self._get_existing_skills(skills_dir)
+
             args = ["run", description]
             if model_to_use:
                 args.extend(["--model", model_to_use])
@@ -1696,14 +1742,60 @@ class OpenCodeTool(BaseTool):
                 )
             )
 
+            files_created = self._get_created_files(skills_dir, existing_skills)
+
             return {
                 "success": True,
                 "output": result
                 or f"OpenCode launched in a new terminal. Prompt: {prompt_file}",
                 "provider_used": provider,
                 "model_used": model_to_use,
-                "files_created": [],
+                "files_created": files_created,
             }
 
         except Exception as e:
             return {"success": False, "error": f"OpenCode generation error: {str(e)}"}
+
+    def _get_existing_skills(self, skills_dir: Path) -> set:
+        """Get set of existing skill folder names"""
+        existing = set()
+        try:
+            if skills_dir.exists():
+                for entry in skills_dir.iterdir():
+                    if entry.is_dir() and entry.name.endswith("_skill"):
+                        existing.add(entry.name)
+        except Exception:
+            pass
+        return existing
+
+    def _get_created_files(self, skills_dir: Path, existing_skills: set) -> List[str]:
+        """Get list of newly created files in new skill folders"""
+        created_files = []
+        try:
+            if skills_dir.exists():
+                for entry in skills_dir.iterdir():
+                    if (
+                        entry.is_dir()
+                        and entry.name.endswith("_skill")
+                        and entry.name not in existing_skills
+                    ):
+                        all_files = self._get_all_files_recursive(entry)
+                        created_files.extend(
+                            [str(f.relative_to(Path.cwd())) for f in all_files]
+                        )
+        except Exception:
+            pass
+        return created_files
+
+    def _get_all_files_recursive(self, dir_path: Path) -> List[Path]:
+        """Recursively get all files in a directory"""
+        files = []
+        try:
+            for entry in dir_path.iterdir():
+                if entry.is_dir():
+                    files.extend(self._get_all_files_recursive(entry))
+                else:
+                    files.append(entry)
+        except Exception:
+            pass
+        return files

@@ -8,7 +8,7 @@ import { ToolkitConfig } from '@sdk/toolkit-config'
 // Hardcoded default settings for OpenCode tool
 // These can be overridden by toolkit settings.json per toolkit.
 const OPENCODE_OPENROUTER_API_KEY: string | null = null
-const OPENCODE_OPENROUTER_MODEL = 'openrouter/z-ai/glm-5'
+const OPENCODE_OPENROUTER_MODEL = 'openrouter/openai/gpt-5.2-codex'
 
 interface OpenCodeProvider {
   name: string
@@ -48,7 +48,7 @@ export default class OpenCodeTool extends Tool {
   private readonly provider_configs = {
     openrouter: {
       name: 'OpenRouter',
-      default_model: 'openrouter/z-ai/glm-5'
+      default_model: 'openrouter/openai/gpt-5.2-codex'
     }
   }
 
@@ -256,6 +256,9 @@ export default class OpenCodeTool extends Tool {
     await fs.promises.writeFile(promptFile, fullPrompt)
 
     try {
+      const skillsDir = path.join(target_path, 'skills')
+      const existingSkills = await this.getExistingSkills(skillsDir)
+
       const args = ['run', description]
       if (modelToUse) {
         args.push('--model', modelToUse)
@@ -273,6 +276,8 @@ export default class OpenCodeTool extends Tool {
         }
       })
 
+      const filesCreated = await this.getCreatedFiles(skillsDir, existingSkills)
+
       return {
         success: true,
         output:
@@ -280,7 +285,7 @@ export default class OpenCodeTool extends Tool {
           `OpenCode launched in a new terminal. Prompt: ${promptFile}`,
         provider_used: provider,
         model_used: modelToUse,
-        files_created: []
+        files_created: filesCreated
       }
     } catch (error: unknown) {
       return {
@@ -288,6 +293,69 @@ export default class OpenCodeTool extends Tool {
         error: `OpenCode generation error: ${(error as Error).message}`
       }
     }
+  }
+
+  private async getExistingSkills(skillsDir: string): Promise<Set<string>> {
+    const existing = new Set<string>()
+    try {
+      const entries = await fs.promises.readdir(skillsDir, {
+        withFileTypes: true
+      })
+      for (const entry of entries) {
+        if (entry.isDirectory() && entry.name.endsWith('_skill')) {
+          existing.add(entry.name)
+        }
+      }
+    } catch {
+      // Directory doesn't exist yet
+    }
+    return existing
+  }
+
+  private async getCreatedFiles(
+    skillsDir: string,
+    existingSkills: Set<string>
+  ): Promise<string[]> {
+    const createdFiles: string[] = []
+    try {
+      const entries = await fs.promises.readdir(skillsDir, {
+        withFileTypes: true
+      })
+      for (const entry of entries) {
+        if (
+          entry.isDirectory() &&
+          entry.name.endsWith('_skill') &&
+          !existingSkills.has(entry.name)
+        ) {
+          const skillPath = path.join(skillsDir, entry.name)
+          const allFiles = await this.getAllFilesRecursive(skillPath)
+          createdFiles.push(
+            ...allFiles.map((f) => path.relative(process.cwd(), f))
+          )
+        }
+      }
+    } catch {
+      // Directory doesn't exist
+    }
+    return createdFiles
+  }
+
+  private async getAllFilesRecursive(dir: string): Promise<string[]> {
+    const files: string[] = []
+    try {
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true })
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          files.push(...(await this.getAllFilesRecursive(fullPath)))
+        } else {
+          files.push(fullPath)
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+    return files
   }
 
   /**
@@ -601,7 +669,7 @@ export default class OpenCodeTool extends Tool {
 
     if (bridge === 'nodejs') {
       guidelines += `### TypeScript Tool Structure\n\n`
-      guidelines += `Create a new file at \`bridges/nodejs/src/sdk/tools/{tool-name}-tool.ts\`:\n\n`
+      guidelines += `Create a new file at \`bridges/nodejs/src/sdk/tools/{tool-name}/{tool-name}-tool.ts\`:\n\n`
       guidelines += `\`\`\`typescript\n`
       guidelines += `import { Tool } from '@sdk/base-tool'\n`
       guidelines += `import { ToolkitConfig } from '@sdk/toolkit-config'\n\n`
@@ -679,7 +747,7 @@ export default class OpenCodeTool extends Tool {
     guidelines += `To add a new method to an existing tool:\n\n`
 
     if (bridge === 'nodejs') {
-      guidelines += `1. Open the existing tool file (e.g., \`bridges/nodejs/src/sdk/tools/ytdlp-tool.ts\`)\n`
+      guidelines += `1. Open the existing tool file (e.g., \`bridges/nodejs/src/sdk/tools/ytdlp/ytdlp-tool.ts\`)\n`
       guidelines += `2. Add your new method to the class:\n\n`
       guidelines += `\`\`\`typescript\n`
       guidelines += `  /**\n`
@@ -864,6 +932,7 @@ export default class OpenCodeTool extends Tool {
         AURORA_COMPONENTS: auroraComponents,
         LEON_ANSWER_BASIC_EXAMPLE: this.buildLeonAnswerBasicExample(bridge),
         CONTEXT_DATA_EXAMPLE: this.buildContextDataExample(bridge),
+        ACTION_PARAMS_EXAMPLE: this.buildActionParamsExample(bridge),
         REFERENCE_FILES_SECTION: referenceFilesSection
       })
     } catch {
@@ -910,7 +979,7 @@ export default class OpenCodeTool extends Tool {
 
     return (
       `- **Tool usage**: Import tools like \`from sdk.tools.ytdlp import YtdlpTool\`\n` +
-      `- **SDK imports**: from sdk import leon, ParamsHelper\n` +
+      `- **SDK imports**: from bridges.python.src.sdk.leon import leon; from bridges.python.src.sdk.params_helper import ParamsHelper\n` +
       `- **Action structure**: Define a \`run\` function as the action entry point\n` +
       `- **Responses**: Use leon.answer() to respond to users\n` +
       `- **File extensions**: ALL files MUST use ${fileExtension} (actions, widgets, utilities)\n` +
@@ -945,8 +1014,10 @@ export default class OpenCodeTool extends Tool {
 
     return (
       '```python\n' +
-      'from sdk import Settings\n\n' +
-      'def run(params, params_helper):\n' +
+      'from bridges.python.src.sdk.leon import leon\n' +
+      'from bridges.python.src.sdk.types import ActionParams\n' +
+      'from bridges.python.src.sdk.settings import Settings\n\n' +
+      'def run(params: ActionParams, params_helper: ParamsHelper) -> None:\n' +
       '    settings = Settings()\n' +
       "    api_key = settings.get('provider_api_key')\n" +
       "    model = settings.get('provider_model') or 'default-model'\n" +
@@ -1082,6 +1153,44 @@ export default class OpenCodeTool extends Tool {
       '# Action 2: Retrieve data from previous action\n' +
       "video_path = params_helper.get_context_data('video_path')\n" +
       "target_language = params_helper.get_context_data('target_language')\n" +
+      '```\n\n'
+    )
+  }
+
+  private buildActionParamsExample(bridge: 'nodejs' | 'python'): string {
+    if (bridge === 'nodejs') {
+      return (
+        '```typescript\n' +
+        "import type { ActionFunction } from '@sdk/types'\n" +
+        "import { leon } from '@sdk/leon'\n" +
+        "import { ParamsHelper } from '@sdk/params-helper'\n\n" +
+        'export const run: ActionFunction = async function (\n' +
+        '  params,\n' +
+        '  paramsHelper: ParamsHelper\n' +
+        ') {\n' +
+        '  // Get action arguments defined in skill.json parameters\n' +
+        "  const location = paramsHelper.getActionArgument('location') as string\n" +
+        "  const units = paramsHelper.getActionArgument('units') as string | undefined\n\n" +
+        '  // Access raw params if needed\n' +
+        '  const utterance = params.utterance\n' +
+        '  const lang = params.lang\n' +
+        '}\n' +
+        '```\n\n'
+      )
+    }
+
+    return (
+      '```python\n' +
+      'from bridges.python.src.sdk.leon import leon\n' +
+      'from bridges.python.src.sdk.types import ActionParams\n' +
+      'from bridges.python.src.sdk.params_helper import ParamsHelper\n\n' +
+      'def run(params: ActionParams, params_helper: ParamsHelper) -> None:\n' +
+      '    # Get action arguments defined in skill.json parameters\n' +
+      "    location = params_helper.get_action_argument('location')\n" +
+      "    units = params_helper.get_action_argument('units')\n\n" +
+      '    # Access raw params if needed\n' +
+      "    utterance = params.get('utterance')\n" +
+      "    lang = params.get('lang')\n" +
       '```\n\n'
     )
   }
@@ -1231,8 +1340,8 @@ export default class OpenCodeTool extends Tool {
       context += `- **File extensions**: ALL files MUST use ${fileExtension} (actions, widgets, utilities)\n`
       context += `- **File structure**: skill.json + locales/en.json + src/actions/*${fileExtension} + src/widgets/*${fileExtension}\n`
     } else {
-      context += `- **Tool usage**: Import tools like \`from sdk.tools.ytdlp_tool import YtdlpTool\`\n`
-      context += `- **SDK imports**: from sdk import leon, ParamsHelper\n`
+      context += `- **Tool usage**: Import tools like \`from sdk.tools.ytdlp import YtdlpTool\`\n`
+      context += `- **SDK imports**: from bridges.python.src.sdk.leon import leon; from bridges.python.src.sdk.types import ActionParams; from bridges.python.src.sdk.params_helper import ParamsHelper\n`
       context += `- **Action structure**: Define a \`run\` function as the action entry point\n`
       context += `- **Responses**: Use leon.answer() to respond to users\n`
       context += `- **File extensions**: ALL files MUST use ${fileExtension} (actions, widgets, utilities)\n`
@@ -1737,8 +1846,10 @@ export default class OpenCodeTool extends Tool {
       context += `\`\`\`\n\n`
     } else {
       context += `\`\`\`python\n`
-      context += `from sdk import Settings\n\n`
-      context += `def run(params, params_helper):\n`
+      context += `from bridges.python.src.sdk.leon import leon\n`
+      context += `from bridges.python.src.sdk.types import ActionParams\n`
+      context += `from bridges.python.src.sdk.settings import Settings\n\n`
+      context += `def run(params: ActionParams, params_helper: ParamsHelper) -> None:\n`
       context += `    settings = Settings()\n`
       context += `    api_key = settings.get('provider_api_key')\n`
       context += `    model = settings.get('provider_model') or 'default-model'\n`

@@ -1,9 +1,9 @@
 import json
 from typing import List, Dict, Any, Optional
 
-from ..base_tool import BaseTool
-from ..toolkit_config import ToolkitConfig
-from ..network import Network
+from ...base_tool import BaseTool
+from ...toolkit_config import ToolkitConfig
+from ...network import Network
 from .schemas import TranscriptionOutput, TranscriptionSegment
 
 # Hardcoded default settings for OpenAI audio tool

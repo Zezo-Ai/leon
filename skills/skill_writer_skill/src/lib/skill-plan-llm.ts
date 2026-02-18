@@ -332,8 +332,7 @@ This shows flow + loop + next_action + context_data:
   "version": "1.0.0",
   "description": "A guessing game where you try to find the secret number.",
   "author": {
-    "name": "Leon AI",
-    "email": "hello@getleon.ai"
+    "name": "Leon AI's Skill Writer Skill"
   },
   "flow": ["set_up", "guess", "replay"],
   "actions": {

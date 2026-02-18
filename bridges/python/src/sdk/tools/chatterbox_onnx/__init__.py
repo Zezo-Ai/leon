@@ -1,3 +1,3 @@
-from .chatterbox_onnx_tool import ChatterboxOnnxTool
+from .chatterbox_onnx_tool import ChatterboxONNXTool
 
-__all__ = ["ChatterboxOnnxTool"]
+__all__ = ["ChatterboxONNXTool"]

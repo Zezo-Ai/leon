@@ -4,10 +4,10 @@ import re
 import tempfile
 from typing import Optional
 
-from ..base_tool import BaseTool, ExecuteCommandOptions
-from ..toolkit_config import ToolkitConfig
-from ..transcription_schema import TranscriptionOutput, TranscriptionSegment
-from ...constants import NVIDIA_LIBS_PATH, PYTORCH_TORCH_PATH
+from ...base_tool import BaseTool, ExecuteCommandOptions
+from ...toolkit_config import ToolkitConfig
+from ...transcription_schema import TranscriptionOutput, TranscriptionSegment
+from ....constants import NVIDIA_LIBS_PATH, PYTORCH_TORCH_PATH
 
 MODEL_NAME = "qwen3-asr-1.7b"
 FORCED_ALIGNER_MODEL_NAME = "qwen3-forcedaligner-0.6b"

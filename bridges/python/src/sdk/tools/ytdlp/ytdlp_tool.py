@@ -1,7 +1,7 @@
 import os
 from typing import Optional
-from ..base_tool import BaseTool, ExecuteCommandOptions, ProgressCallback
-from ..toolkit_config import ToolkitConfig
+from ...base_tool import BaseTool, ExecuteCommandOptions, ProgressCallback
+from ...toolkit_config import ToolkitConfig
 
 
 class YtdlpTool(BaseTool):

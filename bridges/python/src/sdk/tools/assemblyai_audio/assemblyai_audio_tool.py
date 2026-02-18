@@ -2,10 +2,10 @@ import json
 import time
 from typing import List, Dict, Any, Optional
 
-from ..base_tool import BaseTool
-from ..toolkit_config import ToolkitConfig
-from ..network import Network
-from ..transcription_schema import TranscriptionOutput, TranscriptionSegment
+from ...base_tool import BaseTool
+from ...toolkit_config import ToolkitConfig
+from ...network import Network
+from ...transcription_schema import TranscriptionOutput, TranscriptionSegment
 
 # Hardcoded default settings for AssemblyAI audio tool
 # These can be overridden by toolkit settings.json per toolkit.

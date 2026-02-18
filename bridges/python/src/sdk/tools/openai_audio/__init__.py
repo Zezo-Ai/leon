@@ -1,3 +1,3 @@
-from .openai_audio_tool import OpenaiAudioTool
+from .openai_audio_tool import OpenAIAudioTool
 
-__all__ = ["OpenaiAudioTool"]
+__all__ = ["OpenAIAudioTool"]

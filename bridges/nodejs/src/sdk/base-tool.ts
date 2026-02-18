@@ -223,8 +223,20 @@ export abstract class Tool {
         toolGroupId
       )
 
+      void this.reportCommandOutput(
+        result as string,
+        commandString,
+        toolGroupId
+      )
+
       return result as string
     } catch (error: unknown) {
+      const stdout = (error as { stdout?: Buffer | string }).stdout
+      const stderr = (error as { stderr?: Buffer | string }).stderr
+      const output = [stdout, stderr]
+        .map((chunk) => (chunk ? chunk.toString() : ''))
+        .join('')
+      void this.reportCommandOutput(output, commandString, toolGroupId)
       this.report(
         'bridges.tools.command_failed',
         {
@@ -296,6 +308,12 @@ export abstract class Tool {
             toolGroupId
           )
 
+          await this.reportCommandOutput(
+            outputBuffer,
+            commandString,
+            toolGroupId
+          )
+
           if (onProgress) {
             onProgress({ status: 'completed', percentage: 100 })
           }
@@ -309,6 +327,11 @@ export abstract class Tool {
               exit_code: code?.toString() ?? 'unknown',
               execution_time: `${executionTime}ms`
             },
+            toolGroupId
+          )
+          await this.reportCommandOutput(
+            outputBuffer,
+            commandString,
             toolGroupId
           )
           reject(
@@ -427,6 +450,40 @@ export abstract class Tool {
     })
 
     return binaryPath
+  }
+
+  private formatCommandOutput(output: string): string | null {
+    const trimmed = output.trim()
+    if (!trimmed) {
+      return null
+    }
+
+    const maxLength = 4000
+    if (trimmed.length <= maxLength) {
+      return trimmed
+    }
+
+    return `${trimmed.slice(0, maxLength)}\n... (truncated)`
+  }
+
+  private async reportCommandOutput(
+    output: string,
+    command: string,
+    toolGroupId: string
+  ): Promise<void> {
+    const formatted = this.formatCommandOutput(output)
+    if (!formatted) {
+      return
+    }
+
+    await this.report(
+      'bridges.tools.command_output',
+      {
+        command,
+        output: formatted
+      },
+      toolGroupId
+    )
   }
 
   /**

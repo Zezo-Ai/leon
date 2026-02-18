@@ -10,25 +10,40 @@ from typing import (
     Mapping,
     Any,
     Sequence,
+    Literal,
     cast,
 )
 from collections.abc import Sequence as SequenceABC, Mapping as MappingABC
 
-from ..base_tool import BaseTool, ExecuteCommandOptions
-from ..toolkit_config import ToolkitConfig
-from ...constants import NVIDIA_LIBS_PATH, PYTORCH_TORCH_PATH
+from ...base_tool import BaseTool, ExecuteCommandOptions
+from ...toolkit_config import ToolkitConfig
+from ....constants import NVIDIA_LIBS_PATH, PYTORCH_TORCH_PATH
 
 MODEL_BASE_NAME = "Qwen3-TTS-12Hz-1.7B-Base"
 MODEL_DESIGN_NAME = "Qwen3-TTS-12Hz-1.7B-VoiceDesign"
 MODEL_CUSTOM_NAME = "Qwen3-TTS-12Hz-1.7B-CustomVoice"
+
+SupportedLanguage = Literal[
+    "Auto",
+    "Chinese",
+    "English",
+    "Japanese",
+    "Korean",
+    "German",
+    "French",
+    "Russian",
+    "Portuguese",
+    "Spanish",
+    "Italian",
+]
 
 TTask = TypeVar("TTask", bound=Mapping[str, Any])
 
 
 class SynthesizeSpeechTask(TypedDict, total=False):
     text: str
-    target_language: Optional[str]
-    language: Optional[str]
+    target_language: Optional[SupportedLanguage]
+    language: Optional[SupportedLanguage]
     audio_path: Optional[str]
     output_path: Optional[str]
     speaker_reference_path: Optional[str]
@@ -49,8 +64,8 @@ class SynthesizeSpeechTask(TypedDict, total=False):
 
 class DesignVoiceTask(TypedDict, total=False):
     text: str
-    target_language: Optional[str]
-    language: Optional[str]
+    target_language: Optional[SupportedLanguage]
+    language: Optional[SupportedLanguage]
     instruct: Optional[str]
     audio_path: Optional[str]
     output_path: Optional[str]
@@ -68,9 +83,24 @@ class DesignVoiceTask(TypedDict, total=False):
 
 class CustomVoiceTask(TypedDict, total=False):
     text: str
-    target_language: Optional[str]
-    language: Optional[str]
-    speaker: str
+    target_language: Optional[SupportedLanguage]
+    language: Optional[SupportedLanguage]
+    """
+    Vivian for Chinese; Serena for Chinese; Uncle_Fu for Chinese;
+    Dylan for Chinese (Beijing dialect); Eric for Chinese (Sichuan dialect);
+    Ryan for English; Aiden for English; Ono_Anna for Japanese; Sohee for Korean
+    """
+    speaker: (
+        Literal["Vivian"]
+        | Literal["Serena"]
+        | Literal["Uncle_Fu"]
+        | Literal["Dylan"]
+        | Literal["Eric"]
+        | Literal["Ryan"]
+        | Literal["Aiden"]
+        | Literal["Ono_Anna"]
+        | Literal["Sohee"]
+    )
     instruct: Optional[str]
     audio_path: Optional[str]
     output_path: Optional[str]
@@ -88,10 +118,10 @@ class CustomVoiceTask(TypedDict, total=False):
 
 class DesignThenSynthesizeTask(TypedDict, total=False):
     design_text: str
-    design_language: Optional[str]
+    design_language: Optional[SupportedLanguage]
     design_instruct: Optional[str]
     texts: List[str]
-    languages: Optional[List[str]]
+    languages: Optional[List[SupportedLanguage]]
     output_paths: List[str]
     design_max_new_tokens: Optional[int]
     design_do_sample: Optional[bool]

@@ -217,6 +217,9 @@
       "Successfully executed command in {{ execution_time }}.",
       "Command finished successfully after {{ execution_time }}."
     ],
+    "bridges.tools.command_output": [
+      "Output from {{ command }}:\n```\n{{ output }}\n```"
+    ],
     "bridges.tools.command_failed": [
       "Command failed: {{ command }} ({{ error }}).",
       "Execution failed: {{ command }} - {{ error }}.",

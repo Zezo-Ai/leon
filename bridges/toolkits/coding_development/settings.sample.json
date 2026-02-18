@@ -1,6 +1,6 @@
 {
   "opencode": {
     "OPENCODE_OPENROUTER_API_KEY": null,
-    "OPENCODE_OPENROUTER_MODEL": "openrouter/z-ai/glm-5"
+    "OPENCODE_OPENROUTER_MODEL": "openrouter/openai/gpt-5.2-codex"
   }
 }

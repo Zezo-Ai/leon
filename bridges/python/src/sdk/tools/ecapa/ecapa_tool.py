@@ -1,7 +1,7 @@
 import os
 
-from ..base_tool import BaseTool, ExecuteCommandOptions
-from ..toolkit_config import ToolkitConfig
+from ...base_tool import BaseTool, ExecuteCommandOptions
+from ...toolkit_config import ToolkitConfig
 
 MODEL_NAME = 'ecapa-voice_gender_classifier'
 

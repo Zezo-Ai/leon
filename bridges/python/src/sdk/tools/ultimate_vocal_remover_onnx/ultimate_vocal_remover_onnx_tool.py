@@ -3,10 +3,10 @@ import os
 import tempfile
 from typing import Optional, Union, List, TypedDict
 
-from ..base_tool import BaseTool, ExecuteCommandOptions
-from ..toolkit_config import ToolkitConfig
-from ..utils import get_platform_name
-from ...constants import NVIDIA_LIBS_PATH
+from ...base_tool import BaseTool, ExecuteCommandOptions
+from ...toolkit_config import ToolkitConfig
+from ...utils import get_platform_name
+from ....constants import NVIDIA_LIBS_PATH
 
 MODEL_NAME = "ultimate-vocal-remover-onnx"
 

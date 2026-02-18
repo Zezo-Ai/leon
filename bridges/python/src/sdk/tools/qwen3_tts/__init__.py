@@ -1,3 +1,3 @@
-from .qwen3_tts_tool import Qwen3TtsTool
+from .qwen3_tts_tool import Qwen3TTSTool
 
-__all__ = ["Qwen3TtsTool"]
+__all__ = ["Qwen3TTSTool"]

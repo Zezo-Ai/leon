@@ -1,3 +1,3 @@
-from .elevenlabs_audio_tool import ElevenlabsAudioTool
+from .elevenlabs_audio_tool import ElevenLabsAudioTool
 
-__all__ = ["ElevenlabsAudioTool"]
+__all__ = ["ElevenLabsAudioTool"]
