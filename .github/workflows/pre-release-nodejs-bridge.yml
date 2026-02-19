@@ -41,7 +41,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
-          cache: pnpm
 
       - name: Set Node.js bridge version
         working-directory: bridges/nodejs/src
