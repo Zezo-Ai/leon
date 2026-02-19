@@ -36,6 +36,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
+          cache: pnpm
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
 
       - name: Set Node.js bridge version
         working-directory: bridges/nodejs/src
@@ -47,7 +53,7 @@ jobs:
           echo "Node.js bridge version: ${{ env.NODEJS_BRIDGE_VERSION }}"
 
       - name: Install core
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build Node.js bridge
         run: npm run build:nodejs-bridge

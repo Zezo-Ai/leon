@@ -49,6 +49,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
+          cache: pnpm
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
 
       - name: Set TCP server version
         working-directory: tcp_server/src
@@ -60,7 +66,7 @@ jobs:
           echo "TCP server version: ${{ env.TCP_SERVER_VERSION }}"
 
       - name: Install core
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Set up TCP server
         run: npm run setup:tcp-server
