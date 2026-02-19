@@ -57,6 +57,7 @@ jobs:
 
       - name: Create CI lockfile
         env:
+          NPM_CONFIG_PACKAGE_LOCK: true
           PNPM_CONFIG_LOCKFILE: true
         run: pnpm install --lockfile-only --no-frozen-lockfile
 
