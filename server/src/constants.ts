@@ -53,14 +53,23 @@ export const LEON_FILE_PATH = path.join(process.cwd(), 'leon.json')
 
 /**
  * NVIDIA paths and versions.
- * Used as a common layer across tools
+ * Used as a common layer across tools.
+ *
+ * Different binaries need different cuSPARSE libs, hence:
+ * cusparse is for libcusparseLt.so.*
+ * cusparse_full is for libcusparse.so.*
  */
 export const NVIDIA_LIBS_PATH = path.join(BIN_PATH, 'nvidia')
 export const NVIDIA_CUBLAS_PATH = path.join(NVIDIA_LIBS_PATH, 'cublas')
 export const NVIDIA_CUDNN_PATH = path.join(NVIDIA_LIBS_PATH, 'cudnn')
 export const NVIDIA_CUSPARSE_PATH = path.join(NVIDIA_LIBS_PATH, 'cusparse')
+export const NVIDIA_CUSPARSE_FULL_PATH = path.join(
+  NVIDIA_LIBS_PATH,
+  'cusparse_full'
+)
 export const NVIDIA_NCCL_PATH = path.join(NVIDIA_LIBS_PATH, 'nccl')
 export const NVIDIA_NVSHMEM_PATH = path.join(NVIDIA_LIBS_PATH, 'nvshmem')
+export const NVIDIA_NVJITLINK_PATH = path.join(NVIDIA_LIBS_PATH, 'nvjitlink')
 export const NVIDIA_VERSIONS_PATH = path.join(NVIDIA_LIBS_PATH, 'versions.json')
 export const NVIDIA_CUBLAS_MANIFEST_PATH = path.join(
   NVIDIA_CUBLAS_PATH,
@@ -74,12 +83,20 @@ export const NVIDIA_CUSPARSE_MANIFEST_PATH = path.join(
   NVIDIA_CUSPARSE_PATH,
   'manifest.json'
 )
+export const NVIDIA_CUSPARSE_FULL_MANIFEST_PATH = path.join(
+  NVIDIA_CUSPARSE_FULL_PATH,
+  'manifest.json'
+)
 export const NVIDIA_NCCL_MANIFEST_PATH = path.join(
   NVIDIA_NCCL_PATH,
   'manifest.json'
 )
 export const NVIDIA_NVSHMEM_MANIFEST_PATH = path.join(
   NVIDIA_NVSHMEM_PATH,
+  'manifest.json'
+)
+export const NVIDIA_NVJITLINK_MANIFEST_PATH = path.join(
+  NVIDIA_NVJITLINK_PATH,
   'manifest.json'
 )
 const NVIDIA_VERSIONS = JSON.parse(
@@ -89,8 +106,10 @@ export const NVIDIA_CUDA_VERSION = NVIDIA_VERSIONS.cuda
 export const NVIDIA_CUDNN_VERSION = NVIDIA_VERSIONS.cudnn
 export const NVIDIA_CUBLAS_VERSION = NVIDIA_VERSIONS.cublas
 export const NVIDIA_CUSPARSE_VERSION = NVIDIA_VERSIONS.cusparse
+export const NVIDIA_CUSPARSE_FULL_VERSION = NVIDIA_VERSIONS.cusparse_full
 export const NVIDIA_NCCL_VERSION = NVIDIA_VERSIONS.nccl
 export const NVIDIA_NVSHMEM_VERSION = NVIDIA_VERSIONS.nvshmem
+export const NVIDIA_NVJITLINK_VERSION = NVIDIA_VERSIONS.nvjitlink
 
 /**
  * PyTorch paths and versions.

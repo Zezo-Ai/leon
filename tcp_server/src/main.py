@@ -1,4 +1,6 @@
 import argparse
+import ctypes
+import glob
 import os
 import sys
 import threading
@@ -86,10 +88,26 @@ def _configure_external_libraries(
 
     if nvidia_path:
         nvidia_root = os.path.abspath(nvidia_path)
-        for library in ["cublas", "cudnn", "cusparse", "nccl", "nvshmem"]:
+        nvjitlink_pattern = os.path.join(
+            nvidia_root, "nvjitlink", "lib", "libnvJitLink.so.*"
+        )
+        for library in [
+            "cublas",
+            "cudnn",
+            "cusparse",
+            "cusparse_full",
+            "nccl",
+            "nvshmem",
+            "nvjitlink",
+        ]:
             candidate = os.path.join(nvidia_root, library, "lib")
             if os.path.isdir(candidate):
                 lib_paths.append(candidate)
+
+        if sys.platform.startswith("linux"):
+            nvjitlink_candidates = sorted(glob.glob(nvjitlink_pattern), reverse=True)
+            if nvjitlink_candidates:
+                ctypes.CDLL(nvjitlink_candidates[0], mode=ctypes.RTLD_GLOBAL)
 
     _set_library_paths(lib_paths)
 

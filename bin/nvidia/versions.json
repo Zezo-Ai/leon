@@ -3,6 +3,8 @@
   "cudnn": "9.17.1.4",
   "cublas": "12.9.1.4",
   "cusparse": "0.8.1.1",
+  "cusparse_full": "12.5.10.65",
   "nccl": "2.29.3",
-  "nvshmem": "3.5.19"
+  "nvshmem": "3.5.19",
+  "nvjitlink": "12.9.86"
 }

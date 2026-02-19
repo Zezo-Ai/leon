@@ -6,19 +6,25 @@ import {
   NVIDIA_CUBLAS_PATH,
   NVIDIA_CUDNN_PATH,
   NVIDIA_CUSPARSE_PATH,
+  NVIDIA_CUSPARSE_FULL_PATH,
   NVIDIA_NCCL_PATH,
   NVIDIA_NVSHMEM_PATH,
+  NVIDIA_NVJITLINK_PATH,
   NVIDIA_CUBLAS_MANIFEST_PATH,
   NVIDIA_CUDNN_MANIFEST_PATH,
   NVIDIA_CUSPARSE_MANIFEST_PATH,
+  NVIDIA_CUSPARSE_FULL_MANIFEST_PATH,
   NVIDIA_NCCL_MANIFEST_PATH,
   NVIDIA_NVSHMEM_MANIFEST_PATH,
+  NVIDIA_NVJITLINK_MANIFEST_PATH,
   NVIDIA_CUDA_VERSION,
   NVIDIA_CUBLAS_VERSION,
   NVIDIA_CUDNN_VERSION,
   NVIDIA_CUSPARSE_VERSION,
+  NVIDIA_CUSPARSE_FULL_VERSION,
   NVIDIA_NCCL_VERSION,
-  NVIDIA_NVSHMEM_VERSION
+  NVIDIA_NVSHMEM_VERSION,
+  NVIDIA_NVJITLINK_VERSION
 } from '@/constants'
 import { FileHelper } from '@/helpers/file-helper'
 import { SystemHelper } from '@/helpers/system-helper'
@@ -73,6 +79,8 @@ function getNVIDIADownloadURL(library, version) {
     return `https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/${OS_TYPE}-${arch}/cudnn-${OS_TYPE}-${arch}-${version}_cuda${NVIDIA_CUDA_VERSION}-archive.${ext}`
   } else if (library === 'cusparse') {
     return `https://developer.download.nvidia.com/compute/cusparselt/redist/libcusparse_lt/${OS_TYPE}-${arch}/libcusparse_lt-${OS_TYPE}-${arch}-${version}_cuda${NVIDIA_CUDA_VERSION}-archive.${ext}`
+  } else if (library === 'cusparse_full') {
+    return `https://developer.download.nvidia.com/compute/cuda/redist/libcusparse/${OS_TYPE}-${arch}/libcusparse-${OS_TYPE}-${arch}-${version}-archive.${ext}`
   } else if (library === 'nccl') {
     // NCCL is only available on Linux x86_64
     if (!SystemHelper.isLinux() || arch !== 'x86_64') {
@@ -87,6 +95,8 @@ function getNVIDIADownloadURL(library, version) {
     }
 
     return `https://developer.download.nvidia.com/compute/nvshmem/redist/libnvshmem/${OS_TYPE}-${arch}/libnvshmem-${OS_TYPE}-${arch}-${version}_cuda${NVIDIA_CUDA_VERSION}-archive.${ext}`
+  } else if (library === 'nvjitlink') {
+    return `https://developer.download.nvidia.com/compute/cuda/redist/libnvjitlink/${OS_TYPE}-${arch}/libnvjitlink-${OS_TYPE}-${arch}-${version}-archive.${ext}`
   }
 }
 
@@ -224,6 +234,34 @@ async function setupNVIDIALibs() {
         )
       } catch (error) {
         LogHelper.warning(`cuSPARSE-Lt installation skipped: ${error.message}`)
+      }
+    }
+
+    // Install/update cuSPARSE (Linux only, both x86_64 and aarch64)
+    if (SystemHelper.isLinux()) {
+      try {
+        await installNVIDIALibrary(
+          'cusparse_full',
+          NVIDIA_CUSPARSE_FULL_VERSION,
+          NVIDIA_CUSPARSE_FULL_PATH,
+          NVIDIA_CUSPARSE_FULL_MANIFEST_PATH
+        )
+      } catch (error) {
+        LogHelper.warning(`cuSPARSE installation skipped: ${error.message}`)
+      }
+    }
+
+    // Install/update nvJitLink (Linux only)
+    if (SystemHelper.isLinux()) {
+      try {
+        await installNVIDIALibrary(
+          'nvjitlink',
+          NVIDIA_NVJITLINK_VERSION,
+          NVIDIA_NVJITLINK_PATH,
+          NVIDIA_NVJITLINK_MANIFEST_PATH
+        )
+      } catch (error) {
+        LogHelper.warning(`nvJitLink installation skipped: ${error.message}`)
       }
     }
 

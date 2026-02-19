@@ -12,7 +12,9 @@ import {
   NVIDIA_CUBLAS_PATH,
   NVIDIA_CUDNN_PATH,
   NVIDIA_CUSPARSE_PATH,
+  NVIDIA_CUSPARSE_FULL_PATH,
   NVIDIA_NCCL_PATH,
+  NVIDIA_NVJITLINK_PATH,
   NVIDIA_NVSHMEM_PATH,
   NVIDIA_LIBS_PATH,
   PYTORCH_TORCH_PATH,
@@ -81,8 +83,10 @@ import { SystemHelper } from '@/helpers/system-helper'
       `${NVIDIA_CUBLAS_PATH}/lib`,
       `${NVIDIA_CUDNN_PATH}/lib`,
       `${NVIDIA_CUSPARSE_PATH}/lib`,
+      `${NVIDIA_CUSPARSE_FULL_PATH}/lib`,
       `${NVIDIA_NCCL_PATH}/lib`,
-      `${NVIDIA_NVSHMEM_PATH}/lib`
+      `${NVIDIA_NVSHMEM_PATH}/lib`,
+      `${NVIDIA_NVJITLINK_PATH}/lib`
     ]
     const existingLdPath = tcpServerEnv['LD_LIBRARY_PATH']
     const combinedLdPath = [torchLibPath, ...nvidiaLibPaths, existingLdPath]
