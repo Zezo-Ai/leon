@@ -64,7 +64,7 @@
     "build:nodejs-bridge": "tsx scripts/build-binaries.js nodejs-bridge",
     "build:python-bridge": "tsx scripts/build-binaries.js python-bridge",
     "build:tcp-server": "tsx scripts/build-binaries.js tcp-server",
-    "start:tcp-server": "cross-env PIPENV_PIPFILE=tcp_server/src/Pipfile LD_LIBRARY_PATH=`PIPENV_PIPFILE=tcp_server/src/Pipfile pipenv run python -c 'import os; import nvidia.cublas.lib; import nvidia.cudnn.lib; print(os.path.dirname(nvidia.cublas.lib.__file__) + \":\" + os.path.dirname(nvidia.cudnn.lib.__file__))'` pipenv run python tcp_server/src/main.py",
+    "start:tcp-server": "cross-env PIPENV_PIPFILE=tcp_server/src/Pipfile pipenv run python tcp_server/src/main.py --pytorch-path bin/pytorch/torch --nvidia-path bin/nvidia",
     "start": "cross-env LEON_NODE_ENV=production node server/dist/pre-check.js && node server/dist/index.js",
     "python-bridge": "cross-env PIPENV_PIPFILE=bridges/python/src/Pipfile pipenv run python bridges/python/src/main.py server/src/intent-object.sample.json",
     "train": "tsx scripts/train/run-train.js",
