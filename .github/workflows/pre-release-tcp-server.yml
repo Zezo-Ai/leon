@@ -55,6 +55,22 @@ jobs:
         with:
           node-version: lts/*
 
+      - name: Create CI lockfile
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+
+      - name: Get pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-${{ matrix.arch }}-${{ hashFiles('pnpm-lock.yaml', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-${{ matrix.arch }}-
+
       - name: Set TCP server version
         working-directory: tcp_server/src
         run: |
@@ -65,7 +81,7 @@ jobs:
           echo "TCP server version: ${{ env.TCP_SERVER_VERSION }}"
 
       - name: Install core
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Set up TCP server
         run: npm run setup:tcp-server
