@@ -87,10 +87,10 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Set up TCP server
-        run: npm run setup:tcp-server
+        run: pnpm run setup:tcp-server
 
       - name: Build TCP server
-        run: npm run build:tcp-server
+        run: pnpm run build:tcp-server
 
       - name: Upload TCP server
         uses: actions/upload-artifact@v4
@@ -121,12 +121,32 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: tcp_server/dist
+          merge-multiple: true
 
-      - uses: marvinpinto/action-automatic-releases@latest
+      - name: Verify TCP server assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -la tcp_server/dist
+          required=(
+            "tcp_server/dist/leon-tcp-server-linux-aarch64.zip"
+            "tcp_server/dist/leon-tcp-server-linux-x86_64.zip"
+            "tcp_server/dist/leon-tcp-server-macosx-arm64.zip"
+            "tcp_server/dist/leon-tcp-server-macosx-x86_64.zip"
+            "tcp_server/dist/leon-tcp-server-win-amd64.zip"
+          )
+          for asset in "${required[@]}"; do
+            [ -f "$asset" ] || { echo "Missing asset: $asset"; exit 1; }
+          done
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          automatic_release_tag: tcp-server_v${{ env.TCP_SERVER_VERSION }}
+          tag_name: tcp-server_v${{ env.TCP_SERVER_VERSION }}
+          name: TCP Server ${{ env.TCP_SERVER_VERSION }}
           draft: true
           prerelease: false
-          title: TCP Server ${{ env.TCP_SERVER_VERSION }}
-          files: tcp_server/dist/artifact/*.zip
+          files: tcp_server/dist/*.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

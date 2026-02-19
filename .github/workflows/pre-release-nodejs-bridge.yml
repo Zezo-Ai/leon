@@ -10,20 +10,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             arch: linux-x86_64
-            python_arch: x64
-          - os: ubuntu-22.04-arm
-            arch: linux-aarch64
-            python_arch: arm64
-          - os: macos-15-intel
-            arch: macosx-x86_64
-            python_arch: x64
-          - os: macos-latest
-            arch: macosx-arm64
-            python_arch: arm64
-          - os: windows-latest
-            arch: win-amd64
             python_arch: x64
 
     runs-on: ${{ matrix.os }}
@@ -74,7 +62,7 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Build Node.js bridge
-        run: npm run build:nodejs-bridge
+        run: pnpm run build:nodejs-bridge
 
       - name: Upload Node.js bridge
         uses: actions/upload-artifact@v4
@@ -105,12 +93,28 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: bridges/nodejs/dist
+          merge-multiple: true
 
-      - uses: marvinpinto/action-automatic-releases@latest
+      - name: Verify Node.js bridge assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -la bridges/nodejs/dist
+          required=(
+            "bridges/nodejs/dist/leon-nodejs-bridge.zip"
+          )
+          for asset in "${required[@]}"; do
+            [ -f "$asset" ] || { echo "Missing asset: $asset"; exit 1; }
+          done
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          automatic_release_tag: nodejs-bridge_v${{ env.NODEJS_BRIDGE_VERSION }}
+          tag_name: nodejs-bridge_v${{ env.NODEJS_BRIDGE_VERSION }}
+          name: Node.js Bridge ${{ env.NODEJS_BRIDGE_VERSION }}
           draft: true
           prerelease: false
-          title: Node.js Bridge ${{ env.NODEJS_BRIDGE_VERSION }}
-          files: bridges/nodejs/dist/artifact/*.zip
+          files: bridges/nodejs/dist/*.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
