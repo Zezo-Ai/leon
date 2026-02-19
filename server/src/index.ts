@@ -85,17 +85,13 @@ import { LogHelper } from '@/helpers/log-helper'
   PYTHON_TCP_CLIENT.connect()
 
   try {
-    LogHelper.time('LLM Provider ready')
     await LLM_PROVIDER.init()
-    LogHelper.timeEnd('LLM Provider ready')
   } catch (e) {
     LogHelper.error(`LLM Provider failed to init: ${e}`)
   }
 
   try {
-    LogHelper.time('LLM Manager ready')
     await LLM_MANAGER.loadLLM()
-    LogHelper.timeEnd('LLM Manager ready')
   } catch (e) {
     LogHelper.error(`LLM Manager failed to load: ${e}`)
   }
@@ -155,9 +151,7 @@ import { LogHelper } from '@/helpers/log-helper'
 
   try {
     // Start the HTTP server
-    LogHelper.time('HTTP Server ready')
     await HTTP_SERVER.init()
-    LogHelper.timeEnd('HTTP Server ready')
   } catch (e) {
     LogHelper.error(`HTTP server failed to init: ${e}`)
   }

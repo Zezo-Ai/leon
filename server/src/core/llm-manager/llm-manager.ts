@@ -257,6 +257,7 @@ export default class LLMManager {
   }
 
   public async loadLLM(): Promise<void> {
+    LogHelper.time('LLM Manager load LLM')
     /**
      * Get Llama even if LLM is not enabled because it provides good utilities
      * for graphics card information and other useful stuff
@@ -723,16 +724,23 @@ export default class LLMManager {
     if (this._shouldWarmUpLLMDuties) {
       this.warmUpLLMDuties()
     }
+
+    LogHelper.title('LLM Manager')
+    LogHelper.timeEnd('LLM Manager load LLM')
   }
 
   public async warmUpLLMDuties(): Promise<void> {
     try {
+      LogHelper.time('LLM Manager warm up LLM duties')
       LogHelper.title('LLM Manager')
       LogHelper.info('Warming up LLM duties...')
 
       await warmUpLlmDuties(Object.keys(this._coreLLMDuties) as LLMDuties[])
 
       this._areLLMDutiesWarmedUp = true
+
+      LogHelper.title('LLM Manager')
+      LogHelper.timeEnd('LLM Manager warm up LLM duties')
     } catch (e) {
       LogHelper.title('LLM Manager')
       LogHelper.error(`LLM Manager failed to warm up LLM duties: ${e}`)
