@@ -368,6 +368,10 @@ Follow these rules exactly:
         return null
       }
 
+      const actionNames = Object.keys(actions)
+      const preselectedSingleActionName =
+        actionNames.length === 1 ? actionNames[0] : null
+
       // Call pre-LLM shortcuts
       const maybeResult = this.handlePreLLMInference(actions, flow)
       if (maybeResult !== true) {
@@ -378,6 +382,10 @@ Follow these rules exactly:
         return maybeResult as LLMDutyResult
       }
       let prompt = `User Query: "${this.input}"`
+
+      if (preselectedSingleActionName) {
+        prompt = `Only one action exists for this skill: "${preselectedSingleActionName}". Force the use of this action name and resolve parameters.\n${prompt}`
+      }
 
       if (actionNotes.length > 0) {
         prompt = `You must pay attention to these notes: ${actionNotes.join(

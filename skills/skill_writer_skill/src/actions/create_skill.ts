@@ -74,16 +74,9 @@ export const run: ActionFunction = async function (
   _params: ActionParams,
   paramsHelper: ParamsHelper
 ) {
-  const description = paramsHelper.getActionArgument('description') as
-    | string
-    | undefined
+  const description = _params.utterance
   const bridge =
     (paramsHelper.getActionArgument('bridge') as string | undefined) || 'nodejs'
-
-  if (!description) {
-    leon.answer({ key: 'missing_description' })
-    return
-  }
 
   // Validate bridge parameter
   if (bridge !== 'nodejs' && bridge !== 'python') {
@@ -91,6 +84,7 @@ export const run: ActionFunction = async function (
       key: 'invalid_bridge',
       data: { bridge }
     })
+
     return
   }
 

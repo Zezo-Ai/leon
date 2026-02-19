@@ -3,9 +3,6 @@
   "actions": {
     "create_skill": {
       "answers": {
-        "missing_description": [
-          "Please describe the skill you want me to build."
-        ],
         "invalid_bridge": [
           "Invalid bridge '{{ bridge }}'. Please use 'nodejs' or 'python'."
         ],
