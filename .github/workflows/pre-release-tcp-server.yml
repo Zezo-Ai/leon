@@ -71,6 +71,7 @@ jobs:
       - name: Upload TCP server
         uses: actions/upload-artifact@v4
         with:
+          name: tcp-server-${{ matrix.arch }}
           path: tcp_server/dist/*.zip
 
   draft-release:

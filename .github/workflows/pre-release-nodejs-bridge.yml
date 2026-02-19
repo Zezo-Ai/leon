@@ -55,6 +55,7 @@ jobs:
       - name: Upload Node.js bridge
         uses: actions/upload-artifact@v4
         with:
+          name: nodejs-bridge-${{ matrix.arch }}
           path: bridges/nodejs/dist/*.zip
 
   draft-release:

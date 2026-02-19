@@ -71,6 +71,7 @@ jobs:
       - name: Upload Python bridge
         uses: actions/upload-artifact@v4
         with:
+          name: python-bridge-${{ matrix.arch }}
           path: bridges/python/dist/*.zip
 
   draft-release:
