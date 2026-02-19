@@ -13,28 +13,40 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # @see https://github.com/actions/runner-images/tree/main/images/macos
-        # Use macos-12 instead of macos-latest because the latter use ARM64 (M1) architecture
-        os: [ubuntu-20.04, macos-12]
-        # Temporarily disable Windows release
-        # os: [ubuntu-20.04, macos-12, windows-latest]
+        include:
+          - os: ubuntu-latest
+            arch: linux-x86_64
+            python_arch: x64
+          - os: ubuntu-22.04-arm
+            arch: linux-aarch64
+            python_arch: arm64
+          - os: macos-15-intel
+            arch: macosx-x86_64
+            python_arch: x64
+          - os: macos-latest
+            arch: macosx-arm64
+            python_arch: arm64
+          - os: windows-latest
+            arch: win-amd64
+            python_arch: x64
 
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Clone repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.11.9
+          architecture: ${{ matrix.python_arch }}
 
       - name: Install Pipenv
         run: pip install --upgrade pip && pip install pipenv==2024.0.1
 
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: lts/*
 
@@ -57,21 +69,21 @@ jobs:
         run: npm run build:python-bridge
 
       - name: Upload Python bridge
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           path: bridges/python/dist/*.zip
 
   draft-release:
     name: Draft-release
     needs: [build]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Clone repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.11.9
 
@@ -81,7 +93,7 @@ jobs:
           echo "PYTHON_BRIDGE_VERSION=$(python -c "from version import __version__; print(__version__)")" >> $GITHUB_ENV
 
       - name: Download Python bridge
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: bridges/python/dist
 
