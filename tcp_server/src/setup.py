@@ -37,12 +37,19 @@ if "win" in sysconfig.get_platform():
 av_src = os.path.join(package_dir, "av")
 av_dist = os.path.join("lib", "av")
 
-nvidia_cudnn_lib_src = os.path.join(package_dir, "nvidia", "cudnn", "lib")
-nvidia_cudnn_lib_dist = os.path.join("lib", "nvidia", "cudnn", "lib")
-
 options = {
     "build_exe": {
         "packages": ["spacy", "en_core_web_trf", "fr_core_news_md", "pycrfsuite"],
+        "excludes": [
+            "torch",
+            "functorch",
+            "nvidia",
+            "nvidia.cublas",
+            "nvidia.cudnn",
+            "nvidia.cusparse",
+            "nvidia.nccl",
+            "nvidia.nvshmem",
+        ],
         "includes": [
             "srsly.msgpack.util",
             "blis",
@@ -51,6 +58,7 @@ options = {
             "sklearn.utils._isfinite",
             "sklearn.externals.array_api_compat.numpy",
             "sklearn.externals.array_api_compat.numpy.fft",
+            "pickletools",
         ],
         "include_files": [
             # Includes "av" module files manually to avoid ModuleNotFoundError
@@ -59,18 +67,6 @@ options = {
         ],
     }
 }
-
-# Include NVIDIA libraries for non-macOS platforms
-if "macos" not in sysconfig.get_platform():
-    if not os.path.exists(nvidia_cudnn_lib_src):
-        print(
-            f"Skipping NVIDIA cuDNN inclusion. Directory does not exist: {nvidia_cudnn_lib_src}"
-        )
-    else:
-        options["build_exe"]["include_files"] = [
-            *options["build_exe"]["include_files"],
-            (nvidia_cudnn_lib_src, nvidia_cudnn_lib_dist),
-        ]
 
 # Include private libraries from the tokenizers package for Linux
 # if 'linux' in sysconfig.get_platform():

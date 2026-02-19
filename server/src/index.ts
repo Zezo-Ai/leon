@@ -9,6 +9,13 @@ import {
   IS_PRODUCTION_ENV,
   IS_TELEMETRY_ENABLED,
   LANG as LEON_LANG,
+  NVIDIA_CUBLAS_PATH,
+  NVIDIA_CUDNN_PATH,
+  NVIDIA_CUSPARSE_PATH,
+  NVIDIA_NCCL_PATH,
+  NVIDIA_NVSHMEM_PATH,
+  NVIDIA_LIBS_PATH,
+  PYTORCH_TORCH_PATH,
   PYTHON_TCP_SERVER_BIN_PATH
 } from '@/constants'
 import {
@@ -28,6 +35,7 @@ import { Telemetry } from '@/telemetry'
 // import { ActionRecognitionLLMDuty } from '@/core/llm-manager/llm-duties/action-recognition-llm-duty'
 import { LangHelper } from '@/helpers/lang-helper'
 import { LogHelper } from '@/helpers/log-helper'
+import { SystemHelper } from '@/helpers/system-helper'
 ;(async (): Promise<void> => {
   process.title = 'leon'
 
@@ -54,13 +62,40 @@ import { LogHelper } from '@/helpers/log-helper'
    * to have 2 TCP servers running at the same time
    */
   LogHelper.time('TCP Server ready')
-  global.pythonTCPServerProcess = spawn(
-    `${PYTHON_TCP_SERVER_BIN_PATH} ${LangHelper.getShortCode(LEON_LANG)}`,
-    {
-      shell: true,
-      detached: IS_DEVELOPMENT_ENV
-    }
-  )
+  const tcpServerArgs = [
+    LangHelper.getShortCode(LEON_LANG),
+    '--pytorch-path',
+    PYTORCH_TORCH_PATH,
+    '--nvidia-path',
+    NVIDIA_LIBS_PATH
+  ]
+  const tcpServerCmd = [PYTHON_TCP_SERVER_BIN_PATH, ...tcpServerArgs]
+    .map((arg) => `"${arg}"`)
+    .join(' ')
+
+  const tcpServerEnv = { ...process.env }
+
+  if (SystemHelper.isLinux()) {
+    const torchLibPath = `${PYTORCH_TORCH_PATH}/lib`
+    const nvidiaLibPaths = [
+      `${NVIDIA_CUBLAS_PATH}/lib`,
+      `${NVIDIA_CUDNN_PATH}/lib`,
+      `${NVIDIA_CUSPARSE_PATH}/lib`,
+      `${NVIDIA_NCCL_PATH}/lib`,
+      `${NVIDIA_NVSHMEM_PATH}/lib`
+    ]
+    const existingLdPath = tcpServerEnv['LD_LIBRARY_PATH']
+    const combinedLdPath = [torchLibPath, ...nvidiaLibPaths, existingLdPath]
+      .filter(Boolean)
+      .join(':')
+    tcpServerEnv['LD_LIBRARY_PATH'] = combinedLdPath
+  }
+
+  global.pythonTCPServerProcess = spawn(tcpServerCmd, {
+    shell: true,
+    detached: IS_DEVELOPMENT_ENV,
+    env: tcpServerEnv
+  })
   global.pythonTCPServerProcess.stdout.on('data', (data: Buffer) => {
     LogHelper.title('Python TCP Server')
     LogHelper.info(data.toString())
