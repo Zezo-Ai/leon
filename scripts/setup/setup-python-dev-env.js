@@ -8,6 +8,7 @@ import {
   EN_SPACY_MODEL_VERSION,
   FR_SPACY_MODEL_NAME,
   FR_SPACY_MODEL_VERSION,
+  IS_GITHUB_ACTIONS,
   PYTHON_BRIDGE_SRC_PATH,
   PYTHON_TCP_SERVER_SRC_PATH
 } from '@/constants'
@@ -263,11 +264,15 @@ SPACY_MODELS.set('fr', {
       LogHelper.success('Python packages installed')
 
       if (givenSetupTarget === 'tcp-server') {
-        if (!hasSharedPyTorch()) {
+        if (!hasSharedPyTorch() && !IS_GITHUB_ACTIONS) {
           LogHelper.error(
             'Shared PyTorch bundle not found. Please run "npm run postinstall" and retry.'
           )
           process.exit(1)
+        }
+
+        if (!hasSharedPyTorch() && IS_GITHUB_ACTIONS) {
+          LogHelper.info('Skipping shared PyTorch bundle check in CI')
         }
 
         LogHelper.success('Shared PyTorch bundle found')
