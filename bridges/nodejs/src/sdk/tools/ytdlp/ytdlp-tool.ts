@@ -31,20 +31,9 @@ export default class YtdlpTool extends Tool {
     return this.config['description']
   }
 
-  /**
-   * Build common yt-dlp arguments with retry and sleep options
-   */
-  private buildCommonArgs(): string[] {
-    return [
-      '--retries',
-      '3',
-      '--sleep-interval',
-      '0.5',
-      '--max-sleep-interval',
-      '2',
-      '--extractor-args',
-      'youtube:player_client=default,-web_safari'
-    ]
+  private getConfigArgs(): string[] {
+    const configPath = join(this.getToolDir(import.meta.url), 'yt-dlp.conf')
+    return ['--config-locations', configPath]
   }
 
   /**
@@ -62,7 +51,7 @@ export default class YtdlpTool extends Tool {
       const outputTemplate = join(outputPath, '%(title)s.%(ext)s')
       const result = await this.executeCommand({
         binaryName: 'yt-dlp',
-        args: [...this.buildCommonArgs(), videoUrl, '-o', outputTemplate],
+        args: [...this.getConfigArgs(), videoUrl, '-o', outputTemplate],
         options: { sync: true }
       })
 
@@ -106,7 +95,7 @@ export default class YtdlpTool extends Tool {
       const result = await this.executeCommand({
         binaryName: 'yt-dlp',
         args: [
-          ...this.buildCommonArgs(),
+          ...this.getConfigArgs(),
           videoUrl,
           '-x',
           '--audio-format',
@@ -156,7 +145,7 @@ export default class YtdlpTool extends Tool {
       )
       await this.executeCommand({
         binaryName: 'yt-dlp',
-        args: [...this.buildCommonArgs(), playlistUrl, '-o', outputTemplate],
+        args: [...this.getConfigArgs(), playlistUrl, '-o', outputTemplate],
         options: { sync: true }
       })
 
@@ -204,7 +193,7 @@ export default class YtdlpTool extends Tool {
       await this.executeCommand({
         binaryName: 'yt-dlp',
         args: [
-          ...this.buildCommonArgs(),
+          ...this.getConfigArgs(),
           videoUrl,
           '-f',
           formatSelector,
@@ -296,7 +285,7 @@ export default class YtdlpTool extends Tool {
       await this.executeCommand({
         binaryName: 'yt-dlp',
         args: [
-          ...this.buildCommonArgs(),
+          ...this.getConfigArgs(),
           videoUrl,
           '--write-subs',
           '--sub-langs',
@@ -338,7 +327,7 @@ export default class YtdlpTool extends Tool {
       const result = await this.executeCommand({
         binaryName: 'yt-dlp',
         args: [
-          ...this.buildCommonArgs(),
+          ...this.getConfigArgs(),
           videoUrl,
           '--embed-thumbnail',
           '--write-thumbnail',

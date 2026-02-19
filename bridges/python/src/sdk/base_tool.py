@@ -97,6 +97,9 @@ class BaseTool(ABC):
             # Unix/Linux: escape special characters with backslashes
             return re.sub(r'(["\s\'$`\\(){}[\]|&;<>*?!])', r"\\\1", arg)
 
+    def _get_tool_dir(self, module_file: str) -> str:
+        return os.path.dirname(os.path.abspath(module_file))
+
     def _format_command_output(self, output: str) -> Optional[str]:
         trimmed = output.strip()
         if not trimmed:
