@@ -73,7 +73,7 @@ const CORE_LLM_DUTIES: CoreLLMDuties = {
   },
   [LLMDuties.ActionCalling]: {
     /**
-     * An action may have ~128 tokens,
+     * An action may have ~196 tokens,
      * a skill may contain 10 actions,
      * we double that
      */
