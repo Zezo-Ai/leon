@@ -615,7 +615,8 @@ class OpenCodeTool(BaseTool):
                 "- **Action structure**: Export a `run` function as the action entry point\n"
                 "- **Responses**: Use leon.answer() to respond to users\n"
                 f"- **File extensions**: ALL files MUST use {file_extension} (actions, widgets, utilities)\n"
-                f"- **File structure**: skill.json + locales/en.json + src/actions/*{file_extension} + src/widgets/*{file_extension}\n"
+                "- **Extra files**: Put shared helpers in src/lib; only action entry points go in src/actions\n"
+                f"- **File structure**: skill.json + locales/en.json + src/actions/*{file_extension} + src/widgets/*{file_extension} + src/lib/*{file_extension}\n"
             )
 
         return (
@@ -624,7 +625,8 @@ class OpenCodeTool(BaseTool):
             "- **Action structure**: Define a `run` function as the action entry point\n"
             "- **Responses**: Use leon.answer() to respond to users\n"
             f"- **File extensions**: ALL files MUST use {file_extension} (actions, widgets, utilities)\n"
-            f"- **File structure**: skill.json + locales/en.json + src/actions/*{file_extension} + src/widgets/*{file_extension}\n"
+            "- **Extra files**: Put shared helpers in src/lib; only action entry points go in src/actions\n"
+            f"- **File structure**: skill.json + locales/en.json + src/actions/*{file_extension} + src/widgets/*{file_extension} + src/lib/*{file_extension}\n"
         )
 
     def _build_settings_usage_example(self, bridge: str) -> str:
@@ -935,14 +937,16 @@ class OpenCodeTool(BaseTool):
             context += "- **Action structure**: Export a `run` function as the action entry point\n"
             context += "- **Responses**: Use leon.answer() to respond to users\n"
             context += f"- **File extensions**: ALL files MUST use {file_extension} (actions, widgets, utilities)\n"
-            context += f"- **File structure**: skill.json + locales/en.json + src/actions/*{file_extension} + src/widgets/*{file_extension}\n"
+            context += "- **Extra files**: Put shared helpers in src/lib; only action entry points go in src/actions\n"
+            context += f"- **File structure**: skill.json + locales/en.json + src/actions/*{file_extension} + src/widgets/*{file_extension} + src/lib/*{file_extension}\n"
         else:
             context += "- **Tool usage**: Import tools like `from sdk.tools.ytdlp import YtdlpTool`\n"
             context += "- **SDK imports**: from bridges.python.src.sdk.leon import leon; from bridges.python.src.sdk.types import ActionParams; from bridges.python.src.sdk.params_helper import ParamsHelper\n"
             context += "- **Action structure**: Define a `run` function as the action entry point\n"
             context += "- **Responses**: Use leon.answer() to respond to users\n"
             context += f"- **File extensions**: ALL files MUST use {file_extension} (actions, widgets, utilities)\n"
-            context += f"- **File structure**: skill.json + locales/en.json + src/actions/*{file_extension} + src/widgets/*{file_extension}\n"
+            context += "- **Extra files**: Put shared helpers in src/lib; only action entry points go in src/actions\n"
+            context += f"- **File structure**: skill.json + locales/en.json + src/actions/*{file_extension} + src/widgets/*{file_extension} + src/lib/*{file_extension}\n"
 
         context += "- **Validation**: Validate against schemas in ../../schemas/skill-schemas/\n\n"
 
@@ -960,6 +964,8 @@ class OpenCodeTool(BaseTool):
         context += "│       ├── settings.json\n"
         context += "│       ├── actions/\n"
         context += f"│       │   └── action_name{file_extension}\n"
+        context += "│       ├── lib/             # Helpers/utilities\n"
+        context += f"│       │   └── helpers{file_extension}\n"
         context += "│       └── widgets/         # Optional\n"
         context += f"│           └── widget_name{file_extension}\n"
         context += "```\n\n"

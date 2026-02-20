@@ -20,6 +20,10 @@
         }
       },
       "optional_parameters": ["bridge"]
+    },
+    "modify_skill": {
+      "type": "logic",
+      "description": "Modify an existing skill using OpenCode CLI by updating or adding actions within the current skill."
     }
   }
 }

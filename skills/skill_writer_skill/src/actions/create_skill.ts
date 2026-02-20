@@ -6,6 +6,7 @@ import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
 import { Settings } from '@sdk/settings'
 import OpenCodeTool from '@sdk/tools/opencode'
+import { buildSkillPrompt, getContextFiles } from '../lib/skill-prompt'
 
 interface SkillWriterSettings extends Record<string, unknown> {
   opencode_openrouter_api_key?: string
@@ -104,31 +105,10 @@ export const run: ActionFunction = async function (
   const existingSkills = await getSkillDirectories(skillsRoot)
 
   // Context files for OpenCode to learn from (choose based on bridge)
-  const contextFiles =
-    bridge === 'nodejs'
-      ? [
-          'skills/leon/age/skill.json',
-          'skills/leon/age/src/actions/run.ts',
-          'schemas/skill-schemas/skill.json'
-        ]
-      : [
-          'skills/guess_the_number_skill/skill.json',
-          'skills/guess_the_number_skill/src/actions/set_up.py',
-          'schemas/skill-schemas/skill.json'
-        ]
+  const contextFiles = getContextFiles(bridge)
 
   // Enhanced description with tool guidance
-  const enhancedDescription = `${description}
-
-IMPORTANT GUIDANCE:
-- First check if any existing Leon tools can help with this functionality
-- For video/audio tasks: Use ytdlp-tool, ffmpeg-tool, or other video_streaming tools
-- For web requests: Use appropriate HTTP/API tools
-- For file operations: Use file system tools
-- For audio processing: Use music_audio toolkit tools
-- NEVER create new tool functionality that already exists
-- Only implement the skill-specific business logic in actions
-- Choose a concise skill folder name in snake_case ending with _skill`
+  const enhancedDescription = buildSkillPrompt(description, 'create')
 
   const opencodeTool = new OpenCodeTool()
 

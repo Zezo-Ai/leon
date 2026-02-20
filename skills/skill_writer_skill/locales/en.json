@@ -19,6 +19,20 @@
           "I couldn't generate the skill. Error: {{ error }}"
         ]
       }
+    },
+    "modify_skill": {
+      "answers": {
+        "missing_api_key": [
+          "I need your {{ provider }} API key. Please set it in my settings (opencode_{{ provider }}_api_key)."
+        ],
+        "modifying_skill": [
+          "Let me update that skill using OpenCode with {{ provider }}... This may take a minute as I iterate to get it right."
+        ],
+        "skill_modified": [
+          "Done! I updated the skill with OpenCode ({{ provider }}/{{ model }})."
+        ],
+        "generation_failed": ["I couldn't update the skill. Error: {{ error }}"]
+      }
     }
   }
 }
