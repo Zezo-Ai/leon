@@ -23,10 +23,7 @@ interface MusicAudioToolkitSkillSettings extends Record<string, unknown> {
   faster_whisper_device?: 'auto' | 'cpu' | 'cuda'
   faster_whisper_cpu_threads?: number
   qwen3_asr_device?: 'auto' | 'cpu' | 'cuda'
-  openai_transcription_api_key?: string
   openai_transcription_model?: string
-  assemblyai_transcription_api_key?: string
-  elevenlabs_transcription_api_key?: string
   elevenlabs_transcription_model?: string
   elevenlabs_transcription_diarize?: boolean
 }
@@ -68,17 +65,8 @@ export const run: ActionFunction = async function (
     )) as number | undefined
     const qwen3ASRDevice = ((await settings.get('qwen3_asr_device')) ||
       'auto') as NonNullable<MusicAudioToolkitSkillSettings['qwen3_asr_device']>
-    const openaiAPIKey = (await settings.get(
-      'openai_transcription_api_key'
-    )) as string | undefined
     const openaiModel = ((await settings.get('openai_transcription_model')) ||
       'whisper-1') as string
-    const assemblyaiAPIKey = (await settings.get(
-      'assemblyai_transcription_api_key'
-    )) as string | undefined
-    const elevenlabsAPIKey = (await settings.get(
-      'elevenlabs_transcription_api_key'
-    )) as string | undefined
     const elevenlabsModel = ((await settings.get(
       'elevenlabs_transcription_model'
     )) || 'scribe_v1') as string
@@ -123,39 +111,25 @@ export const run: ActionFunction = async function (
       await tool.transcribeToFile(audioPath, transcriptionPath, qwen3ASRDevice)
     } else if (provider === 'openai_audio') {
       const tool = await ToolManager.initTool(OpenAIAudioTool)
-      const resolvedApiKey = openaiAPIKey || tool.apiKey
-      if (!resolvedApiKey) {
-        leon.answer({ key: 'missing_api_key' })
-        return
-      }
-
       await tool.transcribeToFile(
         audioPath,
         transcriptionPath,
-        resolvedApiKey,
+        tool.apiKey as string,
         openaiModel
       )
     } else if (provider === 'assemblyai_audio') {
       const tool = await ToolManager.initTool(AssemblyAIAudioTool)
-      const resolvedApiKey = assemblyaiAPIKey || tool.apiKey
-      if (!resolvedApiKey) {
-        leon.answer({ key: 'missing_api_key' })
-        return
-      }
-
-      await tool.transcribeToFile(audioPath, transcriptionPath, resolvedApiKey)
-    } else if (provider === 'elevenlabs_audio') {
-      const tool = await ToolManager.initTool(ElevenLabsAudioTool)
-      const resolvedApiKey = elevenlabsAPIKey || tool.apiKey
-      if (!resolvedApiKey) {
-        leon.answer({ key: 'missing_api_key' })
-        return
-      }
-
       await tool.transcribeToFile(
         audioPath,
         transcriptionPath,
-        resolvedApiKey,
+        tool.apiKey as string
+      )
+    } else if (provider === 'elevenlabs_audio') {
+      const tool = await ToolManager.initTool(ElevenLabsAudioTool)
+      await tool.transcribeToFile(
+        audioPath,
+        transcriptionPath,
+        tool.apiKey as string,
         elevenlabsModel,
         elevenlabsDiarize
       )
@@ -189,7 +163,10 @@ export const run: ActionFunction = async function (
     }
     leon.answer({
       key: 'transcription_error',
-      data: { error: (error as Error).message }
+      data: { error: (error as Error).message },
+      core: {
+        should_stop_skill: true
+      }
     })
   }
 }

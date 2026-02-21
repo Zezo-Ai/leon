@@ -37,15 +37,14 @@ class GrokTool(BaseTool):
 
     def __init__(self):
         super().__init__()
-        tool_config_name = self.__class__.__name__.lower().replace("tool", "")
-        self.config = ToolkitConfig.load(self.TOOLKIT, tool_config_name)
+        self.config = ToolkitConfig.load(self.TOOLKIT, self.tool_name)
 
         tool_settings = ToolkitConfig.load_tool_settings(
-            self.TOOLKIT, tool_config_name, DEFAULT_SETTINGS
+            self.TOOLKIT, self.tool_name, DEFAULT_SETTINGS
         )
         self.settings = tool_settings
         self.required_settings = REQUIRED_SETTINGS
-        self._check_required_settings(tool_config_name)
+        self._check_required_settings(self.tool_name)
 
         # Priority: toolkit settings > hardcoded default
         self.api_key = self.settings.get("GROK_API_KEY", GROK_API_KEY)
@@ -54,7 +53,7 @@ class GrokTool(BaseTool):
 
     @property
     def tool_name(self) -> str:
-        return self.__class__.__name__
+        return "grok"
 
     @property
     def toolkit(self) -> str:

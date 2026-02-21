@@ -67,19 +67,16 @@ export default class OpenRouterTool extends Tool {
   constructor(apiKey?: string) {
     super()
     // Load configuration from central toolkits directory
-    const toolConfigName = this.constructor.name
-      .toLowerCase()
-      .replace('tool', '')
-    this.config = ToolkitConfig.load(OpenRouterTool.TOOLKIT, toolConfigName)
+    this.config = ToolkitConfig.load(OpenRouterTool.TOOLKIT, this.toolName)
 
     const toolSettings = ToolkitConfig.loadToolSettings(
       OpenRouterTool.TOOLKIT,
-      toolConfigName,
+      this.toolName,
       DEFAULT_SETTINGS
     )
     this.settings = toolSettings
     this.requiredSettings = REQUIRED_SETTINGS
-    this.checkRequiredSettings(toolConfigName)
+    this.checkRequiredSettings(this.toolName)
 
     // Priority: skill-provided apiKey > toolkit settings > hardcoded default
     this.api_key =
@@ -95,7 +92,7 @@ export default class OpenRouterTool extends Tool {
   }
 
   get toolName(): string {
-    return this.constructor.name
+    return 'openrouter'
   }
 
   get toolkit(): string {

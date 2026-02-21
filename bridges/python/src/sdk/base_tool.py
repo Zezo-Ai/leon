@@ -74,6 +74,15 @@ class BaseTool(ABC):
         """Tool description"""
         pass
 
+    @property
+    def alias_tool_name(self) -> str:
+        """Tool alias name (human readable)"""
+        try:
+            config = ToolkitConfig.load(self.toolkit, self.tool_name)
+            return config.get("name") or self.tool_name
+        except Exception:
+            return self.tool_name
+
     def _get_settings_path(self, tool_name: Optional[str] = None) -> str:
         resolved_tool_name = tool_name or self.tool_name
         return os.path.join(

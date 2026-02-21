@@ -93,10 +93,6 @@
           "❌ Target language is required for translation. Please specify which language to translate into.",
           "I need to know which language to translate to. Please specify a target language."
         ],
-        "missing_api_key": [
-          "❌ Your OpenRouter API key is not set. Please add it in this skill's settings.",
-          "I need an OpenRouter API key to translate. Please configure it in the skill settings."
-        ],
         "no_segments_found": [
           "❌ No segments found in the transcription file. The file may be empty or corrupted.",
           "The transcription file appears to be empty or invalid."

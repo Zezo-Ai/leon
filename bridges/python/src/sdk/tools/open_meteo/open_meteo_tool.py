@@ -77,15 +77,12 @@ class OpenMeteoTool(BaseTool):
 
     def __init__(self) -> None:
         super().__init__()
-        tool_config_name = (
-            self.__class__.__name__.lower().replace("tool", "").replace("-", "")
-        )
-        self.config = ToolkitConfig.load(self.TOOLKIT, tool_config_name)
+        self.config = ToolkitConfig.load(self.TOOLKIT, self.tool_name)
         self.settings = ToolkitConfig.load_tool_settings(
-            self.TOOLKIT, tool_config_name, DEFAULT_SETTINGS
+            self.TOOLKIT, self.tool_name, DEFAULT_SETTINGS
         )
         self.required_settings = REQUIRED_SETTINGS
-        self._check_required_settings(tool_config_name)
+        self._check_required_settings(self.tool_name)
         self.geocoding_network = Network(
             {"base_url": "https://geocoding-api.open-meteo.com"}
         )
@@ -93,7 +90,7 @@ class OpenMeteoTool(BaseTool):
 
     @property
     def tool_name(self) -> str:
-        return self.__class__.__name__
+        return "openmeteo"
 
     @property
     def toolkit(self) -> str:

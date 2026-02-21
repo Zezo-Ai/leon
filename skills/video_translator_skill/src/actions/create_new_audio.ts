@@ -33,7 +33,6 @@ interface ProcessedSegment {
 
 interface VideoTranslatorSkillSettings extends Record<string, unknown> {
   speech_synthesis_provider?: 'qwen3_tts' | 'chatterbox_onnx'
-  translation_openrouter_api_key?: string
   translation_openrouter_model?: string
   translation_max_tokens_per_request?: number
   translation_segments_per_batch?: number
@@ -483,6 +482,9 @@ export const run: ActionFunction = async function (
           key: 'batch_synthesis_failed',
           data: {
             error: (error as Error).message
+          },
+          core: {
+            should_stop_skill: true
           }
         })
         throw error
@@ -593,6 +595,9 @@ export const run: ActionFunction = async function (
               data: {
                 group_number: (index + 1).toString(),
                 error: (error as Error).message
+              },
+              core: {
+                should_stop_skill: true
               }
             })
             // Fallback: use original
@@ -650,6 +655,9 @@ export const run: ActionFunction = async function (
         key: 'audio_assembly_failed',
         data: {
           error: (assemblyError as Error).message
+        },
+        core: {
+          should_stop_skill: true
         }
       })
       throw assemblyError
@@ -700,6 +708,9 @@ export const run: ActionFunction = async function (
       key: 'synthesis_error',
       data: {
         error: (error as Error).message
+      },
+      core: {
+        should_stop_skill: true
       }
     })
   }

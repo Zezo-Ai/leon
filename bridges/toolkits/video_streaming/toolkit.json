@@ -3,6 +3,7 @@
   "description": "Tools for video processing and streaming.",
   "tools": {
     "ffmpeg": {
+      "name": "FFmpeg",
       "description": "A tool for video/audio processing, conversion, and manipulation. Use this for encoding, decoding, transcoding, muxing, demuxing, streaming, filtering, and playing media files. For analyzing or extracting metadata without modifying files, use ffprobe instead.",
       "binaries": {
         "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/ffmpeg_7.0.2/ffmpeg_7.0.2-linux-x86_64",
@@ -13,6 +14,7 @@
       }
     },
     "ffprobe": {
+      "name": "FFprobe",
       "description": "A tool for analyzing and extracting metadata from video and audio files. Use this for inspecting media properties like duration, bitrate, codec information, stream details, and format data without modifying the files. For processing or converting media, use ffmpeg instead.",
       "binaries": {
         "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/ffprobe_7.0.2/ffprobe_7.0.2-linux-x86_64",
@@ -23,6 +25,7 @@
       }
     },
     "ytdlp": {
+      "name": "YT-DLP",
       "description": "A tool for downloading videos and audio from various streaming platforms using yt-dlp.",
       "binaries": {
         "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.04/yt-dlp_2026.02.04-linux-x86_64",

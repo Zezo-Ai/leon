@@ -78,6 +78,18 @@ export abstract class Tool {
   abstract get description(): string
 
   /**
+   * Tool alias name (human readable)
+   */
+  get aliasToolName(): string {
+    try {
+      const config = ToolkitConfig.load(this.toolkit, this.toolName)
+      return (config.name as string) || this.toolName
+    } catch {
+      return this.toolName
+    }
+  }
+
+  /**
    * Enable CLI progress display for downloads (logs to stdout instead of stderr to avoid JSON interference)
    */
   protected cliProgress: boolean = true

@@ -98,9 +98,9 @@
       "Hang tight, I'm getting the {{ binary_name }} binary for you."
     ],
     "bridges.tools.missing_settings": [
-      "Missing tool settings: {{ missing }}. Please update {{ settings_path }}.",
-      "I can't proceed without {{ missing }}. Update {{ settings_path }}.",
-      "Tool settings missing ({{ missing }}). Edit {{ settings_path }} to continue."
+      "I need to use the {{ tool_name }} tool. There are missing settings: {{ missing }}. Please update {{ settings_path }} and try again.",
+      "Since I need to use the {{ tool_name }} tool, I can't proceed without {{ missing }}. Please update {{ settings_path }} and try again.",
+      "{{ tool_name }} tool settings missing: {{ missing }}. Please edit {{ settings_path }} file and try again."
     ],
     "bridges.tools.binary_downloaded": [
       "{{ binary_name }} binary downloaded successfully.",

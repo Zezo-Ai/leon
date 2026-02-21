@@ -77,7 +77,10 @@ export const run: ActionFunction = async function (
     }
     leon.answer({
       key: 'vocal_separation_error',
-      data: { error: (error as Error).message }
+      data: { error: (error as Error).message },
+      core: {
+        should_stop_skill: true
+      }
     })
   }
 }

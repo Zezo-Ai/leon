@@ -1,6 +1,4 @@
 {
-  "research_grok_api_key": null,
-  "script_openrouter_api_key": null,
   "script_model": "google/gemini-3-flash-preview",
   "host_voice": "en_female",
   "guest_voice": "en_male"

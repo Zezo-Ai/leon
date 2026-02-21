@@ -1,5 +1,4 @@
 {
-  "translation_openrouter_api_key": null,
   "translation_openrouter_model": "google/gemini-3-flash-preview",
   "translation_max_tokens_per_request": 2000,
   "translation_segments_per_batch": 10,

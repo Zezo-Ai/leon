@@ -31,8 +31,12 @@ export default class ToolManager {
       await leon.answer({
         key: 'bridges.tools.missing_settings',
         data: {
+          tool_name: tool.aliasToolName,
           missing: missing.missing.join(', '),
           settings_path: formatFilePath(missing.settingsPath)
+        },
+        core: {
+          should_stop_skill: true
         }
       })
       throw new MissingToolSettingsError(missing.missing, missing.settingsPath)

@@ -1,5 +1,4 @@
 {
-  "openrouter_api_key": "",
   "openrouter_model": "google/gemini-3-flash-preview",
   "summary_temperature": 0.3,
   "summary_max_tokens": 900,

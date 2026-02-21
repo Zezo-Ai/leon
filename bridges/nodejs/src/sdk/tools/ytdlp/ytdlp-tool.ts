@@ -15,23 +15,19 @@ export default class YtdlpTool extends Tool {
     super()
     // Load configuration from central toolkits directory
     // Use class name for tool config name
-    const toolConfigName = this.constructor.name
-      .toLowerCase()
-      .replace('tool', '')
-    this.config = ToolkitConfig.load(YtdlpTool.TOOLKIT, toolConfigName)
+    this.config = ToolkitConfig.load(YtdlpTool.TOOLKIT, this.toolName)
     const toolSettings = ToolkitConfig.loadToolSettings(
       YtdlpTool.TOOLKIT,
-      toolConfigName,
+      this.toolName,
       DEFAULT_SETTINGS
     )
     this.settings = toolSettings
     this.requiredSettings = REQUIRED_SETTINGS
-    this.checkRequiredSettings(toolConfigName)
+    this.checkRequiredSettings(this.toolName)
   }
 
   get toolName(): string {
-    // Dynamic tool name based on class name
-    return this.constructor.name
+    return 'ytdlp'
   }
 
   get toolkit(): string {

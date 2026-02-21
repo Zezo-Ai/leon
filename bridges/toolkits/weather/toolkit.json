@@ -3,6 +3,7 @@
   "description": "Tools for weather lookup and forecasts.",
   "tools": {
     "openmeteo": {
+      "name": "Open-Meteo",
       "description": "Fetch current weather conditions using Open-Meteo API without an API key."
     }
   }

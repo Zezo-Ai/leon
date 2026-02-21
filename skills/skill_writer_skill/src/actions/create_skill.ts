@@ -10,7 +10,6 @@ import OpenCodeTool from '@sdk/tools/opencode'
 import { buildSkillPrompt, getContextFiles } from '../lib/skill-prompt'
 
 interface SkillWriterSettings extends Record<string, unknown> {
-  opencode_openrouter_api_key?: string
   opencode_openrouter_model?: string
 }
 
@@ -94,9 +93,6 @@ export const run: ActionFunction = async function (
 
     const settings = new Settings<SkillWriterSettings>()
     const provider = 'openrouter'
-    const apiKey = (await settings.get('opencode_openrouter_api_key')) as
-      | string
-      | undefined
     const model = (await settings.get('opencode_openrouter_model')) as
       | string
       | undefined
@@ -125,10 +121,6 @@ export const run: ActionFunction = async function (
 
     if (model) {
       skillOptions.model = model
-    }
-
-    if (apiKey) {
-      skillOptions.api_key = apiKey
     }
 
     const response = await opencodeTool.generateSkill(skillOptions)

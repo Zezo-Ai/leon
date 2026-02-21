@@ -128,6 +128,9 @@ export const run: ActionFunction = async function (
       data: {
         video_path: path.basename(videoPath as string),
         error: (error as Error).message
+      },
+      core: {
+        should_stop_skill: true
       }
     })
   }

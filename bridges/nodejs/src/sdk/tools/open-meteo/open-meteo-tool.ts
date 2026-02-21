@@ -134,19 +134,15 @@ export default class OpenMeteoTool extends Tool {
 
   constructor() {
     super()
-    const toolConfigName = this.constructor.name
-      .toLowerCase()
-      .replace('tool', '')
-      .replace(/-/g, '')
-    this.config = ToolkitConfig.load(OpenMeteoTool.TOOLKIT, toolConfigName)
+    this.config = ToolkitConfig.load(OpenMeteoTool.TOOLKIT, this.toolName)
     const toolSettings = ToolkitConfig.loadToolSettings(
       OpenMeteoTool.TOOLKIT,
-      toolConfigName,
+      this.toolName,
       DEFAULT_SETTINGS
     )
     this.settings = toolSettings
     this.requiredSettings = REQUIRED_SETTINGS
-    this.checkRequiredSettings(toolConfigName)
+    this.checkRequiredSettings(this.toolName)
     this.geocodingNetwork = new Network({
       baseURL: 'https://geocoding-api.open-meteo.com'
     })
@@ -154,7 +150,7 @@ export default class OpenMeteoTool extends Tool {
   }
 
   get toolName(): string {
-    return this.constructor.name
+    return 'openmeteo'
   }
 
   get toolkit(): string {

@@ -153,6 +153,9 @@ export const run: ActionFunction = async function (
       data: {
         video_source: videoSource,
         error: errorMessage
+      },
+      core: {
+        should_stop_skill: true
       }
     })
   }

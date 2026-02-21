@@ -10,7 +10,6 @@ import ElevenLabsAudioTool from '@sdk/tools/elevenlabs_audio'
 import { formatBytes, formatFilePath } from '@sdk/utils'
 
 interface MusicAudioToolkitSkillSettings extends Record<string, unknown> {
-  elevenlabs_dubbing_api_key?: string
   elevenlabs_dubbing_source_lang?: string
   elevenlabs_dubbing_num_speakers?: number
   elevenlabs_dubbing_watermark?: boolean
@@ -36,9 +35,6 @@ export const run: ActionFunction = async function (
 
   try {
     const settings = new Settings<MusicAudioToolkitSkillSettings>()
-    const elevenlabsApiKey = (await settings.get(
-      'elevenlabs_dubbing_api_key'
-    )) as string | undefined
     const sourceLang = ((await settings.get(
       'elevenlabs_dubbing_source_lang'
     )) || 'auto') as string
@@ -87,19 +83,12 @@ export const run: ActionFunction = async function (
 
     // Initialize ElevenLabs tool
     const tool = await ToolManager.initTool(ElevenLabsAudioTool)
-    const resolvedApiKey = elevenlabsApiKey || tool.apiKey
-    if (!resolvedApiKey) {
-      leon.answer({
-        key: 'missing_api_key'
-      })
-      return
-    }
-
+    const apiKey = tool.apiKey as string
     // Create dubbing project
     const dubbingResponse = await tool.createDubbing(
       audioPath,
       targetLanguageISOCode,
-      resolvedApiKey,
+      apiKey,
       sourceLang,
       numSpeakers,
       watermark
@@ -126,10 +115,7 @@ export const run: ActionFunction = async function (
       await new Promise((resolve) => setTimeout(resolve, pollInterval))
       pollCount++
 
-      const statusResponse = await tool.getDubbingStatus(
-        dubbingId,
-        resolvedApiKey
-      )
+      const statusResponse = await tool.getDubbingStatus(dubbingId, apiKey)
       status = statusResponse.status
 
       // Report progress every 3 polls (30 seconds with default interval)
@@ -182,7 +168,7 @@ export const run: ActionFunction = async function (
       dubbingId,
       targetLanguageISOCode,
       dubbedPath,
-      resolvedApiKey
+      apiKey
     )
 
     // Verify the dubbed file exists
@@ -222,7 +208,10 @@ export const run: ActionFunction = async function (
     }
     leon.answer({
       key: 'dubbing_error',
-      data: { error: (error as Error).message }
+      data: { error: (error as Error).message },
+      core: {
+        should_stop_skill: true
+      }
     })
   }
 }

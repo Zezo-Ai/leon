@@ -134,6 +134,7 @@ export interface IntentObject {
 export interface SkillAnswerCoreData {
   is_in_action_loop?: boolean
   next_action?: string
+  should_stop_skill?: boolean
   // Tool-related properties for identifying tool outputs
   isToolOutput?: boolean
   toolkitName?: string

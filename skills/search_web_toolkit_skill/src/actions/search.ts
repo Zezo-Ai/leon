@@ -7,7 +7,6 @@ import GrokTool from '@sdk/tools/grok'
 
 interface SearchSkillSettings extends Record<string, unknown> {
   search_provider?: string
-  grok_api_key?: string
   grok_model?: string
   grok_temperature?: number
   grok_max_tokens?: number
@@ -60,13 +59,7 @@ export const run: ActionFunction = async function (
     }
 
     // Initialize Grok
-    const grokApiKey = (await settings.get('grok_api_key')) as
-      | string
-      | undefined
     const grok = await ToolManager.initTool(GrokTool)
-    if (grokApiKey) {
-      grok.setApiKey(grokApiKey)
-    }
 
     // Perform search based on type
     if (deepResearch) {
@@ -246,6 +239,9 @@ export const run: ActionFunction = async function (
       key: 'search_error',
       data: {
         error: (error as Error).message
+      },
+      core: {
+        should_stop_skill: true
       }
     })
   }

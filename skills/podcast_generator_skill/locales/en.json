@@ -16,9 +16,6 @@
           "Podcast generated successfully! The conversation is about {{ topic }} and is approximately {{ duration }} minutes long. Audio file: {{ audio_file }}"
         ],
         "error": ["Failed to generate podcast: {{ error }}"],
-        "missing_api_key": [
-          "Please configure your API keys in the skill settings. You need: research_grok_api_key and script_openrouter_api_key."
-        ],
         "invalid_duration": [
           "Duration must be between 1 and 30 minutes. You requested {{ duration }} minutes."
         ]

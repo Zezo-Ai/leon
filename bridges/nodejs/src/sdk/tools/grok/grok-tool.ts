@@ -113,19 +113,16 @@ export default class GrokTool extends Tool {
 
   constructor() {
     super()
-    const toolConfigName = this.constructor.name
-      .toLowerCase()
-      .replace('tool', '')
-    this.config = ToolkitConfig.load(GrokTool.TOOLKIT, toolConfigName)
+    this.config = ToolkitConfig.load(GrokTool.TOOLKIT, this.toolName)
 
     const toolSettings = ToolkitConfig.loadToolSettings(
       GrokTool.TOOLKIT,
-      toolConfigName,
+      this.toolName,
       DEFAULT_SETTINGS
     )
     this.settings = toolSettings
     this.requiredSettings = REQUIRED_SETTINGS
-    this.checkRequiredSettings(toolConfigName)
+    this.checkRequiredSettings(this.toolName)
 
     // Priority: toolkit settings > hardcoded default
     this.apiKey = (this.settings['GROK_API_KEY'] as string) || GROK_API_KEY
@@ -133,7 +130,7 @@ export default class GrokTool extends Tool {
   }
 
   get toolName(): string {
-    return this.constructor.name
+    return 'grok'
   }
 
   get toolkit(): string {

@@ -25,22 +25,19 @@ export default class BashTool extends Tool {
   constructor() {
     super()
     // Load configuration from central toolkits directory
-    const toolConfigName = this.constructor.name
-      .toLowerCase()
-      .replace('tool', '')
-    this.config = ToolkitConfig.load(BashTool.TOOLKIT, toolConfigName)
+    this.config = ToolkitConfig.load(BashTool.TOOLKIT, this.toolName)
     const toolSettings = ToolkitConfig.loadToolSettings(
       BashTool.TOOLKIT,
-      toolConfigName,
+      this.toolName,
       DEFAULT_SETTINGS
     )
     this.settings = toolSettings
     this.requiredSettings = REQUIRED_SETTINGS
-    this.checkRequiredSettings(toolConfigName)
+    this.checkRequiredSettings(this.toolName)
   }
 
   get toolName(): string {
-    return this.constructor.name
+    return 'bash'
   }
 
   get toolkit(): string {

@@ -30,9 +30,6 @@
         "provider_not_supported": [
           "Search provider \"{{ provider }}\" is not supported. Please use 'grok'."
         ],
-        "missing_api_key": [
-          "API key for {{ provider }} is missing or invalid. Please configure it in settings.json"
-        ],
         "search_error": ["❌ Search error: {{ error }}"]
       }
     }

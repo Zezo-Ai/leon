@@ -6,9 +6,6 @@
         "invalid_bridge": [
           "Invalid bridge '{{ bridge }}'. Please use 'nodejs' or 'python'."
         ],
-        "missing_api_key": [
-          "I need your {{ provider }} API key. Please set it in my settings (opencode_{{ provider }}_api_key)."
-        ],
         "generating_skill": [
           "Let me build that skill using OpenCode with {{ provider }}... This may take a minute as I iterate to get it right."
         ],
@@ -22,9 +19,6 @@
     },
     "modify_skill": {
       "answers": {
-        "missing_api_key": [
-          "I need your {{ provider }} API key. Please set it in my settings (opencode_{{ provider }}_api_key)."
-        ],
         "modifying_skill": [
           "Let me update that skill using OpenCode with {{ provider }}... This may take a minute as I iterate to get it right."
         ],

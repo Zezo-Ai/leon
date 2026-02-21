@@ -50,10 +50,6 @@
           "🧠 Summarizing the transcription ({{ segment_count }} segments) using {{ model }}...",
           "Working on the summary from {{ segment_count }} segments with {{ model }}."
         ],
-        "missing_api_key": [
-          "❌ Your OpenRouter API key is not set. Please add it in this skill's settings.",
-          "I need an OpenRouter API key to summarize. Please configure it in the skill settings."
-        ],
         "summary_error": [
           "❌ An error occurred while summarizing: {{ error }}",
           "Summary failed with error: {{ error }}"

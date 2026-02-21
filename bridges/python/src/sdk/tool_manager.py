@@ -23,10 +23,14 @@ class ToolManager:
                 {
                     "key": "bridges.tools.missing_settings",
                     "data": {
+                        "tool_name": tool.alias_tool_name,
                         "missing": ", ".join(missing.get("missing", [])),
                         "settings_path": format_file_path(
                             missing.get("settings_path", "")
                         ),
+                    },
+                    "core": {
+                        "should_stop_skill": True,
                     },
                 }
             )

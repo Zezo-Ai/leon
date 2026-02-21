@@ -6,7 +6,6 @@
         "transcription_completed": "Transcription completed. File saved at {{ transcription_path }}.",
         "audio_not_found": "I couldn't find the given audio file to transcribe.",
         "provider_not_supported": "The configured transcription provider is not supported.",
-        "missing_api_key": "Your OpenAI API key is not set. Please add it in this skill's settings.",
         "transcription_error": "An error occurred while transcribing the audio: {{ error }}"
       }
     },
@@ -14,7 +13,6 @@
       "answers": {
         "audio_not_found": "I couldn't find the given audio/video file to dub.",
         "target_language_missing": "Target language is required for dubbing. Please specify which language to dub into.",
-        "missing_api_key": "Your ElevenLabs API key is not set. Please add it in this skill's settings.",
         "dubbing_started": "🎬 Starting dubbing of {{ audio_path }} ({{ file_size }}) to {{ target_language }}... Source: {{ source_language }}, Speakers: {{ num_speakers }}",
         "dubbing_created": "✨ Dubbing project created! ID: {{ dubbing_id }}, Expected duration: {{ expected_duration }}, Target: {{ target_language }}",
         "dubbing_progress": "⏳ Dubbing in progress... Status: {{ status }}, Elapsed: {{ elapsed_time }}, ID: {{ dubbing_id }}",

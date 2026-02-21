@@ -13,8 +13,6 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 
 interface PodcastSettings extends Record<string, unknown> {
-  research_grok_api_key?: string
-  script_openrouter_api_key?: string
   script_model?: string
   host_voice?: string
   guest_voice?: string
@@ -54,12 +52,6 @@ export const run: ActionFunction = async function (
 
   // Load settings
   const settings = new Settings<PodcastSettings>()
-  const grokApiKey = (await settings.get('research_grok_api_key')) as
-    | string
-    | undefined
-  const openrouterApiKey = (await settings.get('script_openrouter_api_key')) as
-    | string
-    | undefined
   const scriptModel =
     ((await settings.get('script_model')) as string) ||
     'google/gemini-3-flash-preview'
@@ -76,9 +68,6 @@ export const run: ActionFunction = async function (
     })
 
     const grok = await ToolManager.initTool(GrokTool)
-    if (grokApiKey) {
-      grok.setApiKey(grokApiKey)
-    }
 
     const researchResult = await grok.deepResearch(topic, [
       'Recent developments and trends',
@@ -110,9 +99,6 @@ export const run: ActionFunction = async function (
     leon.answer({ key: 'generating_script' })
 
     const openrouter = await ToolManager.initTool(OpenRouterTool)
-    if (openrouterApiKey) {
-      openrouter.setApiKey(openrouterApiKey)
-    }
 
     // Calculate approximate word count (150 words per minute of speech)
     const targetWordCount = duration * 150
@@ -285,7 +271,10 @@ Generate the script as a JSON object with this structure:
     }
     leon.answer({
       key: 'error',
-      data: { error: (error as Error).message }
+      data: { error: (error as Error).message },
+      core: {
+        should_stop_skill: true
+      }
     })
   }
 }

@@ -11,7 +11,6 @@ import OpenRouterTool from '@sdk/tools/openrouter'
 import { formatFilePath } from '@sdk/utils'
 
 interface VideoTranslatorSkillSettings extends Record<string, unknown> {
-  openrouter_api_key?: string
   openrouter_model?: string
   translation_max_tokens_per_request?: number
   translation_segments_per_batch?: number
@@ -41,9 +40,6 @@ export const run: ActionFunction = async function (
 
   try {
     const settings = new Settings<VideoTranslatorSkillSettings>()
-    const openrouterApiKey = (await settings.get(
-      'translation_openrouter_api_key'
-    )) as string | undefined
     const openrouterModel = ((await settings.get(
       'translation_openrouter_model'
     )) || 'google/gemini-3-flash-preview') as string
@@ -97,9 +93,6 @@ export const run: ActionFunction = async function (
 
     // Initialize OpenRouter tool
     const tool = await ToolManager.initTool(OpenRouterTool)
-    if (openrouterApiKey) {
-      tool.setApiKey(openrouterApiKey)
-    }
 
     // Prepare translated segments array
     const translatedSegments = [...transcription.segments]
@@ -257,7 +250,10 @@ Do not include any explanations or additional text.`
     }
     leon.answer({
       key: 'translation_error',
-      data: { error: (error as Error).message }
+      data: { error: (error as Error).message },
+      core: {
+        should_stop_skill: true
+      }
     })
   }
 }

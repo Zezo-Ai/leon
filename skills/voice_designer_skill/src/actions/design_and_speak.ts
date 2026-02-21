@@ -94,6 +94,9 @@ export const run: ActionFunction = async function (
       key: 'error',
       data: {
         error: (error as Error).message
+      },
+      core: {
+        should_stop_skill: true
       }
     })
   }

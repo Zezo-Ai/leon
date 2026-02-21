@@ -3,6 +3,7 @@
   "description": "Tools for code generation, development, and automation.",
   "tools": {
     "opencode": {
+      "name": "OpenCode",
       "description": "An AI-powered coding agent tool that generates skills using multiple LLM providers (Cerebras, MiniMax, Anthropic, OpenAI, Gemini).",
       "binaries": {
         "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/opencode-v1.2.6/opencode_1.2.6-linux-x86_64.tar.gz",

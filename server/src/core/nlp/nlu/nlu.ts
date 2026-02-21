@@ -627,6 +627,16 @@ export default class NLU {
     console.log('processedData', processedData)
     console.log('this._nluProcessResult', this._nluProcessResult)
 
+    if (processedData.core?.should_stop_skill) {
+      LogHelper.title('NLU')
+      LogHelper.info('Received stop skill signal')
+
+      this.conversation.cleanActiveState()
+      await NLUProcessResultUpdater.update(DEFAULT_NLU_PROCESS_RESULT)
+
+      return
+    }
+
     if (processedData.core?.next_action) {
       await this.jumpToNextAction(processedData.core.next_action)
 

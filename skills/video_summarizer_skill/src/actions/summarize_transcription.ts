@@ -9,7 +9,6 @@ import OpenRouterTool from '@sdk/tools/openrouter'
 import type { TranscriptionOutput } from '@sdk/tools/transcription-schema'
 
 interface VideoSummarizerSettings extends Record<string, unknown> {
-  openrouter_api_key?: string | null
   openrouter_model?: string | null
   summary_temperature?: number
   summary_max_tokens?: number
@@ -70,7 +69,10 @@ export const run: ActionFunction = async function (
     } catch (error) {
       leon.answer({
         key: 'summary_error',
-        data: { error: (error as Error).message }
+        data: { error: (error as Error).message },
+        core: {
+          should_stop_skill: true
+        }
       })
       return
     }
@@ -88,10 +90,6 @@ export const run: ActionFunction = async function (
     }
 
     const settings = new Settings<VideoSummarizerSettings>()
-    const openrouterApiKey = (await settings.get('openrouter_api_key')) as
-      | string
-      | null
-      | undefined
     const openrouterModel = (await settings.get('openrouter_model')) as
       | string
       | null
@@ -119,9 +117,6 @@ export const run: ActionFunction = async function (
     )
 
     const openrouterTool = await ToolManager.initTool(OpenRouterTool)
-    if (openrouterApiKey) {
-      openrouterTool.setApiKey(openrouterApiKey)
-    }
 
     const languageInstruction = summaryLanguage
       ? `Write the summary in ${summaryLanguage}.`
@@ -174,11 +169,6 @@ ${transcriptText}`
     )
 
     if (!response.success) {
-      if (response.error?.includes('OpenRouter API key not configured')) {
-        leon.answer({ key: 'missing_api_key' })
-        return
-      }
-
       leon.answer({
         key: 'summary_error',
         data: { error: response.error || 'Unknown error' }

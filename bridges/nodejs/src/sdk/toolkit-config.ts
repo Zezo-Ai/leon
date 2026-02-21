@@ -5,6 +5,7 @@ import { getPlatformName } from '@sdk/utils'
 import { TOOLKITS_PATH } from '@bridge/constants'
 
 interface ToolConfig {
+  name?: string
   description: string
   binaries?: Record<string, string>
   resources?: Record<string, string[]>
