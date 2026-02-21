@@ -17,6 +17,11 @@ DEFAULT_SETTINGS = {
     "OPENCODE_OPENROUTER_MODEL": OPENCODE_OPENROUTER_MODEL,
 }
 REQUIRED_SETTINGS = ["OPENCODE_OPENROUTER_API_KEY"]
+OPENCODE_CONFIG_CONTENT = {
+    "$schema": "https://opencode.ai/config.json",
+    "permission": "allow",
+    "provider": {"openrouter": {"options": {"apiKey": ""}}},
+}
 
 
 class OpenCodeTool(BaseTool):
@@ -34,6 +39,14 @@ class OpenCodeTool(BaseTool):
         self.settings = tool_settings
         self.required_settings = REQUIRED_SETTINGS
         self._check_required_settings(self.tool_name)
+
+        openrouter_api_key = tool_settings.get("OPENCODE_OPENROUTER_API_KEY")
+        if openrouter_api_key and str(openrouter_api_key).strip():
+            OPENCODE_CONFIG_CONTENT["provider"]["openrouter"]["options"]["apiKey"] = (
+                openrouter_api_key
+            )
+
+        os.environ["OPENCODE_CONFIG_CONTENT"] = json.dumps(OPENCODE_CONFIG_CONTENT)
 
         # Auto-configure providers from toolkit settings
         self._load_providers_from_settings(self.settings)
@@ -470,7 +483,7 @@ class OpenCodeTool(BaseTool):
             guidelines += "        self.config = ToolkitConfig.load(self.TOOLKIT, self.tool_name)\n\n"
             guidelines += "    @property\n"
             guidelines += "    def tool_name(self) -> str:\n"
-            guidelines += "        return 'mynew'\n\n"
+            guidelines += "        return 'mynew'  # Hardcode tool name\n\n"
             guidelines += "    @property\n"
             guidelines += "    def toolkit(self) -> str:\n"
             guidelines += "        return self.TOOLKIT\n\n"
@@ -1670,21 +1683,6 @@ class OpenCodeTool(BaseTool):
             context += "\n"
 
         return context
-
-    def _get_created_files(self, target_path: str) -> List[str]:
-        """Get list of files created in target directory"""
-        files = []
-        target = Path(target_path)
-
-        if not target.exists():
-            return files
-
-        for file_path in target.rglob("*"):
-            if file_path.is_file():
-                relative = file_path.relative_to(target)
-                files.append(str(relative))
-
-        return files
 
     def generate_skill(
         self,

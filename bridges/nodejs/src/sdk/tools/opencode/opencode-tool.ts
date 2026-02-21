@@ -13,6 +13,17 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   OPENCODE_OPENROUTER_MODEL
 }
 const REQUIRED_SETTINGS = ['OPENCODE_OPENROUTER_API_KEY']
+const OPENCODE_CONFIG_CONTENT = {
+  $schema: 'https://opencode.ai/config.json',
+  permission: 'allow',
+  provider: {
+    openrouter: {
+      options: {
+        apiKey: ''
+      }
+    }
+  }
+}
 
 interface OpenCodeProvider {
   name: string
@@ -69,6 +80,18 @@ export default class OpenCodeTool extends Tool {
     this.settings = toolSettings
     this.requiredSettings = REQUIRED_SETTINGS
     this.checkRequiredSettings(this.toolName)
+
+    const openrouterApiKey = toolSettings['OPENCODE_OPENROUTER_API_KEY'] as
+      | string
+      | undefined
+    if (openrouterApiKey && openrouterApiKey.trim()) {
+      OPENCODE_CONFIG_CONTENT.provider.openrouter.options.apiKey =
+        openrouterApiKey
+    }
+
+    process.env['OPENCODE_CONFIG_CONTENT'] = JSON.stringify(
+      OPENCODE_CONFIG_CONTENT
+    )
 
     // Auto-configure providers from toolkit settings
     this.loadProvidersFromSettings(this.settings)
