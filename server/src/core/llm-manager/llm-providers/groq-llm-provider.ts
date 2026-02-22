@@ -10,10 +10,7 @@ import { LogHelper } from '@/helpers/log-helper'
  * @see https://console.groq.com/docs/text-chat
  */
 enum GroqModels {
-  Llama3_8b_8192 = 'llama3-8b-8192',
-  Llama3_70b_8192 = 'llama3-70b-8192',
-  Mixtral_8x7b_32768 = 'mixtral-8x7b-32768',
-  Gemma_7b_It = 'gemma-7b-it'
+  Llama3_1_8b_instant = 'llama-3.1-8b-instant'
 }
 interface GroqMessage {
   role: 'user' | 'assistant' | 'system'
@@ -116,7 +113,7 @@ export default class GroqLLMProvider {
 
         let chatCompletionParams: GroqChatCompletionParams = {
           messages: messagesHistory,
-          model: GroqModels.Llama3_8b_8192,
+          model: GroqModels.Llama3_1_8b_instant,
           temperature: completionParams.temperature || 0,
           stream: false
         }
