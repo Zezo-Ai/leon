@@ -148,10 +148,10 @@ export class ReActLLMDuty extends LLMDuty {
         {
           name: string
           description: string
-          tools: { id: string; name: string; description: string }[]
+          tools: { id: string, name: string, description: string }[]
         }
       >()
-      const steps: { action: string; observation?: string }[] = []
+      const steps: { action: string, observation?: string }[] = []
 
       flattenedTools.forEach((tool) => {
         if (!toolkitsMap.has(tool.toolkitId)) {
@@ -976,7 +976,7 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
     }
 
     let parsed: unknown = null
-    let parsedFromRepair: { repaired: string; value: unknown } | null = null
+    let parsedFromRepair: { repaired: string, value: unknown } | null = null
     try {
       parsed = JSON.parse(toolInput)
     } catch {
@@ -1094,7 +1094,7 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
 
   private tryRepairToolInput(
     toolInput: string
-  ): { repaired: string; value: unknown } | null {
+  ): { repaired: string, value: unknown } | null {
     const repaired = this.repairJsonStringLiterals(toolInput)
     if (repaired === toolInput) {
       return null

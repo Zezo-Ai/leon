@@ -141,7 +141,7 @@ export default class ToolExecutor {
     status: ToolExecutionResult['status']
     message: string
     input: string | null
-    resolvedTool: { toolkitId: string; toolId: string } | null
+    resolvedTool: { toolkitId: string, toolId: string } | null
     functionName?: string | null
     parsedInput?: Record<string, unknown> | null
     output?: Record<string, unknown>
