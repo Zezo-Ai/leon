@@ -41,12 +41,38 @@
             "oneOf": [
               {
                 "type": "object",
-                "properties": {},
-                "additionalProperties": true
+                "properties": {
+                  "text": { "type": "string" },
+                  "target_language": { "type": "string" },
+                  "audio_path": { "type": "string" },
+                  "voice_name": { "type": "string" },
+                  "speaker_reference_path": { "type": "string" },
+                  "cfg_strength": { "type": "number" },
+                  "exaggeration": { "type": "number" },
+                  "temperature": { "type": "number" },
+                  "auto_split": { "type": "boolean" }
+                },
+                "required": ["text", "audio_path"],
+                "additionalProperties": false
               },
               {
                 "type": "array",
-                "items": { "type": "object", "additionalProperties": true }
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": { "type": "string" },
+                    "target_language": { "type": "string" },
+                    "audio_path": { "type": "string" },
+                    "voice_name": { "type": "string" },
+                    "speaker_reference_path": { "type": "string" },
+                    "cfg_strength": { "type": "number" },
+                    "exaggeration": { "type": "number" },
+                    "temperature": { "type": "number" },
+                    "auto_split": { "type": "boolean" }
+                  },
+                  "required": ["text", "audio_path"],
+                  "additionalProperties": false
+                }
               }
             ]
           },

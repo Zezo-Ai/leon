@@ -18,8 +18,12 @@
           "command": { "type": "string" },
           "options": {
             "type": "object",
-            "properties": {},
-            "additionalProperties": true
+            "properties": {
+              "cwd": { "type": "string" },
+              "timeout": { "type": "number" },
+              "captureOutput": { "type": "boolean" }
+            },
+            "additionalProperties": false
           }
         },
         "required": ["command"]

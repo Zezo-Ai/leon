@@ -34,8 +34,76 @@
         "properties": {
           "options": {
             "type": "object",
-            "properties": {},
-            "additionalProperties": true
+            "properties": {
+              "input": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": ["system", "user", "assistant"]
+                    },
+                    "content": { "type": "string" }
+                  },
+                  "required": ["role", "content"],
+                  "additionalProperties": false
+                }
+              },
+              "model": { "type": "string" },
+              "temperature": { "type": "number" },
+              "max_completion_tokens": { "type": "number" },
+              "stream": { "type": "boolean" },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": ["web_search"]
+                        },
+                        "allowed_domains": {
+                          "type": "array",
+                          "items": { "type": "string" }
+                        },
+                        "excluded_domains": {
+                          "type": "array",
+                          "items": { "type": "string" }
+                        },
+                        "enable_image_understanding": { "type": "boolean" }
+                      },
+                      "required": ["type"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": { "type": "string", "enum": ["x_search"] },
+                        "allowed_x_handles": {
+                          "type": "array",
+                          "items": { "type": "string" }
+                        },
+                        "excluded_x_handles": {
+                          "type": "array",
+                          "items": { "type": "string" }
+                        },
+                        "from_date": { "type": "string" },
+                        "to_date": { "type": "string" },
+                        "enable_image_understanding": { "type": "boolean" },
+                        "enable_video_understanding": { "type": "boolean" }
+                      },
+                      "required": ["type"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            },
+            "required": ["input"],
+            "additionalProperties": false
           }
         },
         "required": ["options"]
@@ -49,8 +117,18 @@
           "query": { "type": "string" },
           "options": {
             "type": "object",
-            "properties": {},
-            "additionalProperties": true
+            "properties": {
+              "allowed_domains": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "excluded_domains": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "enable_image_understanding": { "type": "boolean" }
+            },
+            "additionalProperties": false
           }
         },
         "required": ["query"]
@@ -64,8 +142,21 @@
           "query": { "type": "string" },
           "options": {
             "type": "object",
-            "properties": {},
-            "additionalProperties": true
+            "properties": {
+              "allowed_x_handles": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "excluded_x_handles": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "from_date": { "type": "string" },
+              "to_date": { "type": "string" },
+              "enable_image_understanding": { "type": "boolean" },
+              "enable_video_understanding": { "type": "boolean" }
+            },
+            "additionalProperties": false
           }
         },
         "required": ["query"]
@@ -79,8 +170,42 @@
           "query": { "type": "string" },
           "options": {
             "type": "object",
-            "properties": {},
-            "additionalProperties": true
+            "properties": {
+              "web_options": {
+                "type": "object",
+                "properties": {
+                  "allowed_domains": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "excluded_domains": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "enable_image_understanding": { "type": "boolean" }
+                },
+                "additionalProperties": false
+              },
+              "x_options": {
+                "type": "object",
+                "properties": {
+                  "allowed_x_handles": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "excluded_x_handles": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "from_date": { "type": "string" },
+                  "to_date": { "type": "string" },
+                  "enable_image_understanding": { "type": "boolean" },
+                  "enable_video_understanding": { "type": "boolean" }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": ["query"]
@@ -95,8 +220,13 @@
           "focusAreas": { "type": "array", "items": { "type": "string" } },
           "options": {
             "type": "object",
-            "properties": {},
-            "additionalProperties": true
+            "properties": {
+              "allowed_domains": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": ["topic"]

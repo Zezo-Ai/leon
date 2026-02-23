@@ -133,7 +133,15 @@
         "properties": {
           "segments": {
             "type": "array",
-            "items": { "type": "object", "additionalProperties": true }
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "string" },
+                "startMs": { "type": "number" }
+              },
+              "required": ["path", "startMs"],
+              "additionalProperties": false
+            }
           },
           "outputPath": { "type": "string" },
           "totalDurationMs": { "type": "number" },

@@ -45,7 +45,8 @@ const LLM_PROVIDERS_MAP = {
   [LLMProviders.Groq]: 'groq-llm-provider',
   [LLMProviders.OpenRouter]: 'openrouter-llm-provider'
 }
-const DEFAULT_MAX_EXECUTION_TIMOUT = 32_000
+const DEFAULT_MAX_EXECUTION_TIMOUT =
+  LLM_PROVIDER === LLMProviders.Local ? 32_000 : 120_000
 const DEFAULT_MAX_EXECUTION_RETRIES = 2
 const DEFAULT_TEMPERATURE = 0 // Disabled
 const DEFAULT_MAX_TOKENS = 8_192
@@ -325,7 +326,24 @@ export default class LLMProvider {
         typeof promptOrChatHistory === 'string'
           ? promptOrChatHistory
           : JSON.stringify(promptOrChatHistory),
-      output: isJSONMode ? JSON.parse(rawResultString) : rawResultString,
+      // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+      output: (() => {
+        if (!isJSONMode) {
+          return rawResultString
+        }
+
+        try {
+          return JSON.parse(rawResultString)
+        } catch (error) {
+          LogHelper.title('LLM Provider')
+          LogHelper.warning(
+            `Failed to parse JSON output for ${completionParams.dutyType}: ${
+              (error as Error).message
+            }`
+          )
+          return rawResultString
+        }
+      })(),
       data: completionParams.data,
       functions: completionParams.functions,
       maxTokens: completionParams.maxTokens,

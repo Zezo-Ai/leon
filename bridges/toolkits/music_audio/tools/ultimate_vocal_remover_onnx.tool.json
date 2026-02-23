@@ -31,12 +31,36 @@
             "oneOf": [
               {
                 "type": "object",
-                "properties": {},
-                "additionalProperties": true
+                "properties": {
+                  "audio_path": { "type": "string" },
+                  "vocal_output_path": { "type": "string" },
+                  "instrumental_output_path": { "type": "string" },
+                  "aggression": { "type": "number" }
+                },
+                "required": [
+                  "audio_path",
+                  "vocal_output_path",
+                  "instrumental_output_path"
+                ],
+                "additionalProperties": false
               },
               {
                 "type": "array",
-                "items": { "type": "object", "additionalProperties": true }
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "audio_path": { "type": "string" },
+                    "vocal_output_path": { "type": "string" },
+                    "instrumental_output_path": { "type": "string" },
+                    "aggression": { "type": "number" }
+                  },
+                  "required": [
+                    "audio_path",
+                    "vocal_output_path",
+                    "instrumental_output_path"
+                  ],
+                  "additionalProperties": false
+                }
               }
             ]
           },

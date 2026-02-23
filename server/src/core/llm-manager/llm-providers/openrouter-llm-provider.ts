@@ -35,7 +35,7 @@ export default class OpenRouterLLMProvider {
     process.env['LEON_OPENROUTER_MODEL'] || 'openrouter/auto'
   private readonly axios = axios.create({
     baseURL: 'https://openrouter.ai/api/v1',
-    timeout: 7_000
+    timeout: 120_000
   })
 
   constructor() {
@@ -111,7 +111,7 @@ export default class OpenRouterLLMProvider {
         let chatCompletionParams: OpenRouterChatCompletionParams = {
           messages: messagesHistory,
           model: this.model,
-          temperature: completionParams.temperature || 0,
+          temperature: 1.0,
           stream: false
         }
 

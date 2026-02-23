@@ -59,7 +59,17 @@
           "videoUrl": { "type": "string" },
           "outputPath": { "type": "string" },
           "quality": { "type": "string" },
-          "onProgress": { "type": "object" }
+          "onProgress": {
+            "type": "object",
+            "properties": {
+              "percentage": { "type": "number" },
+              "status": { "type": "string" },
+              "eta": { "type": "string" },
+              "speed": { "type": "string" },
+              "size": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
         },
         "required": ["videoUrl", "outputPath", "quality"]
       }

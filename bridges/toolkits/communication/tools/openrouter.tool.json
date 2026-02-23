@@ -17,8 +17,31 @@
         "properties": {
           "options": {
             "type": "object",
-            "properties": {},
-            "additionalProperties": true
+            "properties": {
+              "messages": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "role": { "type": "string" },
+                    "content": { "type": "string" }
+                  },
+                  "required": ["role", "content"],
+                  "additionalProperties": false
+                }
+              },
+              "model": { "type": "string" },
+              "temperature": { "type": "number" },
+              "max_tokens": { "type": "number" },
+              "system_prompt": { "type": "string" },
+              "use_structured_output": { "type": "boolean" },
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "required": ["messages"],
+            "additionalProperties": false
           }
         },
         "required": ["options"]
@@ -31,8 +54,20 @@
         "properties": {
           "options": {
             "type": "object",
-            "properties": {},
-            "additionalProperties": true
+            "properties": {
+              "prompt": { "type": "string" },
+              "model": { "type": "string" },
+              "temperature": { "type": "number" },
+              "max_tokens": { "type": "number" },
+              "system_prompt": { "type": "string" },
+              "use_structured_output": { "type": "boolean" },
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "required": ["prompt"],
+            "additionalProperties": false
           }
         },
         "required": ["options"]
@@ -45,8 +80,19 @@
         "properties": {
           "options": {
             "type": "object",
-            "properties": {},
-            "additionalProperties": true
+            "properties": {
+              "prompt": { "type": "string" },
+              "json_schema": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "model": { "type": "string" },
+              "temperature": { "type": "number" },
+              "max_tokens": { "type": "number" },
+              "system_prompt": { "type": "string" }
+            },
+            "required": ["prompt", "json_schema"],
+            "additionalProperties": false
           }
         },
         "required": ["options"]
