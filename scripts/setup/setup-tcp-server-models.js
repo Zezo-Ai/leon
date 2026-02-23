@@ -42,7 +42,7 @@ async function installTTSModel() {
 
     const destPath = PYTHON_TCP_SERVER_TTS_MODEL_PATH
 
-    LogHelper.info(`Downloading TTS model...`)
+    LogHelper.info('Downloading TTS model...')
 
     const pythonTCPServerTTSModelDownloadURL =
       await NetworkHelper.setHuggingFaceURL(

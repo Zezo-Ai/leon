@@ -4,7 +4,7 @@ import { WidgetWrapper, List, ListHeader, ListItem } from '@leon-ai/aurora'
 
 export default function handleSuggestions(data, chatbot, client) {
   const container = document.createElement('div')
-  container.className = `bubble-container leon`
+  container.className = 'bubble-container leon'
 
   chatbot.feed.appendChild(container)
 

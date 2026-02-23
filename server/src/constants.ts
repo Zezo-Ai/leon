@@ -218,13 +218,13 @@ const PYTHON_TCP_SERVER_VERSION_FILE_PATH = path.join(
 )
 export const [, NODEJS_BRIDGE_VERSION] = fs
   .readFileSync(NODEJS_BRIDGE_VERSION_FILE_PATH, 'utf8')
-  .split("'")
+  .split('\'')
 export const [, PYTHON_BRIDGE_VERSION] = fs
   .readFileSync(PYTHON_BRIDGE_VERSION_FILE_PATH, 'utf8')
-  .split("'")
+  .split('\'')
 export const [, PYTHON_TCP_SERVER_VERSION] = fs
   .readFileSync(PYTHON_TCP_SERVER_VERSION_FILE_PATH, 'utf8')
-  .split("'")
+  .split('\'')
 
 export const NODEJS_BRIDGE_BIN_NAME = 'leon-nodejs-bridge.cjs'
 export const PYTHON_BRIDGE_BIN_NAME = 'leon-python-bridge'

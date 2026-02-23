@@ -64,7 +64,10 @@ export default [
       ],
       'prefer-destructuring': ['off'],
       'comma-dangle': ['error', 'never'],
+      '@stylistic/ts/comma-dangle': ['error', 'never'],
       semi: ['error', 'never'],
+      quotes: ['error', 'single'],
+      '@stylistic/ts/quotes': ['error', 'single'],
       'object-curly-spacing': ['error', 'always'],
       'unicorn/prefer-node-protocol': 'error',
       '@stylistic/ts/member-delimiter-style': [

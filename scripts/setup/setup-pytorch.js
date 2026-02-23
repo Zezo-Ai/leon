@@ -53,7 +53,7 @@ function getPyTorchDownloadURL(version) {
     'windows-x86_64': `https://download.pytorch.org/whl/cu129/torch-${version}%2Bcu129-cp311-cp311-win_amd64.whl`,
     'macos-arm64': `https://download.pytorch.org/whl/cpu/torch-${version}-cp311-none-macosx_11_0_arm64.whl`,
     // Use 2.2.0 as it is the latest available pre-built package for Python 3.11
-    'macos-x86_64': `https://download.pytorch.org/whl/cpu/torch-2.2.0-cp311-none-macosx_10_9_x86_64.whl`
+    'macos-x86_64': 'https://download.pytorch.org/whl/cpu/torch-2.2.0-cp311-none-macosx_10_9_x86_64.whl'
   }
 
   const url = urls[platform]
@@ -114,15 +114,15 @@ async function installPyTorch(requiredVersion, targetPath, manifestPath) {
         skipExisting: false
       })
 
-      LogHelper.success(`PyTorch downloaded`)
-      LogHelper.info(`Extracting PyTorch wheel...`)
+      LogHelper.success('PyTorch downloaded')
+      LogHelper.info('Extracting PyTorch wheel...')
 
       // Extract wheel (wheels are just ZIP files)
       await FileHelper.extractArchive(wheelPath, targetPath, {
         stripComponents: 0
       })
 
-      LogHelper.success(`PyTorch extracted`)
+      LogHelper.success('PyTorch extracted')
 
       // Clean up and create manifest
       await Promise.all([
@@ -133,7 +133,7 @@ async function installPyTorch(requiredVersion, targetPath, manifestPath) {
         })
       ])
 
-      LogHelper.success(`PyTorch manifest file created`)
+      LogHelper.success('PyTorch manifest file created')
       LogHelper.success(`PyTorch ${requiredVersion} ready`)
     } catch (error) {
       LogHelper.error(`Failed to install PyTorch: ${error}`)

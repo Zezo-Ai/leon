@@ -21,7 +21,7 @@ import {
 import { LLMDuties, LLMProviders } from '@/core/llm-manager/types'
 import { LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
 
-type ReactLLMDutyParams = LLMDutyParams
+type ReactLLMDutyParams = LLMDutyParams;
 
 const formatFilePath = (filePath: string): string => {
   return `[FILE_PATH]${filePath}[/FILE_PATH]`
@@ -70,7 +70,8 @@ const FINAL_FALLBACK_RESPONSE =
 export class ReActLLMDuty extends LLMDuty {
   private static instance: ReActLLMDuty
   private static context: LlamaContext = null as unknown as LlamaContext
-  private static session: LlamaChatSession = null as unknown as LlamaChatSession
+  private static session: LlamaChatSession =
+    null as unknown as LlamaChatSession
   protected systemPrompt: LLMDutyParams['systemPrompt'] = null
   protected readonly name = 'ReAct LLM Duty'
   protected input: LLMDutyParams['input'] = null
@@ -391,38 +392,6 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
         > | null
         const responseValidation =
           this.validateResponseShape(parsedOutputRecord)
-        if (!responseValidation.isValid && typeof rawOutput === 'string') {
-          const lastObservation = steps[steps.length - 1]?.observation
-          if (lastObservation) {
-            try {
-              const parsedObservation = JSON.parse(lastObservation) as {
-                status?: string
-              }
-              if (parsedObservation?.status === 'success') {
-                return {
-                  dutyType: LLMDuties.ReAct,
-                  systemPrompt: this.systemPrompt,
-                  input: this.input,
-                  output: rawOutput,
-                  data: {}
-                } as unknown as LLMDutyResult
-              }
-            } catch {
-              // ignore
-            }
-          }
-        }
-        if (!responseValidation.isValid && typeof rawOutput === 'string') {
-          if (!parsedOutput) {
-            return {
-              dutyType: LLMDuties.ReAct,
-              systemPrompt: this.systemPrompt,
-              input: this.input,
-              output: rawOutput.trim(),
-              data: {}
-            } as unknown as LLMDutyResult
-          }
-        }
         if (!responseValidation.isValid) {
           invalidResponseCount += 1
           if (invalidResponseCount >= 2) {
@@ -870,7 +839,8 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
     ) {
       return {
         isValid: false,
-        message: 'Do not output schema keywords like oneOf/properties/required.'
+        message:
+          'Do not output schema keywords like oneOf/properties/required.'
       }
     }
 
@@ -1283,7 +1253,9 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
     args?: Record<string, string>
     preamble?: string
   } | null {
-    const toolCallMatch = input.match(/\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/i)
+    const toolCallMatch = input.match(
+      /\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/i
+    )
     if (!toolCallMatch) {
       return null
     }

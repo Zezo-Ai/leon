@@ -58,7 +58,7 @@ const skillActionTypes = [
   }),
   Type.Literal('dialog', {
     description:
-      "Action that don't need code to run. Leon actually just answers without any business logic."
+      'Action that don\'t need code to run. Leon actually just answers without any business logic.'
   })
 ]
 const skillDataTypes = [
