@@ -8,6 +8,7 @@ import { downloadFile } from 'ipull'
 
 import { TOOLKITS_PATH } from '@bridge/constants'
 import { ToolkitConfig } from '@sdk/toolkit-config'
+import { reportToolOutput } from '@sdk/tool-reporter'
 import {
   isWindows,
   isMacOS,
@@ -46,6 +47,15 @@ export interface ExecuteCommandOptions {
 }
 
 export abstract class Tool {
+  private static isToolRuntime: boolean = (() => {
+    const args = process.argv
+    const runtimeIndex = args.indexOf('--runtime')
+    if (runtimeIndex === -1) {
+      return false
+    }
+    return args[runtimeIndex + 1] === 'tool'
+  })()
+
   /**
    * Tool settings loaded from toolkit settings.json
    */
@@ -164,8 +174,7 @@ export abstract class Tool {
     }
 
     try {
-      const { leon } = await import('@sdk/leon')
-      await leon.answer({
+      await reportToolOutput({
         key,
         data: data || {},
         core: coreData
@@ -1177,7 +1186,11 @@ export abstract class Tool {
     const logMessage = `[LEON_TOOL_LOG] ${message}${
       args.length > 0 ? ' ' + args.join(' ') : ''
     }`
-    process.stdout.write(logMessage + '\n')
+    if (Tool.isToolRuntime) {
+      process.stderr.write(logMessage + '\n')
+    } else {
+      process.stdout.write(logMessage + '\n')
+    }
   }
 
   /**

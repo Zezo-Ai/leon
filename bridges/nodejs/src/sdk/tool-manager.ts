@@ -1,5 +1,6 @@
 import { formatFilePath } from '@sdk/utils'
 import { Tool } from '@sdk/base-tool'
+import { reportToolOutput } from '@sdk/tool-reporter'
 
 export class MissingToolSettingsError extends Error {
   missing: string[]
@@ -28,8 +29,7 @@ export default class ToolManager {
 
     if (missing) {
       try {
-        const { leon } = await import('@sdk/leon')
-        await leon.answer({
+        await reportToolOutput({
           key: 'bridges.tools.missing_settings',
           data: {
             tool_name: tool.aliasToolName,

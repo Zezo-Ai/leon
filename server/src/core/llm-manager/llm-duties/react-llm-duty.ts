@@ -21,9 +21,16 @@ import { LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
 
 type ReactLLMDutyParams = LLMDutyParams
 
+const formatFilePath = (filePath: string): string => {
+  return `[FILE_PATH]${filePath}[/FILE_PATH]`
+}
+
 const SYSTEM_PROMPT = `You are an autonomous reasoning and acting agent. Your goal is to solve the user's request.
 
-You may choose a toolkit, then choose a tool, then choose a function, or provide a final answer. Tools are not executed yet, so if you choose a function you will receive an observation and must continue.
+You may choose a toolkit, then choose a tool, then choose a function, or provide a final answer. Tools ARE executed, and after a function call you will receive an observation with the tool result. Use observations to decide the next step.
+
+When chaining tools, reuse fields from the latest observation to fill the next tool_input whenever possible.
+If the latest observation includes tool output data, prefer to copy exact values into the next tool_input rather than paraphrasing.
 
 Select a toolkit to see its tools. Select a tool to see its functions. You can select different toolkits/tools later if needed.
 
@@ -40,11 +47,11 @@ No other keys, no null values.`
 const MAX_STEPS = 4
 const REACT_MAX_TOKENS = 256
 const REACT_TEMPERATURE = 0.2
-const MAX_INVALID_INPUTS = 2
+const MAX_INVALID_INPUTS = 4
 const TOOL_DISABLED_OBSERVATION =
-  'Tool execution is not available yet. Provide the best possible final answer without using tools.'
+  'No valid action received. Choose a toolkit, tool, function, or provide a final answer.'
 const FINAL_FALLBACK_RESPONSE =
-  'I cannot use tools right now, but I can still help. Tell me what outcome you want and any constraints, and I will do my best.'
+  'I need a clear toolkit/tool/function selection or a final answer to proceed.'
 
 export class ReActLLMDuty extends LLMDuty {
   private static instance: ReActLLMDuty
@@ -206,8 +213,9 @@ export class ReActLLMDuty extends LLMDuty {
       let selectedToolId: string | null = null
       let invalidResponseCount = 0
       let invalidInputCount = 0
+      let maxSteps = MAX_STEPS
 
-      for (let stepIndex = 0; stepIndex < MAX_STEPS; stepIndex += 1) {
+      for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
         const stepsSection = steps.length
           ? `Previous Steps:\n${steps
               .map((step, index) => {
@@ -264,7 +272,13 @@ export class ReActLLMDuty extends LLMDuty {
           ? `Available Toolkits:\n${toolkitsList}`
           : 'Available Toolkits: none'
 
-        const prompt = `${toolkitsSection}\n\n${selectedToolkitSection}\n\n${toolsSection}\n\n${selectedToolSection}\n\n${functionsSection}\n\n${stepsSection}\n\nUser Request: "${this.input}"`
+        const latestObservation = steps.length
+          ? steps[steps.length - 1]?.observation
+          : null
+        const latestObservationSection = latestObservation
+          ? `Latest Observation:\n${latestObservation}`
+          : 'Latest Observation: none'
+        const prompt = `${toolkitsSection}\n\n${selectedToolkitSection}\n\n${toolsSection}\n\n${selectedToolSection}\n\n${functionsSection}\n\n${stepsSection}\n\n${latestObservationSection}\n\nUser Request: "${this.input}"`
         const responseSchema = {
           oneOf: [
             {
@@ -424,7 +438,56 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
             })
             continue
           }
+          if (selectedToolkitId && toolId === selectedToolkitId) {
+            selectedToolId = null
+            steps.push({
+              action: `toolkit:${selectedToolkitId}`,
+              observation:
+                'Interpreted tool_id as a toolkit_id. Choose a tool next.'
+            })
+            const toolkitTools = toolkitsMap.get(selectedToolkitId)?.tools || []
+            if (toolkitTools.length === 1) {
+              selectedToolId = toolkitTools[0]?.id || null
+              if (selectedToolId) {
+                steps.push({
+                  action: `tool:${selectedToolId}`,
+                  observation:
+                    'Auto-selected the only available tool in this toolkit.'
+                })
+              }
+            }
+            continue
+          }
+          const toolIdParts = toolId.split('/')
+          if (toolIdParts.length === 2 && toolIdParts[0] && toolIdParts[1]) {
+            selectedToolkitId = toolIdParts[0]
+            selectedToolId = toolIdParts[1]
+          }
           if (!selectedToolkitId) {
+            const toolkitMatch = TOOLKIT_REGISTRY.toolkits.find(
+              (toolkit) => toolkit.id === toolId
+            )
+            if (toolkitMatch) {
+              selectedToolkitId = toolkitMatch.id
+              selectedToolId = null
+              steps.push({
+                action: `toolkit:${toolkitMatch.id}`,
+                observation:
+                  'Interpreted tool_id as a toolkit_id. Choose a tool next.'
+              })
+              continue
+            }
+
+            const resolvedTool = TOOLKIT_REGISTRY.resolveToolById(toolId)
+            if (resolvedTool) {
+              selectedToolkitId = resolvedTool.toolkitId
+              selectedToolId = resolvedTool.toolId
+              steps.push({
+                action: `tool:${resolvedTool.toolId}`
+              })
+              continue
+            }
+
             steps.push({
               action: `tool:${toolId || 'unknown_tool'}`,
               observation: 'Select a toolkit before choosing a tool.'
@@ -433,10 +496,22 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
           }
 
           const resolvedTool = TOOLKIT_REGISTRY.resolveToolById(
-            toolId,
+            selectedToolId || toolId,
             selectedToolkitId
           )
           if (!resolvedTool) {
+            const resolvedAnyToolkit = TOOLKIT_REGISTRY.resolveToolById(
+              selectedToolId || toolId
+            )
+            if (resolvedAnyToolkit) {
+              selectedToolkitId = resolvedAnyToolkit.toolkitId
+              selectedToolId = resolvedAnyToolkit.toolId
+              steps.push({
+                action: `tool:${resolvedAnyToolkit.toolId}`,
+                observation: 'Switched toolkit to match the requested tool_id.'
+              })
+              continue
+            }
             steps.push({
               action: `tool:${toolId || 'unknown_tool'}`,
               observation: 'Unknown tool_id for selected toolkit.'
@@ -525,13 +600,56 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
 
           const toolExecutionResult =
             await TOOL_EXECUTOR.executeTool(toolExecutionInput)
+          const missingSettings =
+            toolExecutionResult.status === 'error'
+              ? (toolExecutionResult.data.output?.['missing_settings'] as
+                  | string[]
+                  | undefined)
+              : undefined
+          const settingsPath =
+            toolExecutionResult.status === 'error'
+              ? (toolExecutionResult.data.output?.['settings_path'] as
+                  | string
+                  | undefined)
+              : undefined
+          if (missingSettings && missingSettings.length > 0 && settingsPath) {
+            const formattedPath = formatFilePath(settingsPath)
+            return {
+              dutyType: LLMDuties.ReAct,
+              systemPrompt: this.systemPrompt,
+              input: this.input,
+              output: `Missing tool settings: ${missingSettings.join(
+                ', '
+              )}. Please set them in ${formattedPath}.`,
+              data: {}
+            } as unknown as LLMDutyResult
+          }
+          if (toolExecutionResult.status === 'invalid_input') {
+            invalidInputCount += 1
+            if (invalidInputCount >= MAX_INVALID_INPUTS) {
+              return {
+                dutyType: LLMDuties.ReAct,
+                systemPrompt: this.systemPrompt,
+                input: this.input,
+                output:
+                  'I need a bit more detail to proceed. Please provide the missing fields for this function input.',
+                data: {}
+              } as unknown as LLMDutyResult
+            }
+          }
           const toolLabel =
             toolExecutionResult.toolLabel || selectedToolId || 'unknown_tool'
-          const observation = JSON.stringify({
+          const observationPayload: Record<string, unknown> = {
             status: toolExecutionResult.status,
             message: toolExecutionResult.message,
             data: toolExecutionResult.data
-          })
+          }
+          if (toolExecutionResult.status === 'invalid_input') {
+            observationPayload['repair_hint'] =
+              toolExecutionResult.message ||
+              'Fix tool_input using required fields and correct order.'
+          }
+          const observation = JSON.stringify(observationPayload)
 
           steps.push({
             action: `function:${toolLabel}.${functionName}${
@@ -539,6 +657,9 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
             }`,
             observation
           })
+          if (stepIndex >= maxSteps - 1) {
+            maxSteps += 1
+          }
           continue
         }
 
@@ -812,33 +933,10 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
   private tryRepairToolInput(
     toolInput: string
   ): { repaired: string; value: unknown } | null {
-    const commandKey = '"command"'
-    const commandIndex = toolInput.indexOf(commandKey)
-    if (commandIndex === -1) {
+    const repaired = this.repairJsonStringLiterals(toolInput)
+    if (repaired === toolInput) {
       return null
     }
-
-    const colonIndex = toolInput.indexOf(':', commandIndex)
-    if (colonIndex === -1) {
-      return null
-    }
-
-    const firstQuoteIndex = toolInput.indexOf('"', colonIndex + 1)
-    if (firstQuoteIndex === -1) {
-      return null
-    }
-
-    const lastQuoteIndex = toolInput.lastIndexOf('"')
-    if (lastQuoteIndex <= firstQuoteIndex) {
-      return null
-    }
-
-    const commandValue = toolInput.slice(firstQuoteIndex + 1, lastQuoteIndex)
-    const escapedCommand = commandValue.replace(/"/g, '\\"')
-    const repaired =
-      toolInput.slice(0, firstQuoteIndex + 1) +
-      escapedCommand +
-      toolInput.slice(lastQuoteIndex)
 
     try {
       const value = JSON.parse(repaired)
@@ -846,5 +944,85 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
     } catch {
       return null
     }
+  }
+
+  private repairJsonStringLiterals(input: string): string {
+    let inString = false
+    let escaped = false
+    let result = ''
+
+    const isValidEscape = (char: string): boolean => {
+      return (
+        char === '"' ||
+        char === '\\' ||
+        char === '/' ||
+        char === 'b' ||
+        char === 'f' ||
+        char === 'n' ||
+        char === 'r' ||
+        char === 't' ||
+        char === 'u'
+      )
+    }
+
+    const nextNonSpace = (value: string, start: number): string => {
+      for (let i = start; i < value.length; i += 1) {
+        const char = value[i]
+        if (char && !/\s/.test(char)) {
+          return char
+        }
+      }
+      return ''
+    }
+
+    for (let i = 0; i < input.length; i += 1) {
+      const char = input[i]
+
+      if (!inString) {
+        if (char === '"') {
+          inString = true
+        }
+        result += char
+        continue
+      }
+
+      if (escaped) {
+        result += char
+        escaped = false
+        continue
+      }
+
+      if (char === '\\') {
+        const nextChar = input[i + 1]
+        if (nextChar && isValidEscape(nextChar)) {
+          result += char
+          escaped = true
+          continue
+        }
+        result += '\\\\'
+        continue
+      }
+
+      if (char === '"') {
+        const nextChar = nextNonSpace(input, i + 1)
+        const isTerminator =
+          nextChar === '' ||
+          nextChar === ',' ||
+          nextChar === '}' ||
+          nextChar === ']' ||
+          nextChar === ':'
+        if (isTerminator) {
+          inString = false
+          result += char
+          continue
+        }
+        result += '\\"'
+        continue
+      }
+
+      result += char
+    }
+
+    return result
   }
 }

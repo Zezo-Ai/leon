@@ -102,10 +102,23 @@ export default class ToolExecutor {
       })
     }
 
-    const argsArray = this.mapArgs(
-      parsedInput,
-      functions?.[functionName]?.parameters
-    )
+    let argsArray: unknown[]
+    try {
+      argsArray = this.mapArgs(
+        parsedInput,
+        functions?.[functionName]?.parameters
+      )
+    } catch (error) {
+      return this.buildResult({
+        status: 'invalid_input',
+        message: (error as Error).message,
+        input: input.toolInput ?? null,
+        resolvedTool,
+        functionName,
+        parsedInput,
+        output: {}
+      })
+    }
     const runtimeResult = await this.runToolRuntime({
       toolkitId: resolvedTool.toolkitId,
       toolId: resolvedTool.toolId,
@@ -186,7 +199,46 @@ export default class ToolExecutor {
       return Object.values(argsObject)
     }
 
-    return Object.keys(properties).map((key) => argsObject[key])
+    const requiredList = Array.isArray(parameters?.['required'])
+      ? (parameters?.['required'] as string[])
+      : []
+    const orderedKeys = Object.keys(properties)
+    const missingRequired = requiredList.filter(
+      (key) => argsObject[key] === undefined
+    )
+
+    if (missingRequired.length > 0) {
+      throw new Error(
+        `Missing required tool_input fields: ${missingRequired.join(', ')}`
+      )
+    }
+
+    if (requiredList.length > 0) {
+      const lastRequiredIndex = Math.max(
+        ...requiredList.map((key) => orderedKeys.indexOf(key))
+      )
+      const optionalBeforeRequired = orderedKeys
+        .slice(0, lastRequiredIndex)
+        .filter((key) => !requiredList.includes(key))
+
+      if (optionalBeforeRequired.length > 0) {
+        throw new Error(
+          `Optional parameters must be trailing: ${optionalBeforeRequired.join(
+            ', '
+          )}`
+        )
+      }
+    }
+
+    const orderedArgs = orderedKeys.map((key) => argsObject[key])
+    while (orderedArgs.length > 0) {
+      const lastIndex = orderedArgs.length - 1
+      if (orderedArgs[lastIndex] !== undefined) {
+        break
+      }
+      orderedArgs.pop()
+    }
+    return orderedArgs
   }
 
   private async runToolRuntime(params: {
@@ -222,39 +274,91 @@ export default class ToolExecutor {
       params.toolId,
       '--function',
       params.functionName,
-      '--args-base64',
-      Buffer.from(JSON.stringify(params.args)).toString('base64')
+      '--args',
+      JSON.stringify(params.args)
     ]
 
     try {
-      const { stdout } = await execFileAsync(process.execPath, cliArgs, {
-        cwd: NODEJS_BRIDGE_ROOT_PATH,
-        maxBuffer: 1024 * 1024 * 10
-      })
+      const { stdout, stderr } = await execFileAsync(
+        process.execPath,
+        cliArgs,
+        {
+          cwd: NODEJS_BRIDGE_ROOT_PATH,
+          maxBuffer: 1024 * 1024 * 10
+        }
+      )
       const output = stdout ? stdout.toString().trim() : ''
       if (!output) {
         return {
           success: false,
           message: 'Tool runtime returned empty output.',
-          output: {}
+          output: {
+            runtime_stdout: stdout ? stdout.toString() : '',
+            runtime_stderr: stderr ? stderr.toString() : ''
+          }
         }
       }
 
-      const parsed = JSON.parse(output) as {
-        success: boolean
-        message: string
-        output?: Record<string, unknown>
-      }
-      return {
-        success: Boolean(parsed.success),
-        message: parsed.message || 'Tool runtime error.',
-        output: parsed.output || {}
+      try {
+        const parsed = JSON.parse(output) as {
+          success: boolean
+          message: string
+          output?: Record<string, unknown>
+        }
+        return {
+          success: Boolean(parsed.success),
+          message: parsed.message || 'Tool runtime error.',
+          output: parsed.output || {}
+        }
+      } catch (parseError) {
+        return {
+          success: false,
+          message: `Tool runtime returned invalid JSON: ${
+            (parseError as Error).message
+          }`,
+          output: {
+            runtime_stdout: stdout ? stdout.toString() : '',
+            runtime_stderr: stderr ? stderr.toString() : ''
+          }
+        }
       }
     } catch (error) {
+      const execError = error as Error & {
+        stdout?: Buffer | string
+        stderr?: Buffer | string
+      }
+      const runtimeStdout = execError.stdout ? execError.stdout.toString() : ''
+      const runtimeStderr = execError.stderr ? execError.stderr.toString() : ''
+      if (runtimeStdout) {
+        try {
+          const parsed = JSON.parse(runtimeStdout) as {
+            success: boolean
+            message: string
+            output?: Record<string, unknown>
+          }
+          return {
+            success: Boolean(parsed.success),
+            message: parsed.message || 'Tool runtime error.',
+            output: {
+              ...(parsed.output || {}),
+              runtime_stderr: runtimeStderr
+            }
+          }
+        } catch {
+          // Fall through to stderr message
+        }
+      }
+      const stderrMessage = runtimeStderr.trim()
+      const message = stderrMessage
+        ? `Tool runtime error: ${stderrMessage}`
+        : `Tool runtime error: ${execError.message}`
       return {
         success: false,
-        message: `Tool runtime error: ${(error as Error).message}`,
-        output: {}
+        message,
+        output: {
+          runtime_stdout: runtimeStdout,
+          runtime_stderr: runtimeStderr
+        }
       }
     }
   }

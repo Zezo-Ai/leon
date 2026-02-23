@@ -29,22 +29,13 @@ const parseArgs = (): ToolRuntimeCliInput => {
   const toolId = getValue('--tool')
   const functionName = getValue('--function')
   const rawArgs = getValue('--args')
-  const rawArgsBase64 = getValue('--args-base64')
 
   if (!toolkitId || !toolId || !functionName) {
     throw new Error('Missing required arguments: --toolkit, --tool, --function')
   }
 
   let parsedArgs: unknown[] = []
-  if (rawArgsBase64) {
-    const decodedJson = Buffer.from(rawArgsBase64, 'base64').toString('utf8')
-    const decoded = JSON.parse(decodedJson)
-    if (Array.isArray(decoded)) {
-      parsedArgs = decoded
-    } else if (decoded && typeof decoded === 'object') {
-      parsedArgs = Object.values(decoded)
-    }
-  } else if (rawArgs) {
+  if (rawArgs) {
     const decoded = JSON.parse(rawArgs)
     if (Array.isArray(decoded)) {
       parsedArgs = decoded
@@ -112,27 +103,38 @@ const run = async (): Promise<void> => {
     }
 
     const { Tool } = await import('@sdk/base-tool')
+    const toolManagerModule = await import('@sdk/tool-manager')
+    const ToolManager = toolManagerModule.default
+    const isMissingToolSettingsError =
+      toolManagerModule.isMissingToolSettingsError
     const toolModule = await import(pathToFileURL(toolModulePath).href)
     const ToolClass = toolModule?.default
     if (!ToolClass) {
       throw new Error(`Tool ${input.toolId} has no default export.`)
     }
 
-    const toolInstance = new ToolClass() as InstanceType<typeof Tool>
-    const missing = toolInstance.getMissingSettings()
-    if (missing) {
-      process.stdout.write(
-        JSON.stringify({
-          success: false,
-          message: `Missing tool settings: ${missing.missing.join(', ')}`,
-          output: {
-            missing_settings: missing.missing,
-            settings_path: missing.settingsPath
-          }
-        })
-      )
-      process.exitCode = 1
-      return
+    let toolInstance: InstanceType<typeof Tool>
+    try {
+      toolInstance = (await ToolManager.initTool(
+        ToolClass as new () => InstanceType<typeof Tool>
+      )) as InstanceType<typeof Tool>
+    } catch (error) {
+      if (isMissingToolSettingsError(error)) {
+        process.stdout.write(
+          JSON.stringify({
+            success: false,
+            message: error.message,
+            output: {
+              missing_settings: error.missing,
+              settings_path: error.settingsPath
+            }
+          })
+        )
+        process.exitCode = 1
+        return
+      }
+
+      throw error
     }
     const method = (toolInstance as unknown as Record<string, unknown>)?.[
       input.functionName
