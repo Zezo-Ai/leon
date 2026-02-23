@@ -1,0 +1,63 @@
+{
+  "$schema": "../../../../schemas/tool-schemas/tool.json",
+  "tool_id": "openrouter",
+  "toolkit_id": "communication",
+  "name": "OpenRouter",
+  "description": "A tool for interacting with various LLMs through the OpenRouter API gateway.",
+  "author": {
+    "name": "Louis Grenard",
+    "email": "louis@getleon.ai",
+    "url": "https://twitter.com/grenlouis"
+  },
+  "functions": {
+    "chatCompletion": {
+      "description": "Generate a chat completion using OpenRouter.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "options": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "required": ["options"]
+      }
+    },
+    "completion": {
+      "description": "Generate a completion using OpenRouter.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "options": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "required": ["options"]
+      }
+    },
+    "structuredCompletion": {
+      "description": "Generate a structured completion using a JSON schema.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "options": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "required": ["options"]
+      }
+    },
+    "listModels": {
+      "description": "List available OpenRouter models.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  }
+}

@@ -1,3 +1,6 @@
 {
-  "name": "Travel & Transportation"
+  "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
+  "name": "Travel & Transportation",
+  "description": "Tools for travel planning and transportation.",
+  "tools": []
 }

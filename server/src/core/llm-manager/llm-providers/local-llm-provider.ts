@@ -43,12 +43,19 @@ export default class LocalLLMProvider {
         }
 
         if (isJSONMode) {
-          const grammar = await LLM_MANAGER.llama.createGrammarForJsonSchema({
-            type: 'object',
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-expect-error
-            properties: completionParams.data
-          })
+          const dataSchema =
+            completionParams.data &&
+            typeof completionParams.data === 'object' &&
+            ('type' in completionParams.data ||
+              'oneOf' in completionParams.data)
+              ? completionParams.data
+              : {
+                  type: 'object',
+                  properties: completionParams.data
+                }
+          const grammar = await LLM_MANAGER.llama.createGrammarForJsonSchema(
+            dataSchema as never
+          )
 
           promptParams = {
             ...promptParams,

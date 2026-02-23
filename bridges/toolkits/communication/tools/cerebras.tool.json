@@ -1,0 +1,63 @@
+{
+  "$schema": "../../../../schemas/tool-schemas/tool.json",
+  "tool_id": "cerebras",
+  "toolkit_id": "communication",
+  "name": "Cerebras",
+  "description": "A tool for interacting with Cerebras LLM APIs (e.g., GLM 4.7).",
+  "author": {
+    "name": "Louis Grenard",
+    "email": "louis@getleon.ai",
+    "url": "https://twitter.com/grenlouis"
+  },
+  "functions": {
+    "chatCompletion": {
+      "description": "Generate a chat completion using the Cerebras API.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "options": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "required": ["options"]
+      }
+    },
+    "completion": {
+      "description": "Generate a completion using the Cerebras API.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "options": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "required": ["options"]
+      }
+    },
+    "structuredCompletion": {
+      "description": "Generate a structured completion using a JSON schema.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "options": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          }
+        },
+        "required": ["options"]
+      }
+    },
+    "listModels": {
+      "description": "List available Cerebras models.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  }
+}

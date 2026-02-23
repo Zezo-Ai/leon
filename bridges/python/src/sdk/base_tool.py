@@ -86,7 +86,10 @@ class BaseTool(ABC):
     def _get_settings_path(self, tool_name: Optional[str] = None) -> str:
         resolved_tool_name = tool_name or self.tool_name
         return os.path.join(
-            TOOLKITS_PATH, self.toolkit, "settings", f"{resolved_tool_name}.json"
+            TOOLKITS_PATH,
+            self.toolkit,
+            "settings",
+            f"{resolved_tool_name}.settings.json",
         )
 
     def _check_required_settings(self, tool_name: Optional[str] = None) -> None:
@@ -592,7 +595,7 @@ class BaseTool(ABC):
         Get resource path and ensure all resource files are downloaded
 
         Args:
-            resource_name: The name of the resource as defined in toolkit.json
+        resource_name: The name of the resource as defined in the tool manifest
 
         Returns:
             The path to the resource directory

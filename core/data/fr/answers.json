@@ -26,6 +26,11 @@
       "Désolé, je ne comprends pas votre requête",
       "Désolé, je suis encore très jeune, je n'ai pas compris votre demande"
     ],
+    "skill_not_found_offer_create": [
+      "Je n'ai pas encore cette compétence, mais je peux la développer pour vous tout de suite.",
+      "Cette compétence n'existe pas encore, mais je peux la créer maintenant.",
+      "Je n'ai pas cette compétence pour le moment. Je peux la construire tout de suite."
+    ],
     "random_not_sure": [
       "Désolé, vous pouvez répéter d'une autre façon",
       "Désolé, je ne suis pas sûr de comprendre",

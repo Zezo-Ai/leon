@@ -10,6 +10,7 @@ import { SlotFillingLLMDuty } from '@/core/llm-manager/llm-duties/slot-filling-l
 import { SkillRouterLLMDuty } from '@/core/llm-manager/llm-duties/skill-router-llm-duty'
 import { ActionCallingLLMDuty } from '@/core/llm-manager/llm-duties/action-calling-llm-duty'
 import { CustomLLMDuty } from '@/core/llm-manager/llm-duties/custom-llm-duty'
+import { ReActLLMDuty } from '@/core/llm-manager/llm-duties/react-llm-duty'
 import { LLM_MANAGER } from '@/core'
 
 interface PostLLMInferenceSchema {
@@ -28,7 +29,8 @@ const LLM_DUTIES_MAP = {
   [LLMDuties.CustomNER]: CustomNERLLMDuty,
   [LLMDuties.Paraphrase]: ParaphraseLLMDuty,
   [LLMDuties.Conversation]: ConversationLLMDuty,
-  [LLMDuties.Custom]: CustomLLMDuty
+  [LLMDuties.Custom]: CustomLLMDuty,
+  [LLMDuties.ReAct]: ReActLLMDuty
 }
 
 export const postLLMInference: FastifyPluginAsync<APIOptions> = async (

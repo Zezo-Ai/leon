@@ -1,10 +1,6 @@
 {
+  "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Search & Web",
   "description": "Tools to search the web and social media platforms.",
-  "tools": {
-    "grok": {
-      "name": "Grok",
-      "description": "AI-powered deep research tool with real-time web search and X/Twitter access. Use this for comprehensive web research, trending topics on X, and searching social media posts. Powered by xAI's Grok with live internet and X platform integration."
-    }
-  }
+  "tools": ["grok"]
 }

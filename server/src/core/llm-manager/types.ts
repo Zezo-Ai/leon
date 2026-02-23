@@ -16,7 +16,8 @@ export enum LLMDuties {
   CustomNER = 'custom-ner',
   Paraphrase = 'paraphrase',
   Conversation = 'conversation',
-  Custom = 'custom'
+  Custom = 'custom',
+  ReAct = 'react'
   // TODO
   /*SentimentAnalysis = 'sentiment-analysis',
   QuestionAnswering = 'question-answering',

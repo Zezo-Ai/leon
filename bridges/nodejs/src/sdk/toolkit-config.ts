@@ -5,16 +5,22 @@ import { getPlatformName } from '@sdk/utils'
 import { TOOLKITS_PATH } from '@bridge/constants'
 
 interface ToolConfig {
-  name?: string
+  tool_id: string
+  toolkit_id: string
+  name: string
   description: string
   binaries?: Record<string, string>
   resources?: Record<string, string[]>
+  functions: Record<
+    string,
+    { description: string; input_schema: Record<string, string> }
+  >
 }
 
 interface ToolkitConfigData {
   name: string
   description: string
-  tools: Record<string, ToolConfig>
+  tools: string[]
 }
 
 export class ToolkitConfig {
@@ -39,13 +45,20 @@ export class ToolkitConfig {
     }
 
     const toolkitConfig = this.configCache.get(cacheKey)!
-    const toolConfig = toolkitConfig.tools[toolName]
-
-    if (!toolConfig) {
+    if (!toolkitConfig.tools.includes(toolName)) {
       throw new Error(
         `Tool '${toolName}' not found in toolkit '${toolkitConfig.name}'`
       )
     }
+
+    const toolConfigPath = join(
+      TOOLKITS_PATH,
+      toolkitName,
+      'tools',
+      `${toolName}.tool.json`
+    )
+    const toolConfigContent = readFileSync(toolConfigPath, 'utf-8')
+    const toolConfig = JSON.parse(toolConfigContent) as ToolConfig
 
     return toolConfig
   }
@@ -67,7 +80,7 @@ export class ToolkitConfig {
     }
 
     const settingsDir = join(TOOLKITS_PATH, toolkitName, 'settings')
-    const settingsPath = join(settingsDir, `${toolName}.json`)
+    const settingsPath = join(settingsDir, `${toolName}.settings.json`)
 
     mkdirSync(settingsDir, { recursive: true })
 

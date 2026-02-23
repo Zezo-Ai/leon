@@ -1,3 +1,6 @@
 {
-  "name": "News"
+  "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
+  "name": "News",
+  "description": "Tools for news and current events.",
+  "tools": []
 }

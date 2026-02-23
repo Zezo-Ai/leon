@@ -1,4 +1,3 @@
-import { leon } from '@sdk/leon'
 import { formatFilePath } from '@sdk/utils'
 import { Tool } from '@sdk/base-tool'
 
@@ -28,17 +27,26 @@ export default class ToolManager {
     const missing = tool.getMissingSettings()
 
     if (missing) {
-      await leon.answer({
-        key: 'bridges.tools.missing_settings',
-        data: {
-          tool_name: tool.aliasToolName,
-          missing: missing.missing.join(', '),
-          settings_path: formatFilePath(missing.settingsPath)
-        },
-        core: {
-          should_stop_skill: true
-        }
-      })
+      try {
+        const { leon } = await import('@sdk/leon')
+        await leon.answer({
+          key: 'bridges.tools.missing_settings',
+          data: {
+            tool_name: tool.aliasToolName,
+            missing: missing.missing.join(', '),
+            settings_path: formatFilePath(missing.settingsPath)
+          },
+          core: {
+            should_stop_skill: true
+          }
+        })
+      } catch (error) {
+        console.warn(
+          `[LEON_TOOL_LOG] Failed to report missing tool settings: ${
+            (error as Error).message
+          }`
+        )
+      }
       throw new MissingToolSettingsError(missing.missing, missing.settingsPath)
     }
 

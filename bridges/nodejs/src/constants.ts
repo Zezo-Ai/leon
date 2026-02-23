@@ -5,11 +5,23 @@ import type { SkillLocaleConfigSchema } from '@/schemas/skill-schemas'
 
 import { IntentObject, NLPAction } from '@sdk/types'
 
-const {
-  argv: [, , INTENT_OBJ_FILE_PATH]
-} = process
+const args = process.argv.slice(2)
+const runtimeIndex = args.indexOf('--runtime')
+const runtime =
+  runtimeIndex >= 0 && args[runtimeIndex + 1] ? args[runtimeIndex + 1] : 'skill'
+const filteredArgs = args.filter((_, index) => {
+  if (index === runtimeIndex || index === runtimeIndex + 1) {
+    return false
+  }
+  return true
+})
+const intentPathCandidate = filteredArgs.find((arg) => !arg.startsWith('--'))
+const INTENT_OBJ_FILE_PATH =
+  runtime === 'skill' ? intentPathCandidate : undefined
 
 export const LEON_VERSION = process.env['npm_package_version']
+
+export const RUNTIME = runtime
 
 const BIN_PATH = path.join(process.cwd(), 'bin')
 const BRIDGES_PATH = path.join(process.cwd(), 'bridges')
@@ -26,9 +38,19 @@ export const [, NODEJS_BRIDGE_VERSION] = fs
   .readFileSync(NODEJS_BRIDGE_VERSION_FILE_PATH, 'utf8')
   .split("'")
 
-export const INTENT_OBJECT: IntentObject = JSON.parse(
-  fs.readFileSync(INTENT_OBJ_FILE_PATH as string, 'utf8')
-)
+let parsedIntentObject: IntentObject | null = null
+if (INTENT_OBJ_FILE_PATH) {
+  if (!fs.existsSync(INTENT_OBJ_FILE_PATH)) {
+    throw new Error(`Intent file not found: ${INTENT_OBJ_FILE_PATH}`)
+  }
+  parsedIntentObject = JSON.parse(
+    fs.readFileSync(INTENT_OBJ_FILE_PATH, 'utf8')
+  ) as IntentObject
+}
+
+export const INTENT_OBJECT: IntentObject = parsedIntentObject
+  ? parsedIntentObject
+  : ({} as IntentObject)
 
 export const NVIDIA_LIBS_PATH = path.join(BIN_PATH, 'nvidia')
 
@@ -36,22 +58,39 @@ export const PYTORCH_PATH = path.join(BIN_PATH, 'pytorch')
 export const PYTORCH_TORCH_PATH = path.join(PYTORCH_PATH, 'torch')
 
 export const SKILLS_PATH = path.join(process.cwd(), 'skills')
-export const SKILL_PATH = path.join(SKILLS_PATH, INTENT_OBJECT.skill_name)
-const SKILL_LOCALE_PATH = path.join(
-  SKILL_PATH,
-  'locales',
-  INTENT_OBJECT.extra_context.lang + '.json'
-)
-const SKILL_LOCALE_CONFIG_CONTENT = JSON.parse(
-  fs.existsSync(SKILL_LOCALE_PATH)
-    ? fs.readFileSync(SKILL_LOCALE_PATH, 'utf8')
-    : `{"variables": {}, "common_answers": {}, "widget_contents": {}, "actions": {"${INTENT_OBJECT.action_name}": {}}}`
-)
+export const SKILL_PATH =
+  runtime === 'skill' && parsedIntentObject
+    ? path.join(SKILLS_PATH, parsedIntentObject.skill_name)
+    : ''
+const SKILL_LOCALE_CONFIG_CONTENT =
+  runtime === 'skill' && INTENT_OBJ_FILE_PATH && parsedIntentObject
+    ? (() => {
+        const skillLocalePath = path.join(
+          SKILL_PATH,
+          'locales',
+          parsedIntentObject.extra_context.lang + '.json'
+        )
+        return JSON.parse(
+          fs.existsSync(skillLocalePath)
+            ? fs.readFileSync(skillLocalePath, 'utf8')
+            : `{"variables": {}, "common_answers": {}, "widget_contents": {}, "actions": {"${parsedIntentObject.action_name}": {}}}`
+        )
+      })()
+    : {
+        variables: {},
+        common_answers: {},
+        widget_contents: {},
+        actions: {}
+      }
 
 export const SKILL_LOCALE_CONFIG: SkillLocaleConfigSchema &
   SkillLocaleConfigSchema['actions'][NLPAction] = {
   variables: SKILL_LOCALE_CONFIG_CONTENT.variables,
   common_answers: SKILL_LOCALE_CONFIG_CONTENT.common_answers,
   widget_contents: SKILL_LOCALE_CONFIG_CONTENT.widget_contents,
-  ...SKILL_LOCALE_CONFIG_CONTENT.actions[INTENT_OBJECT.action_name]
+  ...((runtime === 'skill' && parsedIntentObject
+    ? SKILL_LOCALE_CONFIG_CONTENT.actions[
+        parsedIntentObject.action_name as NLPAction
+      ]
+    : {}) || {})
 }

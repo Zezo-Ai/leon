@@ -236,7 +236,7 @@ class OpenCodeTool(BaseTool):
                     with open(toolkit_json) as f:
                         toolkit_data = json.load(f)
 
-                    tools = toolkit_data.get("tools", {})
+                    tools = toolkit_data.get("tools", [])
                     if not tools:
                         continue
 
@@ -245,9 +245,21 @@ class OpenCodeTool(BaseTool):
                         f"{toolkit_data.get('description', 'No description')}\n\n"
                     )
 
-                    for tool_name, tool_config in tools.items():
+                    for tool_name in tools:
+                        tool_manifest = toolkit_dir / "tools" / f"{tool_name}.tool.json"
+                        tool_description = "No description"
+                        if tool_manifest.exists():
+                            try:
+                                with open(tool_manifest, "r", encoding="utf-8") as f:
+                                    manifest_data = json.load(f)
+                                    tool_description = manifest_data.get(
+                                        "description", tool_description
+                                    )
+                            except json.JSONDecodeError:
+                                pass
+
                         toolkit_info += f"### {tool_name}\n"
-                        toolkit_info += f"- **Description**: {tool_config.get('description', 'No description')}\n"
+                        toolkit_info += f"- **Description**: {tool_description}\n"
 
                         # Convert to PascalCase for import
                         pascal_name = "".join(
@@ -495,19 +507,34 @@ class OpenCodeTool(BaseTool):
             guidelines += "        return 'result'\n"
             guidelines += "```\n\n"
 
-        guidelines += "### Register New Tool in toolkit.json\n\n"
-        guidelines += "Add to `bridges/toolkits/{toolkit_name}/toolkit.json`:\n\n"
+        guidelines += "### Register New Tool\n\n"
+        guidelines += (
+            "1) Add tool id to `bridges/toolkits/{toolkit_name}/toolkit.json`:\n\n"
+        )
         guidelines += "```json\n"
         guidelines += "{\n"
         guidelines += '  "name": "Toolkit Name",\n'
         guidelines += '  "description": "Description",\n'
-        guidelines += '  "tools": {\n'
-        guidelines += '    "mynew": {\n'
-        guidelines += '      "name": "My New Tool",\n'
-        guidelines += '      "description": "My new tool description",\n'
-        guidelines += '      "binaries": {  // Optional: only if tool needs a binary\n'
-        guidelines += '        "linux-x86_64": "https://url-to-binary.tar.gz"\n'
-        guidelines += "      }\n"
+        guidelines += '  "tools": ["mynew"]\n'
+        guidelines += "}\n"
+        guidelines += "```\n\n"
+
+        guidelines += "2) Create tool manifest `bridges/toolkits/{toolkit_name}/tools/mynew.tool.json`:\n\n"
+        guidelines += "```json\n"
+        guidelines += "{\n"
+        guidelines += '  "$schema": "../../../../schemas/tool-schemas/tool.json",\n'
+        guidelines += '  "tool_id": "mynew",\n'
+        guidelines += '  "toolkit_id": "{toolkit_name}",\n'
+        guidelines += '  "name": "My New Tool",\n'
+        guidelines += '  "description": "My new tool description",\n'
+        guidelines += '  "author": { "name": "Your Name" },\n'
+        guidelines += '  "binaries": {\n'
+        guidelines += '    "linux-x86_64": "https://url-to-binary.tar.gz"\n'
+        guidelines += "  },\n"
+        guidelines += '  "functions": {\n'
+        guidelines += '    "my_method": {\n'
+        guidelines += '      "description": "My method description",\n'
+        guidelines += '      "input_schema": { "param": "string" }\n'
         guidelines += "    }\n"
         guidelines += "  }\n"
         guidelines += "}\n"

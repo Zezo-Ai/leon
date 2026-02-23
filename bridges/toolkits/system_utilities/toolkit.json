@@ -1,3 +1,6 @@
 {
-  "name": "System Utilities"
+  "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
+  "name": "System Utilities",
+  "description": "Tools for system utilities and maintenance.",
+  "tools": []
 }

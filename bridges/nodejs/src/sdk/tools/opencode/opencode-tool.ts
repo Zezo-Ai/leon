@@ -491,15 +491,34 @@ export default class OpenCodeTool extends Tool {
             await fs.promises.readFile(toolkitJsonPath, 'utf-8')
           )
 
-          if (toolkitData.tools && Object.keys(toolkitData.tools).length > 0) {
+          if (
+            Array.isArray(toolkitData.tools) &&
+            toolkitData.tools.length > 0
+          ) {
             toolkitInfo += `## ${toolkitData.name || dir.name}\n`
             toolkitInfo += `${toolkitData.description || 'No description'}\n\n`
 
-            for (const [toolName, toolConfig] of Object.entries(
-              toolkitData.tools as Record<string, { description: string }>
-            )) {
+            for (const toolName of toolkitData.tools as string[]) {
+              const toolManifestPath = path.join(
+                toolkitsDir,
+                dir.name,
+                'tools',
+                `${toolName}.tool.json`
+              )
+              let toolDescription = 'No description'
+              if (fs.existsSync(toolManifestPath)) {
+                try {
+                  const toolManifest = JSON.parse(
+                    await fs.promises.readFile(toolManifestPath, 'utf-8')
+                  )
+                  toolDescription = toolManifest.description || toolDescription
+                } catch {
+                  // Ignore malformed tool manifest
+                }
+              }
+
               toolkitInfo += `### ${toolName}\n`
-              toolkitInfo += `- **Description**: ${toolConfig.description}\n`
+              toolkitInfo += `- **Description**: ${toolDescription}\n`
               const importPath = '@sdk/tools/' + toolName
               toolkitInfo += `- **Import**: \`import ${this.toPascalCase(
                 toolName
@@ -756,19 +775,32 @@ export default class OpenCodeTool extends Tool {
       guidelines += `\`\`\`\n\n`
     }
 
-    guidelines += `### Register New Tool in toolkit.json\n\n`
-    guidelines += `Add to \`bridges/toolkits/{toolkit_name}/toolkit.json\`:\n\n`
+    guidelines += `### Register New Tool\n\n`
+    guidelines += `1) Add tool id to \`bridges/toolkits/{toolkit_name}/toolkit.json\`:\n\n`
     guidelines += `\`\`\`json\n`
     guidelines += `{\n`
     guidelines += `  "name": "Toolkit Name",\n`
     guidelines += `  "description": "Description",\n`
-    guidelines += `  "tools": {\n`
-    guidelines += `    "mynew": {\n`
-    guidelines += `      "name": "My New Tool",\n`
-    guidelines += `      "description": "My new tool description",\n`
-    guidelines += `      "binaries": {  // Optional: only if tool needs a binary\n`
-    guidelines += `        "linux-x86_64": "https://url-to-binary.tar.gz"\n`
-    guidelines += `      }\n`
+    guidelines += `  "tools": ["mynew"]\n`
+    guidelines += `}\n`
+    guidelines += `\`\`\`\n\n`
+
+    guidelines += `2) Create tool manifest \`bridges/toolkits/{toolkit_name}/tools/mynew.tool.json\`:\n\n`
+    guidelines += `\`\`\`json\n`
+    guidelines += `{\n`
+    guidelines += `  "$schema": "../../../../schemas/tool-schemas/tool.json",\n`
+    guidelines += `  "tool_id": "mynew",\n`
+    guidelines += `  "toolkit_id": "{toolkit_name}",\n`
+    guidelines += `  "name": "My New Tool",\n`
+    guidelines += `  "description": "My new tool description",\n`
+    guidelines += `  "author": { "name": "Your Name" },\n`
+    guidelines += `  "binaries": {\n`
+    guidelines += `    "linux-x86_64": "https://url-to-binary.tar.gz"\n`
+    guidelines += `  },\n`
+    guidelines += `  "functions": {\n`
+    guidelines += `    "myMethod": {\n`
+    guidelines += `      "description": "My method description",\n`
+    guidelines += `      "input_schema": { "param": "string" }\n`
     guidelines += `    }\n`
     guidelines += `  }\n`
     guidelines += `}\n`

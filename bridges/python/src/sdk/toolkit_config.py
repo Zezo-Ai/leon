@@ -38,13 +38,24 @@ class ToolkitConfig:
             cls._config_cache[cache_key] = toolkit_config
 
         toolkit_config = cls._config_cache[cache_key]
-        tools_config = toolkit_config.get("tools", {})
-        tool_config = tools_config.get(tool_name)
+        tools_list = toolkit_config.get("tools", [])
 
-        if not tool_config:
+        if tool_name not in tools_list:
             toolkit_name_display = toolkit_config.get("name", "unknown")
             raise Exception(
                 f"Tool '{tool_name}' not found in toolkit '{toolkit_name_display}'"
+            )
+
+        tool_config_path = os.path.join(
+            TOOLKITS_PATH, toolkit_name, "tools", f"{tool_name}.tool.json"
+        )
+
+        try:
+            with open(tool_config_path, "r", encoding="utf-8") as f:
+                tool_config = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            raise Exception(
+                f"Failed to load tool config from '{tool_config_path}': {str(e)}"
             )
 
         return tool_config
@@ -69,7 +80,7 @@ class ToolkitConfig:
             return cls._settings_cache[cache_key]
 
         settings_dir = os.path.join(TOOLKITS_PATH, toolkit_name, "settings")
-        settings_path = os.path.join(settings_dir, f"{tool_name}.json")
+        settings_path = os.path.join(settings_dir, f"{tool_name}.settings.json")
         os.makedirs(settings_dir, exist_ok=True)
 
         tool_settings: Dict[str, Any] = {}

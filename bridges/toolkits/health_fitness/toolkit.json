@@ -1,3 +1,6 @@
 {
-  "name": "Health & Fitness"
+  "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
+  "name": "Health & Fitness",
+  "description": "Tools for health and fitness information.",
+  "tools": []
 }

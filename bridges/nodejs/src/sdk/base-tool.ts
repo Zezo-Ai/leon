@@ -18,7 +18,6 @@ import {
   formatFilePath,
   extractArchive
 } from '@sdk/utils'
-import { leon } from '@sdk/leon'
 
 // Progress callback type for reporting tool progress
 export type ProgressCallback = (progress: {
@@ -103,7 +102,7 @@ export abstract class Tool {
       TOOLKITS_PATH,
       this.toolkit,
       'settings',
-      `${resolvedToolName}.json`
+      `${resolvedToolName}.settings.json`
     )
   }
 
@@ -164,11 +163,20 @@ export abstract class Tool {
       coreData['toolGroupId'] = toolGroupId
     }
 
-    await leon.answer({
-      key,
-      data: data || {},
-      core: coreData
-    })
+    try {
+      const { leon } = await import('@sdk/leon')
+      await leon.answer({
+        key,
+        data: data || {},
+        core: coreData
+      })
+    } catch (error) {
+      console.warn(
+        `[LEON_TOOL_LOG] Failed to report tool output: ${
+          (error as Error).message
+        }`
+      )
+    }
   }
 
   /**
@@ -568,7 +576,7 @@ export abstract class Tool {
 
   /**
    * Get resource path and ensure all resource files are downloaded
-   * @param resourceName The name of the resource as defined in toolkit.json
+   * @param resourceName The name of the resource as defined in the tool manifest
    * @returns A promise that resolves to the path of the resource directory
    */
   async getResourcePath(resourceName: string): Promise<string> {

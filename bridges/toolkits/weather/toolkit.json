@@ -1,10 +1,6 @@
 {
+  "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Weather",
   "description": "Tools for weather lookup and forecasts.",
-  "tools": {
-    "openmeteo": {
-      "name": "Open-Meteo",
-      "description": "Fetch current weather conditions using Open-Meteo API without an API key."
-    }
-  }
+  "tools": ["openmeteo"]
 }

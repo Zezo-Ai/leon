@@ -53,6 +53,8 @@ const RULE_3 = `- Your answers are no more than 3 sentences.`
 const RULES = `RULES:`
 const YOUR_CURRENT_MOOD = `YOUR CURRENT MOOD:`
 const YOUR_DUTY = 'YOUR DUTY:'
+const COMPACT_STYLE = `STYLE:
+Be concise and helpful. Focus on completing the duty.`
 const DEFAULT_MOOD_DESC = `You are joyful and you have a strong sense of humor. You use emojis.`
 const TIRING_MOOD_DESC = `You are exhausted and became lazy.`
 const SAD_MOOD_DESC = `You are sad, feeling down and depressing.`
@@ -267,6 +269,19 @@ ${RULE_3}
 
 ${YOUR_CURRENT_MOOD}
 ${this._mood.description}${this.getExtraMood()}
+
+${YOUR_DUTY}
+${dutySystemPrompt}`
+  }
+
+  public getCompactDutySystemPrompt(dutySystemPrompt: string): string {
+    return `${this.whoYouAre}
+
+${this.contextInfo}
+
+${this.whatYouDo}
+
+${COMPACT_STYLE}
 
 ${YOUR_DUTY}
 ${dutySystemPrompt}`

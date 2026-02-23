@@ -26,6 +26,9 @@ import {
 import { SkillRouterLLMDuty } from '@/core/llm-manager/llm-duties/skill-router-llm-duty'
 import { ActionCallingLLMDuty } from '@/core/llm-manager/llm-duties/action-calling-llm-duty'
 import { SlotFillingLLMDuty } from '@/core/llm-manager/llm-duties/slot-filling-llm-duty'
+import { ReActLLMDuty } from '@/core/llm-manager/llm-duties/react-llm-duty'
+import { LEON_ROUTING_MODE } from '@/constants'
+import { RoutingMode } from '@/types'
 
 // TODO: core rewrite delete?
 /*type MatchActionResult = Pick<
@@ -54,6 +57,8 @@ export const DEFAULT_NLU_RESULT = {
   actionConfig: null
 }
 
+type RoutingRoute = 'workflow' | 'react'
+
 export default class NLU {
   private static instance: NLU
   // Used to store the current single-turn NLU process result
@@ -61,6 +66,11 @@ export default class NLU {
   private _nluResult: NLUResult = DEFAULT_NLU_RESULT
   // Used to store the conversation state (across multiple turns)
   public conversation = new Conversation('conv0')
+
+  private readonly routingRoutes: Record<RoutingRoute, RoutingRoute> = {
+    workflow: 'workflow',
+    react: 'react'
+  }
 
   get nluProcessResult(): NLUProcessResult {
     return this._nluProcessResult
@@ -582,7 +592,118 @@ export default class NLU {
     this.conversation.cleanActiveState()
     await NLUProcessResultUpdater.update(DEFAULT_NLU_PROCESS_RESULT)
 
+    const leonMode = this.getLeonMode()
+    if (leonMode === RoutingMode.Workflow) {
+      const utterance = this._nluProcessResult.new.utterance as NLPUtterance
+      if (!utterance) {
+        return
+      }
+
+      if (!BRAIN.isMuted) {
+        await BRAIN.talk(BRAIN.wernicke('skill_not_found_offer_create'), true)
+      }
+
+      await this.runSkillWriterCreateSkill(utterance)
+      return
+    }
+
+    const routingDecision = {
+      mode: leonMode,
+      route: this.routingRoutes.react,
+      reason: 'skill_not_found'
+    }
+    LogHelper.title('NLU')
+    LogHelper.info(
+      `Routing decision: mode=${routingDecision.mode} route=${routingDecision.route} reason=${routingDecision.reason}`
+    )
+
+    const utterance = this._nluProcessResult.new.utterance as NLPUtterance
+    if (utterance) {
+      await this.runReAct(utterance)
+    }
+
     // TODO: core rewrite chit-chat duty / or conversation skill?
+  }
+
+  private getLeonMode(): RoutingMode {
+    const mode = String(LEON_ROUTING_MODE || RoutingMode.Smart).toLowerCase()
+    if (
+      mode === RoutingMode.Workflow ||
+      mode === RoutingMode.Agent ||
+      mode === RoutingMode.Smart
+    ) {
+      return mode as RoutingMode
+    }
+
+    LogHelper.title('NLU')
+    LogHelper.warning(
+      `Unknown LEON_ROUTING_MODE "${LEON_ROUTING_MODE}", defaulting to smart`
+    )
+
+    return RoutingMode.Smart
+  }
+
+  private getRoutingDecision(): {
+    mode: RoutingMode
+    route: RoutingRoute
+    reason: string
+  } {
+    const mode = this.getLeonMode()
+
+    if (mode === RoutingMode.Agent) {
+      return { mode, route: this.routingRoutes.react, reason: 'agent_mode' }
+    }
+
+    if (mode === RoutingMode.Workflow) {
+      return {
+        mode,
+        route: this.routingRoutes.workflow,
+        reason: 'workflow_mode'
+      }
+    }
+
+    return { mode, route: this.routingRoutes.workflow, reason: 'smart_default' }
+  }
+
+  private async runReAct(utterance: NLPUtterance): Promise<void> {
+    LogHelper.title('NLU')
+    LogHelper.info('Routing to ReAct...')
+
+    const reactDuty = new ReActLLMDuty({
+      input: utterance
+    })
+    await reactDuty.init()
+    const reactResult = await reactDuty.execute()
+    const output = reactResult?.output as unknown as string
+
+    if (output && !BRAIN.isMuted) {
+      await BRAIN.talk(String(output), true)
+    }
+  }
+
+  private async runSkillWriterCreateSkill(
+    utterance: NLPUtterance
+  ): Promise<void> {
+    LogHelper.title('NLU')
+    LogHelper.info('Routing to Skill Writer...')
+
+    await NLUProcessResultUpdater.update({
+      new: {
+        utterance
+      }
+    })
+    await NLUProcessResultUpdater.update({
+      skillName: 'skill_writer_skill'
+    })
+    await NLUProcessResultUpdater.update({
+      actionName: 'create_skill'
+    })
+
+    await this.handleActionSuccess({
+      status: ActionCallingStatus.Success,
+      name: 'create_skill',
+      arguments: {}
+    })
   }
 
   /**
@@ -891,6 +1012,19 @@ export default class NLU {
           }
         })
 
+        const routingDecision = this.getRoutingDecision()
+        LogHelper.title('NLU')
+        LogHelper.info(
+          `Routing decision: mode=${routingDecision.mode} route=${routingDecision.route} reason=${routingDecision.reason}`
+        )
+
+        if (routingDecision.route === this.routingRoutes.react) {
+          this.conversation.cleanActiveState()
+          await NLUProcessResultUpdater.update(DEFAULT_NLU_PROCESS_RESULT)
+          await this.runReAct(utterance)
+          return resolve(null)
+        }
+
         const shouldPickSkillAction = await this.preProcessRoute()
 
         if (shouldPickSkillAction) {
@@ -898,6 +1032,11 @@ export default class NLU {
           const isSkillFound = !!chosenSkill
 
           if (!isSkillFound) {
+            if (routingDecision.mode === RoutingMode.Smart) {
+              await this.runReAct(utterance)
+              return resolve(null)
+            }
+
             await this.handleSkillOrActionNotFound()
             return
           }

@@ -255,12 +255,12 @@ export class LogicActionSkillHandler {
 
         if (skillBridge === SkillBridges.Python) {
           BRAIN.skillProcess = spawn(
-            `${PYTHON_BRIDGE_BIN_PATH} "${intentObjectPath}"`,
+            `${PYTHON_BRIDGE_BIN_PATH} --runtime skill "${intentObjectPath}"`,
             { shell: true }
           )
         } else if (skillBridge === SkillBridges.NodeJS) {
           BRAIN.skillProcess = spawn(
-            `${NODEJS_BRIDGE_BIN_PATH} "${intentObjectPath}"`,
+            `${NODEJS_BRIDGE_BIN_PATH} --runtime skill "${intentObjectPath}"`,
             { shell: true }
           )
         } else {

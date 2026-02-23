@@ -8,6 +8,8 @@ import {
   skillConfigSchemaObject,
   skillLocaleConfigObject
 } from '@/schemas/skill-schemas'
+import { toolManifestSchemaObject } from '@/schemas/tool-schemas'
+import { toolkitSchemaObject } from '@/schemas/toolkit-schemas'
 import {
   globalEntitySchemaObject,
   globalResolverSchemaObject,
@@ -66,6 +68,14 @@ export default async () => {
         ['skill-config', skillConfigSchemaObject],
         ['skill-locale-config', skillLocaleConfigObject]
       ])
+    ),
+    generateSchemas(
+      'tool-schemas',
+      new Map([['tool', toolManifestSchemaObject]])
+    ),
+    generateSchemas(
+      'toolkit-schemas',
+      new Map([['toolkit', toolkitSchemaObject]])
     ),
     generateSchemas(
       'voice-config-schemas',
