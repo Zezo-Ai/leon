@@ -40,7 +40,10 @@ Only use toolkits, tools, and functions that are listed. If unsure, select a too
 
 After a successful tool result, decide the next tool or finish. Do not repeat the same tool selection.
 
-Prefer dedicated toolkits/tools over operating_system_control. Use operating_system_control and bash only as a last resort when no suitable tool exists.
+Prefer dedicated toolkits/tools over the operating_system_control toolkit.
+You must always go through other toolkits and tools before using the operating_system_control toolkit. Use the operating_system_control toolkit and bash tool only as a last resort when no suitable tool exists.
+
+When the next action is based on uncertainty, assumptions, ambiguous selection, or could be irreversible, ask for confirmation before executing the tool.
 
 tool_input must be a JSON string.
 
@@ -50,11 +53,11 @@ Return ONLY one of the following JSON shapes:
 - {"type":"function","function_name":"...","tool_input":"{...}"}
 - {"type":"final","answer":"..."}
 
-If the final answer includes a file path, wrap it as [FILE_PATH]/path[/FILE_PATH].
+If your answers include a file path, wrap it as [FILE_PATH]/the_path_here[/FILE_PATH].
 
 Do not output schema keywords like "oneOf", "properties", or "required".
 No other keys, no null values.`
-const MAX_STEPS = 26
+const MAX_STEPS = 64
 const REACT_TEMPERATURE = 0.2
 const MAX_INVALID_INPUTS = 4
 const REACT_LOCAL_PROVIDER_HISTORY_LOGS = 8
@@ -63,9 +66,6 @@ const TOOL_DISABLED_OBSERVATION =
   'No valid action received. Choose a toolkit, tool, function, or provide a final answer.'
 const FINAL_FALLBACK_RESPONSE =
   'I need a clear toolkit/tool/function selection or a final answer to proceed.'
-
-const PROGRESS_SYSTEM_PROMPT =
-  'Write one short, friendly progress update in present continuous ("-ing"). One sentence, under 32 words. Mention why, the tool/function, and key input (path or command). Do not use markdown. If you mention a local path, wrap it as [FILE_PATH]PATH[/FILE_PATH]. No quotes, no JSON.'
 
 export class ReActLLMDuty extends LLMDuty {
   private static instance: ReActLLMDuty
@@ -175,6 +175,54 @@ export class ReActLLMDuty extends LLMDuty {
             `- ${toolkit.name} (${toolkitId}): ${toolkit.description}`
         )
         .join('\n')
+      const toolkitsSectionCache = toolkitsList
+        ? `Available Toolkits:\n${toolkitsList}`
+        : 'Available Toolkits: none'
+      const toolsSectionCache = new Map<string, string>()
+      const functionsSectionCache = new Map<string, string>()
+
+      toolkitsMap.forEach((toolkit, toolkitId) => {
+        const toolsList = toolkit.tools
+          .map((tool) => `  - ${tool.id}: ${tool.name} — ${tool.description}`)
+          .join('\n')
+        toolsSectionCache.set(
+          toolkitId,
+          toolsList
+            ? `Available Tools (Selected Toolkit):\n${toolsList}`
+            : 'Available Tools (Selected Toolkit): none'
+        )
+      })
+
+      const getFunctionsSection = (
+        toolkitId: string | null,
+        toolId: string | null
+      ): string => {
+        if (!toolkitId || !toolId) {
+          return 'Available Functions (Selected Tool): none'
+        }
+        const cacheKey = `${toolkitId}/${toolId}`
+        const cached = functionsSectionCache.get(cacheKey)
+        if (cached) {
+          return cached
+        }
+        const toolFunctions = TOOLKIT_REGISTRY.getToolFunctions(
+          toolkitId,
+          toolId
+        )
+        const functionsList = toolFunctions
+          ? Object.entries(toolFunctions)
+              .map(([functionName, config]) => {
+                const inputs = JSON.stringify(config.parameters)
+                return `  - ${functionName}: ${config.description} ${inputs}`
+              })
+              .join('\n')
+          : ''
+        const section = toolFunctions
+          ? `Available Functions (Selected Tool):\n${functionsList}`
+          : 'Available Functions (Selected Tool): none'
+        functionsSectionCache.set(cacheKey, section)
+        return section
+      }
 
       let selectedToolkitId: string | null = null
       let selectedToolId: string | null = null
@@ -187,39 +235,6 @@ export class ReActLLMDuty extends LLMDuty {
           return
         }
         await BRAIN.talk(message)
-      }
-
-      const emitToolProgress = async (
-        toolId: string,
-        functionName: string,
-        toolInput: string
-      ): Promise<void> => {
-        const prompt = `Tool: ${toolId}\nFunction: ${functionName}\nInput: ${toolInput}\nWhy: ${this.input}`
-        try {
-          const progressParams =
-            LLM_PROVIDER_NAME === LLMProviders.Local
-              ? {
-                  dutyType: LLMDuties.Custom,
-                  systemPrompt: PROGRESS_SYSTEM_PROMPT,
-                  temperature: 0.6,
-                  maxTokens: 64,
-                  session: ReActLLMDuty.session
-                }
-              : {
-                  dutyType: LLMDuties.Custom,
-                  systemPrompt: PROGRESS_SYSTEM_PROMPT,
-                  temperature: 0.6,
-                  maxTokens: 64
-                }
-          const completion = await LLM_PROVIDER.prompt(prompt, progressParams)
-          const message =
-            typeof completion?.output === 'string'
-              ? completion.output
-              : String(completion?.output || '')
-          await emitProgress(message.trim())
-        } catch {
-          await emitProgress(`Using ${toolId} to ${functionName}...`)
-        }
       }
 
       for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
@@ -241,43 +256,15 @@ export class ReActLLMDuty extends LLMDuty {
           ? `Selected Tool: ${selectedToolId}`
           : 'Selected Tool: none'
 
-        const selectedToolkitTools = selectedToolkitId
-          ? toolkitsMap.get(selectedToolkitId)?.tools || []
-          : []
-        const toolsList = selectedToolkitId
-          ? selectedToolkitTools
-              .map(
-                (tool) => `  - ${tool.id}: ${tool.name} — ${tool.description}`
-              )
-              .join('\n')
-          : ''
-
         const toolsSection = selectedToolkitId
-          ? `Available Tools (Selected Toolkit):\n${toolsList}`
+          ? toolsSectionCache.get(selectedToolkitId) ||
+            'Available Tools (Selected Toolkit): none'
           : 'Available Tools (Selected Toolkit): none'
-
-        const selectedToolFunctions =
-          selectedToolkitId && selectedToolId
-            ? TOOLKIT_REGISTRY.getToolFunctions(
-                selectedToolkitId,
-                selectedToolId
-              )
-            : null
-        const functionsList = selectedToolFunctions
-          ? Object.entries(selectedToolFunctions)
-              .map(([functionName, config]) => {
-                const inputs = JSON.stringify(config.parameters)
-                return `  - ${functionName}: ${config.description} ${inputs}`
-              })
-              .join('\n')
-          : ''
-        const functionsSection = selectedToolFunctions
-          ? `Available Functions (Selected Tool):\n${functionsList}`
-          : 'Available Functions (Selected Tool): none'
-
-        const toolkitsSection = toolkitsList
-          ? `Available Toolkits:\n${toolkitsList}`
-          : 'Available Toolkits: none'
+        const functionsSection = getFunctionsSection(
+          selectedToolkitId,
+          selectedToolId
+        )
+        const toolkitsSection = toolkitsSectionCache
 
         const latestObservation = steps.length
           ? steps[steps.length - 1]?.observation
@@ -330,7 +317,8 @@ export class ReActLLMDuty extends LLMDuty {
         const completionParams = {
           dutyType: LLMDuties.ReAct,
           systemPrompt: this.systemPrompt as string,
-          data: responseSchema,
+          data:
+            LLM_PROVIDER_NAME === LLMProviders.Local ? responseSchema : null,
           temperature: REACT_TEMPERATURE
         }
         let completionResult
@@ -422,6 +410,17 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
             } catch {
               // ignore
             }
+          }
+        }
+        if (!responseValidation.isValid && typeof rawOutput === 'string') {
+          if (!parsedOutput) {
+            return {
+              dutyType: LLMDuties.ReAct,
+              systemPrompt: this.systemPrompt,
+              input: this.input,
+              output: rawOutput.trim(),
+              data: {}
+            } as unknown as LLMDutyResult
           }
         }
         if (!responseValidation.isValid) {
@@ -747,13 +746,19 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
             toolExecutionInput.parsedInput = inputValidation.parsedValue
           }
 
-          await emitToolProgress(
-            selectedToolId || 'tool',
-            normalizedFunctionName,
-            toolInputToUse
-          )
           const toolExecutionResult =
             await TOOL_EXECUTOR.executeTool(toolExecutionInput)
+          const finalAnswer =
+            this.extractFinalAnswerFromToolResult(toolExecutionResult)
+          if (finalAnswer) {
+            return {
+              dutyType: LLMDuties.ReAct,
+              systemPrompt: this.systemPrompt,
+              input: this.input,
+              output: finalAnswer,
+              data: {}
+            } as unknown as LLMDutyResult
+          }
           if (toolExecutionResult.status === 'success') {
             lastSuccessfulToolId = selectedToolId
           }
@@ -1357,5 +1362,27 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
     }
 
     return input.slice(startIndex, endIndex + 1)
+  }
+
+  private extractFinalAnswerFromToolResult(toolExecutionResult: {
+    status: string
+    data?: {
+      output?: Record<string, unknown>
+    }
+  }): string | null {
+    if (toolExecutionResult.status !== 'success') {
+      return null
+    }
+
+    const output = toolExecutionResult.data?.output || {}
+    const finalAnswer = output['final_answer']
+    if (typeof finalAnswer === 'string' && finalAnswer.trim()) {
+      return finalAnswer
+    }
+    const answer = output['answer']
+    if (typeof answer === 'string' && answer.trim()) {
+      return answer
+    }
+    return null
   }
 }
