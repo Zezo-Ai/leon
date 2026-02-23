@@ -42,6 +42,8 @@ Return ONLY one of the following JSON shapes:
 - {"type":"function","function_name":"...","tool_input":"{...}"}
 - {"type":"final","answer":"..."}
 
+If the final answer includes a file path, wrap it as [FILE_PATH]/path[/FILE_PATH].
+
 Do not output schema keywords like "oneOf", "properties", or "required".
 No other keys, no null values.`
 const MAX_STEPS = 4
