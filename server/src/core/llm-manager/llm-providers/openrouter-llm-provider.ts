@@ -7,36 +7,34 @@ import type {
 import { LogHelper } from '@/helpers/log-helper'
 
 /**
- * @see https://console.groq.com/docs/text-chat
+ * @see https://openrouter.ai/docs
  */
-interface GroqMessage {
+interface OpenRouterMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   name?: string
-  seed?: number
 }
-interface GroqChatCompletionParams {
+interface OpenRouterChatCompletionParams {
   model: string
-  messages: GroqMessage[]
+  messages: OpenRouterMessage[]
   max_tokens?: number
   temperature?: number
   top_p?: number
   stream?: boolean
   stop?: string | null
-  grammar?: unknown
   response_format?: {
     type: 'json_object'
   }
 }
-type GroqCompletionParams = Omit<CompletionParams, ''>
+type OpenRouterCompletionParams = Omit<CompletionParams, ''>
 
-export default class GroqLLMProvider {
-  protected readonly name = 'Groq LLM Provider'
-  protected readonly apiKey = process.env['LEON_GROQ_API_KEY']
+export default class OpenRouterLLMProvider {
+  protected readonly name = 'OpenRouter LLM Provider'
+  protected readonly apiKey = process.env['LEON_OPENROUTER_API_KEY']
   protected readonly model =
-    process.env['LEON_GROQ_MODEL'] || 'llama-3.1-8b-instant'
+    process.env['LEON_OPENROUTER_MODEL'] || 'openrouter/auto'
   private readonly axios = axios.create({
-    baseURL: 'https://api.groq.com/openai/v1',
+    baseURL: 'https://openrouter.ai/api/v1',
     timeout: 7_000
   })
 
@@ -59,7 +57,7 @@ export default class GroqLLMProvider {
 
   public runChatCompletion(
     prompt: PromptOrChatHistory,
-    completionParams: GroqCompletionParams
+    completionParams: OpenRouterCompletionParams
   ): Promise<AxiosResponse> {
     return new Promise(async (resolve, reject) => {
       try {
@@ -76,7 +74,7 @@ export default class GroqLLMProvider {
           )}`
         }
 
-        let messagesHistory: GroqMessage[] = []
+        let messagesHistory: OpenRouterMessage[] = []
         if (completionParams.history) {
           messagesHistory = completionParams.history.map((message) => {
             if (message.who === 'leon') {
@@ -110,7 +108,7 @@ export default class GroqLLMProvider {
           })
         }
 
-        let chatCompletionParams: GroqChatCompletionParams = {
+        let chatCompletionParams: OpenRouterChatCompletionParams = {
           messages: messagesHistory,
           model: this.model,
           temperature: completionParams.temperature || 0,
@@ -126,17 +124,16 @@ export default class GroqLLMProvider {
           }
         }
 
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`
+        }
+
         const promise = this.axios.request({
           url: '/chat/completions',
           method: 'POST',
           data: chatCompletionParams,
-          transformResponse: (data) => {
-            return data
-          },
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`
-          }
+          headers
         })
 
         return resolve(promise)

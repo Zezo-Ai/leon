@@ -13,6 +13,7 @@ import { LogHelper } from '@/helpers/log-helper'
 import { FileHelper } from '@/helpers/file-helper'
 import LocalLLMProvider from '@/core/llm-manager/llm-providers/local-llm-provider'
 import GroqLLMProvider from '@/core/llm-manager/llm-providers/groq-llm-provider'
+import OpenRouterLLMProvider from '@/core/llm-manager/llm-providers/openrouter-llm-provider'
 import { LLM_MANAGER } from '@/core'
 
 interface CompletionResult {
@@ -33,11 +34,16 @@ interface NormalizedCompletionResult {
   usedInputTokens: number
   usedOutputTokens: number
 }
-type Provider = LocalLLMProvider | GroqLLMProvider | undefined
+type Provider =
+  | LocalLLMProvider
+  | GroqLLMProvider
+  | OpenRouterLLMProvider
+  | undefined
 
 const LLM_PROVIDERS_MAP = {
   [LLMProviders.Local]: 'local-llm-provider',
-  [LLMProviders.Groq]: 'groq-llm-provider'
+  [LLMProviders.Groq]: 'groq-llm-provider',
+  [LLMProviders.OpenRouter]: 'openrouter-llm-provider'
 }
 const DEFAULT_MAX_EXECUTION_TIMOUT = 32_000
 const DEFAULT_MAX_EXECUTION_RETRIES = 2
@@ -128,6 +134,18 @@ export default class LLMProvider {
     rawResult: AxiosResponse
   ): NormalizedCompletionResult {
     const parsedCompletionResult = JSON.parse(rawResult.data)
+
+    return {
+      rawResult: parsedCompletionResult.choices[0].message.content,
+      usedInputTokens: parsedCompletionResult.usage.prompt_tokens,
+      usedOutputTokens: parsedCompletionResult.usage.completion_tokens
+    }
+  }
+
+  private normalizeCompletionResultForOpenRouterProvider(
+    rawResult: AxiosResponse
+  ): NormalizedCompletionResult {
+    const parsedCompletionResult = rawResult.data
 
     return {
       rawResult: parsedCompletionResult.choices[0].message.content,
@@ -260,6 +278,18 @@ export default class LLMProvider {
         usedInputTokens: inputTokens,
         usedOutputTokens: outputTokens
       } = this.normalizeCompletionResultForGroqProvider(
+        rawResult as AxiosResponse
+      )
+
+      rawResult = result
+      usedInputTokens = inputTokens
+      usedOutputTokens = outputTokens
+    } else if (LLM_PROVIDER === LLMProviders.OpenRouter) {
+      const {
+        rawResult: result,
+        usedInputTokens: inputTokens,
+        usedOutputTokens: outputTokens
+      } = this.normalizeCompletionResultForOpenRouterProvider(
         rawResult as AxiosResponse
       )
 

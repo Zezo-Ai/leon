@@ -28,7 +28,8 @@ export enum LLMDuties {
 
 export enum LLMProviders {
   Local = 'local',
-  Groq = 'groq'
+  Groq = 'groq',
+  OpenRouter = 'openrouter'
 }
 
 export enum ActionCallingStatus {
