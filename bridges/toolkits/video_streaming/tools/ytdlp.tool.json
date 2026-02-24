@@ -10,11 +10,11 @@
     "url": "https://twitter.com/grenlouis"
   },
   "binaries": {
-    "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.04/yt-dlp_2026.02.04-linux-x86_64",
-    "linux-aarch64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.04/yt-dlp_2026.02.04-linux-aarch64",
-    "macosx-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.04/yt-dlp_2026.02.04-macosx-x86_64",
-    "macosx-arm64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.04/yt-dlp_2026.02.04-macosx-arm64",
-    "win-amd64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.04/yt-dlp_2026.02.04-win-amd64.exe"
+    "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.21/yt-dlp_2026.02.21-linux-x86_64",
+    "linux-aarch64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.21/yt-dlp_2026.02.21-linux-aarch64",
+    "macosx-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.21/yt-dlp_2026.02.21-macosx-x86_64",
+    "macosx-arm64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.21/yt-dlp_2026.02.21-macosx-arm64",
+    "win-amd64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.21/yt-dlp_2026.02.21-win-amd64.exe"
   },
   "functions": {
     "downloadVideo": {
@@ -22,10 +22,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "videoUrl": { "type": "string" },
-          "outputPath": { "type": "string" }
+          "videoUrl": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          }
         },
-        "required": ["videoUrl", "outputPath"]
+        "required": [
+          "videoUrl",
+          "outputPath"
+        ]
       }
     },
     "downloadAudioOnly": {
@@ -33,11 +40,21 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "videoUrl": { "type": "string" },
-          "outputPath": { "type": "string" },
-          "audioFormat": { "type": "string" }
+          "videoUrl": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          },
+          "audioFormat": {
+            "type": "string"
+          }
         },
-        "required": ["videoUrl", "outputPath", "audioFormat"]
+        "required": [
+          "videoUrl",
+          "outputPath",
+          "audioFormat"
+        ]
       }
     },
     "downloadPlaylist": {
@@ -45,10 +62,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "playlistUrl": { "type": "string" },
-          "outputPath": { "type": "string" }
+          "playlistUrl": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          }
         },
-        "required": ["playlistUrl", "outputPath"]
+        "required": [
+          "playlistUrl",
+          "outputPath"
+        ]
       }
     },
     "downloadVideoByQuality": {
@@ -56,22 +80,42 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "videoUrl": { "type": "string" },
-          "outputPath": { "type": "string" },
-          "quality": { "type": "string" },
+          "videoUrl": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          },
+          "quality": {
+            "type": "string"
+          },
           "onProgress": {
             "type": "object",
             "properties": {
-              "percentage": { "type": "number" },
-              "status": { "type": "string" },
-              "eta": { "type": "string" },
-              "speed": { "type": "string" },
-              "size": { "type": "string" }
+              "percentage": {
+                "type": "number"
+              },
+              "status": {
+                "type": "string"
+              },
+              "eta": {
+                "type": "string"
+              },
+              "speed": {
+                "type": "string"
+              },
+              "size": {
+                "type": "string"
+              }
             },
             "additionalProperties": false
           }
         },
-        "required": ["videoUrl", "outputPath", "quality"]
+        "required": [
+          "videoUrl",
+          "outputPath",
+          "quality"
+        ]
       }
     },
     "downloadSubtitles": {
@@ -79,11 +123,21 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "videoUrl": { "type": "string" },
-          "outputPath": { "type": "string" },
-          "languageCode": { "type": "string" }
+          "videoUrl": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          },
+          "languageCode": {
+            "type": "string"
+          }
         },
-        "required": ["videoUrl", "outputPath", "languageCode"]
+        "required": [
+          "videoUrl",
+          "outputPath",
+          "languageCode"
+        ]
       }
     },
     "downloadVideoWithThumbnail": {
@@ -91,10 +145,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "videoUrl": { "type": "string" },
-          "outputPath": { "type": "string" }
+          "videoUrl": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          }
         },
-        "required": ["videoUrl", "outputPath"]
+        "required": [
+          "videoUrl",
+          "outputPath"
+        ]
       }
     }
   }
