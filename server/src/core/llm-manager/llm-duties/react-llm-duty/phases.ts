@@ -535,7 +535,8 @@ async function resolveToolFunctionWithNativeTools(
     prompt,
     resolveSystemPrompt,
     tools,
-    'auto'
+    'auto',
+    caller.history
   )
 
   if (!result) {
@@ -663,7 +664,12 @@ async function resolveToolFunctionWithJSONMode(
     ]
   }
 
-  const completionResult = await caller.callLLM(prompt, resolveSystemPrompt, resolveSchema)
+  const completionResult = await caller.callLLM(
+    prompt,
+    resolveSystemPrompt,
+    resolveSchema,
+    caller.history
+  )
   const parsed = parseOutput(completionResult?.output)
 
   if (!parsed) {
@@ -805,7 +811,8 @@ async function executeFunctionWithNativeTools(
       prompt,
       executeSystemPrompt,
       [tool],
-      { type: 'function', function: { name: functionName } }
+      { type: 'function', function: { name: functionName } },
+      caller.history
     )
 
     if (!result) {
@@ -958,7 +965,8 @@ async function executeFunctionWithJSONMode(
     const completionResult = await caller.callLLM(
       prompt,
       executeSystemPrompt,
-      executeSchema
+      executeSchema,
+      caller.history
     )
     const parsed = parseOutput(completionResult?.output)
 
@@ -1215,7 +1223,8 @@ export async function runFinalAnswerPhase(
       prompt,
       systemPrompt,
       [answerTool],
-      { type: 'function', function: { name: 'provide_answer' } }
+      { type: 'function', function: { name: 'provide_answer' } },
+      caller.history
     )
 
     if (result?.toolCall) {
@@ -1247,7 +1256,8 @@ export async function runFinalAnswerPhase(
     const completionResult = await caller.callLLM(
       prompt,
       systemPrompt,
-      finalSchema
+      finalSchema,
+      caller.history
     )
 
     if (completionResult?.output) {

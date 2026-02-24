@@ -143,7 +143,7 @@ export class ReActLLMDuty extends LLMDuty {
       LogHelper.title(this.name)
       LogHelper.debug('Phase 1: Planning...')
 
-      const caller = this.createLLMCaller()
+      const caller = this.createLLMCaller(history)
       const planResult = await runPlanningPhase(caller, catalog, history)
 
       if (planResult.type === 'final') {
@@ -338,12 +338,13 @@ export class ReActLLMDuty extends LLMDuty {
    * Creates an LLMCaller interface that phase functions use to call the LLM
    * without needing a direct reference to this class instance.
    */
-  private createLLMCaller(): LLMCaller {
+  private createLLMCaller(history: MessageLog[]): LLMCaller {
     return {
       callLLM: this.callLLM.bind(this),
       callLLMWithTools: this.callLLMWithTools.bind(this),
       supportsNativeTools: this.supportsNativeTools,
-      input: this.input
+      input: this.input,
+      history
     }
   }
 

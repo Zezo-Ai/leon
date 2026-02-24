@@ -90,4 +90,5 @@ export interface LLMCaller {
 
   readonly supportsNativeTools: boolean
   readonly input: string | object | null
+  readonly history: MessageLog[]
 }
