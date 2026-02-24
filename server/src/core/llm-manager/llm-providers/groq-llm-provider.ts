@@ -2,6 +2,8 @@ import axios, { type AxiosError, type AxiosResponse } from 'axios'
 
 import type {
   CompletionParams,
+  OpenAITool,
+  OpenAIToolChoice,
   PromptOrChatHistory
 } from '@/core/llm-manager/types'
 import { LogHelper } from '@/helpers/log-helper'
@@ -27,6 +29,8 @@ interface GroqChatCompletionParams {
   response_format?: {
     type: 'json_object'
   }
+  tools?: OpenAITool[]
+  tool_choice?: OpenAIToolChoice
 }
 type GroqCompletionParams = Omit<CompletionParams, ''>
 
@@ -117,7 +121,13 @@ export default class GroqLLMProvider {
           stream: false
         }
 
-        if (isJSONMode) {
+        if (completionParams.tools && completionParams.tools.length > 0) {
+          chatCompletionParams = {
+            ...chatCompletionParams,
+            tools: completionParams.tools,
+            tool_choice: completionParams.toolChoice || 'auto'
+          }
+        } else if (isJSONMode) {
           chatCompletionParams = {
             ...chatCompletionParams,
             response_format: {

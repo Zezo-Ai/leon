@@ -148,12 +148,19 @@ export default class LLMProvider {
     rawResult: AxiosResponse
   ): NormalizedCompletionResult {
     const parsedCompletionResult = JSON.parse(rawResult.data)
+    const message = parsedCompletionResult.choices[0].message
 
-    return {
-      rawResult: parsedCompletionResult.choices[0].message.content,
+    const result: NormalizedCompletionResult = {
+      rawResult: message.content || '',
       usedInputTokens: parsedCompletionResult.usage.prompt_tokens,
       usedOutputTokens: parsedCompletionResult.usage.completion_tokens
     }
+
+    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      result.toolCalls = message.tool_calls as OpenAIToolCall[]
+    }
+
+    return result
   }
 
   private normalizeCompletionResultForOpenRouterProvider(
@@ -179,24 +186,38 @@ export default class LLMProvider {
     rawResult: AxiosResponse
   ): NormalizedCompletionResult {
     const parsedCompletionResult = rawResult.data
+    const message = parsedCompletionResult.choices[0].message
 
-    return {
-      rawResult: parsedCompletionResult.choices[0].message.content,
+    const result: NormalizedCompletionResult = {
+      rawResult: message.content || '',
       usedInputTokens: parsedCompletionResult.usage.prompt_tokens,
       usedOutputTokens: parsedCompletionResult.usage.completion_tokens
     }
+
+    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      result.toolCalls = message.tool_calls as OpenAIToolCall[]
+    }
+
+    return result
   }
 
   private normalizeCompletionResultForHuggingFaceProvider(
     rawResult: AxiosResponse
   ): NormalizedCompletionResult {
     const parsedCompletionResult = rawResult.data
+    const message = parsedCompletionResult.choices[0].message
 
-    return {
-      rawResult: parsedCompletionResult.choices[0].message.content,
+    const result: NormalizedCompletionResult = {
+      rawResult: message.content || '',
       usedInputTokens: parsedCompletionResult.usage.prompt_tokens,
       usedOutputTokens: parsedCompletionResult.usage.completion_tokens
     }
+
+    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      result.toolCalls = message.tool_calls as OpenAIToolCall[]
+    }
+
+    return result
   }
 
   public cleanUpResult(str: string): string {
@@ -319,17 +340,14 @@ export default class LLMProvider {
         usedOutputTokens = outputTokens
       }
     } else if (LLM_PROVIDER === LLMProviders.Groq) {
-      const {
-        rawResult: result,
-        usedInputTokens: inputTokens,
-        usedOutputTokens: outputTokens
-      } = this.normalizeCompletionResultForGroqProvider(
+      const normalized = this.normalizeCompletionResultForGroqProvider(
         rawResult as AxiosResponse
       )
 
-      rawResult = result
-      usedInputTokens = inputTokens
-      usedOutputTokens = outputTokens
+      rawResult = normalized.rawResult
+      usedInputTokens = normalized.usedInputTokens
+      usedOutputTokens = normalized.usedOutputTokens
+      toolCalls = normalized.toolCalls
     } else if (LLM_PROVIDER === LLMProviders.OpenRouter) {
       const normalized = this.normalizeCompletionResultForOpenRouterProvider(
         rawResult as AxiosResponse
@@ -340,29 +358,23 @@ export default class LLMProvider {
       usedOutputTokens = normalized.usedOutputTokens
       toolCalls = normalized.toolCalls
     } else if (LLM_PROVIDER === LLMProviders.Cerebras) {
-      const {
-        rawResult: result,
-        usedInputTokens: inputTokens,
-        usedOutputTokens: outputTokens
-      } = this.normalizeCompletionResultForCerebrasProvider(
+      const normalized = this.normalizeCompletionResultForCerebrasProvider(
         rawResult as AxiosResponse
       )
 
-      rawResult = result
-      usedInputTokens = inputTokens
-      usedOutputTokens = outputTokens
+      rawResult = normalized.rawResult
+      usedInputTokens = normalized.usedInputTokens
+      usedOutputTokens = normalized.usedOutputTokens
+      toolCalls = normalized.toolCalls
     } else if (LLM_PROVIDER === LLMProviders.HuggingFace) {
-      const {
-        rawResult: result,
-        usedInputTokens: inputTokens,
-        usedOutputTokens: outputTokens
-      } = this.normalizeCompletionResultForHuggingFaceProvider(
+      const normalized = this.normalizeCompletionResultForHuggingFaceProvider(
         rawResult as AxiosResponse
       )
 
-      rawResult = result
-      usedInputTokens = inputTokens
-      usedOutputTokens = outputTokens
+      rawResult = normalized.rawResult
+      usedInputTokens = normalized.usedInputTokens
+      usedOutputTokens = normalized.usedOutputTokens
+      toolCalls = normalized.toolCalls
     } else {
       LogHelper.error(`The LLM provider "${LLM_PROVIDER}" is not yet supported`)
       return null

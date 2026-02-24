@@ -209,10 +209,28 @@ export class ReActLLMDuty extends LLMDuty {
       // --- Build adaptive catalog ---
       const catalog = this.buildCatalog()
 
+      LogHelper.title(this.name)
+      LogHelper.debug(`Catalog mode: ${catalog.mode} | Input: "${this.input}"`)
+      LogHelper.debug(`Native tools supported: ${this.supportsNativeTools} (provider: ${LLM_PROVIDER_NAME})`)
+
       // --- Phase 1: Planning ---
+      LogHelper.title(this.name)
+      LogHelper.debug('Phase 1: Planning...')
+
       const planResult = await this.runPlanningPhase(catalog, history)
+
       if (planResult.type === 'final') {
+        LogHelper.title(this.name)
+        LogHelper.debug(`Planning returned final answer directly: "${planResult.answer.slice(0, 200)}"`)
         return this.makeDutyResult(planResult.answer)
+      }
+
+      LogHelper.title(this.name)
+      LogHelper.debug(
+        `Plan created with ${planResult.steps.length} step(s): ${planResult.steps.map((s) => s.function).join(' -> ')}`
+      )
+      if (planResult.summary) {
+        LogHelper.debug(`Plan summary: "${planResult.summary}"`)
       }
 
       let pendingSteps = [...planResult.steps]
@@ -221,9 +239,17 @@ export class ReActLLMDuty extends LLMDuty {
       let executionCount = 0
 
       // --- Phase 2: Execution loop ---
+      LogHelper.title(this.name)
+      LogHelper.debug('Phase 2: Execution loop...')
+
       while (pendingSteps.length > 0 && executionCount < MAX_EXECUTIONS) {
         const currentStep = pendingSteps.shift()!
         executionCount += 1
+
+        LogHelper.title(this.name)
+        LogHelper.debug(
+          `Execution ${executionCount}/${MAX_EXECUTIONS}: ${currentStep.function} | ${pendingSteps.length} step(s) remaining`
+        )
 
         const stepResult = await this.runExecutionStep(
           currentStep,
@@ -232,11 +258,18 @@ export class ReActLLMDuty extends LLMDuty {
         )
 
         if (stepResult.type === 'final') {
+          LogHelper.title(this.name)
+          LogHelper.debug(`Execution returned final answer: "${(stepResult.answer).slice(0, 200)}"`)
           return this.makeDutyResult(stepResult.answer)
         }
 
         if (stepResult.type === 'replan') {
           replanCount += 1
+          LogHelper.title(this.name)
+          LogHelper.debug(
+            `Re-plan ${replanCount}/${MAX_REPLANS}: reason="${stepResult.reason}" | new steps: ${stepResult.functions.join(' -> ')}`
+          )
+
           if (replanCount > MAX_REPLANS) {
             LogHelper.title(this.name)
             LogHelper.warning('Max re-plans reached, synthesizing answer')
@@ -253,6 +286,11 @@ export class ReActLLMDuty extends LLMDuty {
         // Record execution
         executionHistory.push(stepResult.execution)
 
+        LogHelper.title(this.name)
+        LogHelper.debug(
+          `Execution result: ${stepResult.execution.function} [${stepResult.execution.status}] | Observation: ${stepResult.execution.observation.slice(0, 300)}`
+        )
+
         // Emit progress
         const nextStep = pendingSteps[0]
         const progressMsg = nextStep
@@ -262,17 +300,25 @@ export class ReActLLMDuty extends LLMDuty {
 
         // Check for short-circuit final answer from tool result
         if (stepResult.finalAnswer) {
+          LogHelper.title(this.name)
+          LogHelper.debug(`Tool returned final_answer, short-circuiting: "${stepResult.finalAnswer.slice(0, 200)}"`)
           return this.makeDutyResult(stepResult.finalAnswer)
         }
 
         // Check for missing settings error — return immediately
         if (stepResult.missingSettingsMessage) {
+          LogHelper.title(this.name)
+          LogHelper.debug(`Missing settings detected: "${stepResult.missingSettingsMessage}"`)
           return this.makeDutyResult(stepResult.missingSettingsMessage)
         }
       }
 
       // --- Phase 3: Final answer synthesis ---
+      LogHelper.title(this.name)
+      LogHelper.debug(`Phase 3: Final answer synthesis (${executionHistory.length} execution(s) completed)`)
+
       if (executionHistory.length === 0) {
+        LogHelper.debug('No executions completed, returning fallback')
         return this.makeDutyResult(
           'I was unable to find the right tools to help with your request.'
         )
@@ -412,9 +458,15 @@ export class ReActLLMDuty extends LLMDuty {
       completionResult = await LLM_PROVIDER.prompt(prompt, completionParams)
     }
 
+    LogHelper.title(this.name)
+    LogHelper.debug(`Planning prompt: "${prompt.slice(0, 300)}..."`)
+    LogHelper.debug(`Planning raw output: ${JSON.stringify(completionResult?.output).slice(0, 500)}`)
+
     const parsed = this.parseOutput(completionResult?.output)
     if (!parsed) {
       // If the LLM couldn't produce structured output, treat raw as final answer
+      LogHelper.title(this.name)
+      LogHelper.debug('Planning: failed to parse structured output, treating as final answer')
       const raw =
         typeof completionResult?.output === 'string'
           ? completionResult.output.trim()
@@ -423,6 +475,8 @@ export class ReActLLMDuty extends LLMDuty {
     }
 
     if (parsed['type'] === 'final' && parsed['answer']) {
+      LogHelper.title(this.name)
+      LogHelper.debug('Planning: LLM chose to answer directly (no tools needed)')
       return { type: 'final', answer: parsed['answer'] as string }
     }
 
@@ -597,6 +651,9 @@ export class ReActLLMDuty extends LLMDuty {
     const toolkitId = parts[0] || ''
     const toolId = parts[1] || parts[0] || ''
 
+    LogHelper.title(this.name)
+    LogHelper.debug(`Tool-level execution: resolving "${qualifiedName}"`)
+
     // Try to resolve the tool
     const resolved = TOOLKIT_REGISTRY.resolveToolById(toolId, toolkitId || undefined)
     const effectiveToolkitId = resolved?.toolkitId || toolkitId
@@ -608,6 +665,7 @@ export class ReActLLMDuty extends LLMDuty {
     )
 
     if (!toolFunctions || Object.keys(toolFunctions).length === 0) {
+      LogHelper.debug(`No functions found for tool "${qualifiedName}"`)
       return {
         type: 'executed',
         execution: {
@@ -623,6 +681,7 @@ export class ReActLLMDuty extends LLMDuty {
     // If only one function, auto-select it
     if (functionEntries.length === 1) {
       const [fnName, fnConfig] = functionEntries[0]!
+      LogHelper.debug(`Auto-selecting only function: ${fnName}`)
       return this.executeFunction(
         effectiveToolkitId,
         effectiveToolId,
@@ -963,6 +1022,7 @@ export class ReActLLMDuty extends LLMDuty {
    * Uses native OpenAI-style tool calling to fill tool_input.
    * The LLM is forced to call the specific function via tool_choice.
    */
+   
   private async executeFunctionWithNativeTools(
     toolkitId: string,
     toolId: string,
@@ -1256,8 +1316,18 @@ export class ReActLLMDuty extends LLMDuty {
       toolExecutionInput.parsedInput = parsedInput
     }
 
+    LogHelper.title(this.name)
+    LogHelper.debug(
+      `Running tool: ${qualifiedName} | Input: ${toolInput.slice(0, 200)}`
+    )
+
     const toolExecutionResult =
       await TOOL_EXECUTOR.executeTool(toolExecutionInput)
+
+    LogHelper.title(this.name)
+    LogHelper.debug(
+      `Tool result: ${qualifiedName} [${toolExecutionResult.status}] — ${toolExecutionResult.message}`
+    )
 
     // Check for final_answer in tool result
     const finalAnswer =
@@ -1325,6 +1395,9 @@ export class ReActLLMDuty extends LLMDuty {
   private async runFinalAnswerPhase(
     executionHistory: ExecutionRecord[]
   ): Promise<string> {
+    LogHelper.title(this.name)
+    LogHelper.debug('Synthesizing final answer from execution history...')
+
     const historySection = this.formatExecutionHistory(executionHistory)
     const systemPrompt = PERSONA.getCompactDutySystemPrompt(
       'You are synthesizing a final answer from tool execution results. Provide a clear, helpful response to the user based on the observations collected.\n\nIf your answers include a file path, wrap it as [FILE_PATH]/the_path_here[/FILE_PATH].'
@@ -1373,9 +1446,12 @@ export class ReActLLMDuty extends LLMDuty {
 
   /**
    * Whether the current LLM provider supports native OpenAI-style tool calling.
+   * All remote providers support the OpenAI-compatible tools API.
+   * The local provider (node-llama-cpp) uses a different function calling
+   * mechanism and stays on grammar-based JSON mode.
    */
   private get supportsNativeTools(): boolean {
-    return LLM_PROVIDER_NAME === LLMProviders.OpenRouter
+    return LLM_PROVIDER_NAME !== LLMProviders.Local
   }
 
   private async callLLM(
@@ -1420,6 +1496,17 @@ export class ReActLLMDuty extends LLMDuty {
     usedInputTokens?: number
     usedOutputTokens?: number
   } | null> {
+    const toolNames = tools.map((t) => t.function.name).join(', ')
+    const choiceLabel =
+      typeof toolChoice === 'string'
+        ? toolChoice
+        : `forced:${toolChoice.function.name}`
+
+    LogHelper.title(this.name)
+    LogHelper.debug(
+      `callLLMWithTools: tools=[${toolNames}] | choice=${choiceLabel}`
+    )
+
     const completionResult = await LLM_PROVIDER.prompt(prompt, {
       dutyType: LLMDuties.ReAct,
       systemPrompt,
@@ -1429,13 +1516,20 @@ export class ReActLLMDuty extends LLMDuty {
     })
 
     if (!completionResult) {
+      LogHelper.debug('callLLMWithTools: no completion result returned')
       return null
     }
 
     // Check if the model responded with tool calls
-    const toolCalls = (completionResult as unknown as { toolCalls?: OpenAIToolCall[] }).toolCalls
+    const toolCalls = (
+      completionResult as unknown as { toolCalls?: OpenAIToolCall[] }
+    ).toolCalls
     if (toolCalls && toolCalls.length > 0) {
       const firstCall = toolCalls[0]!
+      LogHelper.title(this.name)
+      LogHelper.debug(
+        `callLLMWithTools: tool call received — ${firstCall.function.name}(${firstCall.function.arguments.slice(0, 200)})`
+      )
       return {
         toolCall: {
           functionName: firstCall.function.name,
@@ -1451,6 +1545,10 @@ export class ReActLLMDuty extends LLMDuty {
       typeof completionResult.output === 'string'
         ? completionResult.output
         : ''
+    LogHelper.title(this.name)
+    LogHelper.debug(
+      `callLLMWithTools: no tool call, text response: "${textContent.slice(0, 200)}"`
+    )
     return {
       textContent,
       usedInputTokens: completionResult.usedInputTokens,
