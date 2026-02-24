@@ -1,3 +1,7 @@
+import { writeFileSync, mkdirSync, unlinkSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+
 import type { LlamaContext } from 'node-llama-cpp'
 import { LlamaChatSession } from 'node-llama-cpp'
 
@@ -46,6 +50,12 @@ const formatFilePath = (filePath: string): string => {
 const CATALOG_TOKEN_BUDGET = 2_000
 const CHARS_PER_TOKEN = 4
 
+const FORMATTING_RULES = `FORMATTING RULES for all user-facing text:
+- Do NOT use markdown (no **, ##, \`\`\`, etc.).
+- Use plain text only: newlines for paragraphs, dashes for lists.
+- Keep answers concise.
+- ALWAYS wrap file paths with [FILE_PATH]/path/here[/FILE_PATH]. Example: the file is at [FILE_PATH]/home/user/file.txt[/FILE_PATH].`
+
 const PLAN_SYSTEM_PROMPT = `You are an autonomous planning and acting agent. Your goal is to solve the user's request.
 
 You have access to a catalog of available tools and functions. Your job is to:
@@ -53,21 +63,21 @@ You have access to a catalog of available tools and functions. Your job is to:
 2. Select the functions (or tools) you need to call, in order
 3. Provide a short natural language summary of your plan for the user
 
-Only use functions/tools that are listed in the catalog. If no function/tool is relevant, provide a direct answer.
+Only use functions/tools that are listed in the catalog.
+If no function/tool is relevant (e.g. the user is chatting or asking a general question), return an empty steps array and put your answer in the summary field.
 
 Prefer dedicated tools over the operating_system_control toolkit.
-You must always consider other tools before using the operating_system_control toolkit. Use the operating_system_control toolkit and bash tool only as a last resort when no suitable tool exists.
+You must always consider other tools first before using the operating_system_control toolkit. Use the operating_system_control toolkit and bash tool only as a last resort when no suitable tool exists.
 
-If your answers include a file path, wrap it as [FILE_PATH]/the_path_here[/FILE_PATH].
+${FORMATTING_RULES}
 
-Return ONLY one of the following JSON shapes:
-- {"type":"plan","steps":[{"function":"toolkit_id.tool_id.function_name","label":"Short verb-starting task description"}],"summary":"..."}
-- {"type":"final","answer":"..."}
+Always create a complete plan with ALL steps needed upfront. Do not return only the first step.
+For example, if the user asks to "find a file and process it", include ALL steps: find, probe, process.
 
 "steps" is an ordered array of functions to call. Each step has:
   - "function": the fully qualified name (toolkit_id.tool_id.function_name). If the catalog only lists tools, use toolkit_id.tool_id.
   - "label": a very short user-facing description of what this step does. Must start with a verb (e.g. "Search for video files", "Download the page", "List matching items"). Keep it under 8 words.
-"summary" is a short natural language description of the plan for the user.
+"summary" is a short natural language description of the plan for the user. If no tools are needed, put your conversational answer here with an empty steps array.
 
 No other keys, no null values.`
 
@@ -84,7 +94,7 @@ When the next action is based on uncertainty, assumptions, ambiguous selection, 
 
 tool_input must be a JSON string.
 
-If your answers include a file path, wrap it as [FILE_PATH]/the_path_here[/FILE_PATH].
+${FORMATTING_RULES}
 
 Return ONLY one of the following JSON shapes:
 - {"type":"execute","function_name":"...","tool_input":"{...}"}
@@ -101,7 +111,7 @@ IMPORTANT: Only provide required parameters. Do NOT fill in optional parameters 
 
 tool_input must be a JSON string.
 
-If your answers include a file path, wrap it as [FILE_PATH]/the_path_here[/FILE_PATH].
+${FORMATTING_RULES}
 
 Return ONLY one of the following JSON shapes:
 - {"type":"execute","function_name":"...","tool_input":"{...}"}
@@ -114,7 +124,7 @@ const MAX_EXECUTIONS = 20
 const MAX_REPLANS = 3
 const MAX_RETRIES_PER_FUNCTION = 2
 const REACT_TEMPERATURE = 0.2
-const MAX_OBSERVATION_LENGTH = 1_000
+
 const REACT_LOCAL_PROVIDER_HISTORY_LOGS = 8
 const REACT_REMOTE_PROVIDER_HISTORY_LOGS = 16
 
@@ -241,6 +251,8 @@ export class ReActLLMDuty extends LLMDuty {
   protected systemPrompt: LLMDutyParams['systemPrompt'] = null
   protected readonly name = 'ReAct LLM Duty'
   protected input: LLMDutyParams['input'] = null
+  private totalInputTokens = 0
+  private totalOutputTokens = 0
 
   constructor(params: ReactLLMDutyParams) {
     super()
@@ -300,6 +312,9 @@ export class ReActLLMDuty extends LLMDuty {
     LogHelper.title(this.name)
     LogHelper.info('Executing...')
 
+    this.totalInputTokens = 0
+    this.totalOutputTokens = 0
+
     try {
       const history =
         LLM_PROVIDER_NAME !== LLMProviders.Local
@@ -314,7 +329,7 @@ export class ReActLLMDuty extends LLMDuty {
       const catalog = this.buildCatalog()
 
       LogHelper.title(this.name)
-      LogHelper.debug(`Catalog mode: ${catalog.mode} | Input: "${this.input}"`)
+      LogHelper.debug(`Catalog mode: ${catalog.mode} | Catalog length: ${catalog.text.length} chars (~${Math.ceil(catalog.text.length / CHARS_PER_TOKEN)} tokens) | Input: "${this.input}"`)
       LogHelper.debug(`Native tools supported: ${this.supportsNativeTools} (provider: ${LLM_PROVIDER_NAME})`)
 
       // --- Phase 1: Planning ---
@@ -432,8 +447,9 @@ export class ReActLLMDuty extends LLMDuty {
 
         LogHelper.title(this.name)
         LogHelper.debug(
-          `Execution result: ${stepResult.execution.function} [${stepResult.execution.status}] | Observation: ${stepResult.execution.observation.slice(0, 300)}`
+          `Execution result: ${stepResult.execution.function} [${stepResult.execution.status}]`
         )
+        LogHelper.debug(`Observation: ${stepResult.execution.observation}`)
 
         // Update plan widget: mark current step as completed, next as in_progress
         if (currentStepIndex < trackedSteps.length) {
@@ -514,8 +530,21 @@ export class ReActLLMDuty extends LLMDuty {
       )
       if (toolFunctions) {
         for (const [fnName, fnConfig] of Object.entries(toolFunctions)) {
+          // Include required parameter names so the model can reason about
+          // data flow between steps (e.g. search returns a URL → download needs a URL)
+          const params = fnConfig.parameters
+          const paramNames: string[] = []
+          if (params && typeof params === 'object') {
+            const properties = (params as Record<string, unknown>)['properties']
+            if (properties && typeof properties === 'object') {
+              paramNames.push(...Object.keys(properties as Record<string, unknown>))
+            }
+          }
+          const paramHint = paramNames.length > 0
+            ? ` (${paramNames.join(', ')})`
+            : ''
           functionLines.push(
-            `- ${tool.toolkitId}.${tool.toolId}.${fnName}: ${fnConfig.description}`
+            `- ${tool.toolkitId}.${tool.toolId}.${fnName}${paramHint}: ${fnConfig.description}`
           )
         }
       }
@@ -620,7 +649,7 @@ export class ReActLLMDuty extends LLMDuty {
           function: {
             name: 'create_plan',
             description:
-              'Create an execution plan with ordered steps to solve the user request.',
+              'Create an execution plan with ordered steps to solve the user request. If no tools are needed (conversational message), return empty steps with the answer in summary.',
             parameters: {
               type: 'object',
               properties: {
@@ -646,38 +675,21 @@ export class ReActLLMDuty extends LLMDuty {
                 summary: {
                   type: 'string',
                   description:
-                    'Short natural language summary of the plan for the user'
+                    'Short natural language summary of the plan, or the conversational answer if steps is empty'
                 }
               },
               required: ['steps', 'summary']
             }
           }
-        },
-        {
-          type: 'function',
-          function: {
-            name: 'direct_answer',
-            description:
-              'Provide a direct answer when no tools are needed to fulfill the request.',
-            parameters: {
-              type: 'object',
-              properties: {
-                answer: {
-                  type: 'string',
-                  description: 'The answer to the user request'
-                }
-              },
-              required: ['answer']
-            }
-          }
         }
       ]
 
+      // First attempt: force create_plan to get a proper multi-step plan
       const toolResult = await this.callLLMWithTools(
         prompt,
         planSystemPrompt,
         planTools,
-        'auto',
+        { type: 'function', function: { name: 'create_plan' } },
         history
       )
 
@@ -688,18 +700,9 @@ export class ReActLLMDuty extends LLMDuty {
       )
 
       if (toolResult?.toolCall) {
-        const { functionName, arguments: args } = toolResult.toolCall
         try {
-          const parsedArgs = JSON.parse(args)
-
-          if (functionName === 'direct_answer' && parsedArgs.answer) {
-            return {
-              type: 'final',
-              answer: (parsedArgs.answer as string).trim()
-            }
-          }
-
-          if (functionName === 'create_plan' && Array.isArray(parsedArgs.steps)) {
+          const parsedArgs = JSON.parse(toolResult.toolCall.arguments)
+          if (Array.isArray(parsedArgs.steps)) {
             const steps = this.parseStepsFromArgs(parsedArgs.steps)
             if (steps.length > 0) {
               const summary =
@@ -709,12 +712,21 @@ export class ReActLLMDuty extends LLMDuty {
               return { type: 'plan', steps, summary }
             }
           }
+
+          // Model returned create_plan with empty steps — treat the summary
+          // as a direct answer (conversational response)
+          if (parsedArgs.summary) {
+            return {
+              type: 'final',
+              answer: (parsedArgs.summary as string).trim()
+            }
+          }
         } catch {
-          LogHelper.debug('Planning: failed to parse tool call arguments')
+          LogHelper.debug('Planning: failed to parse create_plan arguments')
         }
       }
 
-      // Fallback: try parsing text content if model didn't use tools
+      // Fallback: if the model returned text instead of a tool call
       if (toolResult?.textContent) {
         const parsed = this.parseOutput(toolResult.textContent)
         const fallbackResult = this.extractPlanFromParsed(parsed)
@@ -722,57 +734,6 @@ export class ReActLLMDuty extends LLMDuty {
           return fallbackResult
         }
 
-        // Check if the text contains function references from the catalog,
-        // which means the model tried to use tools via text instead of the
-        // native tools API. Retry with tool_choice='required' to force it.
-        const hasFunctionReferences =
-          /[a-z_]+\.[a-z_]+\.[a-zA-Z_]+/.test(toolResult.textContent)
-        if (hasFunctionReferences) {
-          LogHelper.title(this.name)
-          LogHelper.debug(
-            'Planning: model responded with text containing function references, retrying with tool_choice=required'
-          )
-
-          const retryResult = await this.callLLMWithTools(
-            prompt,
-            planSystemPrompt,
-            planTools,
-            'required',
-            history
-          )
-
-          if (retryResult?.toolCall) {
-            const { functionName, arguments: args } = retryResult.toolCall
-            try {
-              const parsedArgs = JSON.parse(args)
-
-              if (functionName === 'direct_answer' && parsedArgs.answer) {
-                return {
-                  type: 'final',
-                  answer: (parsedArgs.answer as string).trim()
-                }
-              }
-
-              if (
-                functionName === 'create_plan' &&
-                Array.isArray(parsedArgs.steps)
-              ) {
-                const steps = this.parseStepsFromArgs(parsedArgs.steps)
-                if (steps.length > 0) {
-                  const summary =
-                    typeof parsedArgs.summary === 'string'
-                      ? (parsedArgs.summary as string)
-                      : ''
-                  return { type: 'plan', steps, summary }
-                }
-              }
-            } catch {
-              LogHelper.debug('Planning retry: failed to parse tool call arguments')
-            }
-          }
-        }
-
-        // Pure conversational response — return as final answer
         return {
           type: 'final',
           answer:
@@ -1616,17 +1577,57 @@ export class ReActLLMDuty extends LLMDuty {
       toolExecutionInput.parsedInput = parsedInput
     }
 
+    // For bash commands, write the command to a temp script file so that
+    // base-tool's escapeShellArg does not destroy shell metacharacters
+    // (quotes, pipes, redirects, etc.). The bash tool receives a simple
+    // file path instead of a raw command string.
+    let bashScriptPath: string | null = null
+    if (
+      toolId === 'bash' &&
+      functionName === 'executeBashCommand' &&
+      toolExecutionInput.parsedInput?.['command']
+    ) {
+      const command = toolExecutionInput.parsedInput['command'] as string
+      const scriptDir = join(tmpdir(), 'leon_bash_scripts')
+      mkdirSync(scriptDir, { recursive: true })
+      bashScriptPath = join(
+        scriptDir,
+        `cmd_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.sh`
+      )
+      writeFileSync(bashScriptPath, `${command}\nexit 0`, { mode: 0o755 })
+
+      // Replace the command with the script path
+      toolExecutionInput.parsedInput = {
+        ...toolExecutionInput.parsedInput,
+        command: bashScriptPath
+      }
+      toolExecutionInput.toolInput = JSON.stringify(
+        toolExecutionInput.parsedInput
+      )
+    }
+
     LogHelper.title(this.name)
-    LogHelper.debug(
-      `Running tool: ${qualifiedName} | Input: ${toolInput.slice(0, 200)}`
-    )
+    LogHelper.debug(`Running tool: ${qualifiedName}`)
+    LogHelper.debug(`Tool input: ${toolInput}`)
 
     const toolExecutionResult =
       await TOOL_EXECUTOR.executeTool(toolExecutionInput)
 
+    // Clean up temp script
+    if (bashScriptPath) {
+      try {
+        unlinkSync(bashScriptPath)
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+
     LogHelper.title(this.name)
     LogHelper.debug(
       `Tool result: ${qualifiedName} [${toolExecutionResult.status}] — ${toolExecutionResult.message}`
+    )
+    LogHelper.debug(
+      `Tool output: ${JSON.stringify(toolExecutionResult.data?.output)}`
     )
 
     // Check for final_answer in tool result
@@ -1700,53 +1701,79 @@ export class ReActLLMDuty extends LLMDuty {
 
     const historySection = this.formatExecutionHistory(executionHistory)
     const systemPrompt = PERSONA.getCompactDutySystemPrompt(
-      'You are synthesizing a final answer from tool execution results. Provide a clear, helpful response to the user based on the observations collected.\n\nIf your answers include a file path, wrap it as [FILE_PATH]/the_path_here[/FILE_PATH].'
+      `You are synthesizing a final answer from tool execution results. Provide a clear, helpful, and complete response to the user based on the observations collected. Always include relevant details from the tool results.\n\n${FORMATTING_RULES}`
     )
     const prompt = `${historySection}\n\nUser Request: "${this.input}"\n\nBased on the execution results above, provide a final answer to the user.`
 
-    const finalSchema = {
-      type: 'object',
-      properties: {
-        answer: { type: 'string' }
-      },
-      required: ['answer'],
-      additionalProperties: false
-    }
-
-    const completionResult = await this.callLLM(
-      prompt,
-      systemPrompt,
-      finalSchema
-    )
-
-    if (completionResult?.output) {
-      const parsed = this.parseOutput(completionResult.output)
-      if (parsed?.['answer']) {
-        return parsed['answer'] as string
+    // Use native tool calling for remote providers to get a proper answer
+    if (this.supportsNativeTools) {
+      const answerTool: OpenAITool = {
+        type: 'function',
+        function: {
+          name: 'provide_answer',
+          description:
+            'Provide the final answer to the user. Include all relevant details from the tool execution results. Use plain text only, no markdown.',
+          parameters: {
+            type: 'object',
+            properties: {
+              answer: {
+                type: 'string',
+                description:
+                  'A clear, complete, and helpful plain text answer (no markdown) to the user request based on the tool results. Wrap any file paths with [FILE_PATH]/path[/FILE_PATH].'
+              }
+            },
+            required: ['answer']
+          }
+        }
       }
-      if (typeof completionResult.output === 'string') {
-        // Try to extract answer from a JSON string the parser may have missed
+
+      const result = await this.callLLMWithTools(
+        prompt,
+        systemPrompt,
+        [answerTool],
+        { type: 'function', function: { name: 'provide_answer' } }
+      )
+
+      if (result?.toolCall) {
         try {
-          const jsonParsed = JSON.parse(completionResult.output)
-          if (typeof jsonParsed === 'object' && jsonParsed?.answer) {
-            return (jsonParsed.answer as string).trim()
+          const parsed = JSON.parse(result.toolCall.arguments)
+          if (typeof parsed.answer === 'string' && parsed.answer.trim()) {
+            return parsed.answer.trim()
           }
         } catch {
-          // Not JSON, return as-is
+          // Fall through
         }
-        return completionResult.output.trim()
       }
-      // If output is an object but parseOutput didn't extract answer,
-      // check directly
-      if (
-        typeof completionResult.output === 'object' &&
-        (completionResult.output as Record<string, unknown>)['answer']
-      ) {
-        return (
-          (completionResult.output as Record<string, unknown>)[
-            'answer'
-          ] as string
-        ).trim()
+
+      // If the model responded with text instead
+      if (result?.textContent?.trim()) {
+        return result.textContent.trim()
+      }
+    } else {
+      // Local provider: use JSON mode
+      const finalSchema = {
+        type: 'object',
+        properties: {
+          answer: { type: 'string' }
+        },
+        required: ['answer'],
+        additionalProperties: false
+      }
+
+      const completionResult = await this.callLLM(
+        prompt,
+        systemPrompt,
+        finalSchema
+      )
+
+      if (completionResult?.output) {
+        const parsed = this.parseOutput(completionResult.output)
+        if (parsed?.['answer']) {
+          return parsed['answer'] as string
+        }
+        if (typeof completionResult.output === 'string') {
+          return completionResult.output.trim()
+        }
       }
     }
 
@@ -1793,14 +1820,26 @@ export class ReActLLMDuty extends LLMDuty {
       ...(history ? { history } : {})
     }
 
+    let result
     if (LLM_PROVIDER_NAME === LLMProviders.Local) {
-      return LLM_PROVIDER.prompt(prompt, {
+      result = await LLM_PROVIDER.prompt(prompt, {
         ...completionParams,
         session: ReActLLMDuty.session
       })
+    } else {
+      result = await LLM_PROVIDER.prompt(prompt, completionParams)
     }
 
-    return LLM_PROVIDER.prompt(prompt, completionParams)
+    if (result) {
+      this.totalInputTokens += result.usedInputTokens ?? 0
+      this.totalOutputTokens += result.usedOutputTokens ?? 0
+      LogHelper.title(this.name)
+      LogHelper.debug(
+        `Tokens — input: ${result.usedInputTokens ?? 0} | output: ${result.usedOutputTokens ?? 0} | total: ${this.totalInputTokens}+${this.totalOutputTokens}=${this.totalInputTokens + this.totalOutputTokens}`
+      )
+    }
+
+    return result
   }
 
   /**
@@ -1845,6 +1884,13 @@ export class ReActLLMDuty extends LLMDuty {
       return null
     }
 
+    this.totalInputTokens += completionResult.usedInputTokens ?? 0
+    this.totalOutputTokens += completionResult.usedOutputTokens ?? 0
+    LogHelper.title(this.name)
+    LogHelper.debug(
+      `Tokens — input: ${completionResult.usedInputTokens ?? 0} | output: ${completionResult.usedOutputTokens ?? 0} | total: ${this.totalInputTokens}+${this.totalOutputTokens}=${this.totalInputTokens + this.totalOutputTokens}`
+    )
+
     // Check if the model responded with tool calls
     const toolCalls = (
       completionResult as unknown as { toolCalls?: OpenAIToolCall[] }
@@ -1887,13 +1933,8 @@ export class ReActLLMDuty extends LLMDuty {
     }
     return `Previous Executions:\n${history
       .map(
-        (exec, i) => {
-          const observation =
-            exec.observation.length > MAX_OBSERVATION_LENGTH
-              ? exec.observation.slice(0, MAX_OBSERVATION_LENGTH) + '...(truncated)'
-              : exec.observation
-          return `Step ${i + 1}: ${exec.function} [${exec.status}]\n  Observation: ${observation}`
-        }
+        (exec, i) =>
+          `Step ${i + 1}: ${exec.function} [${exec.status}]\n  Observation: ${exec.observation}`
       )
       .join('\n')}`
   }
@@ -2025,6 +2066,9 @@ export class ReActLLMDuty extends LLMDuty {
     LogHelper.title(this.name)
     LogHelper.success('Duty executed')
     LogHelper.success(`Output — ${output}`)
+    LogHelper.debug(
+      `Total tokens — input: ${this.totalInputTokens} | output: ${this.totalOutputTokens} | combined: ${this.totalInputTokens + this.totalOutputTokens}`
+    )
 
     return {
       dutyType: LLMDuties.ReAct,
