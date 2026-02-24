@@ -1,6 +1,6 @@
 import path from 'node:path'
 
-import type { AxiosResponse } from 'axios'
+import axios, { type AxiosResponse } from 'axios'
 
 import {
   type CompletionParams,
@@ -17,7 +17,7 @@ import GroqLLMProvider from '@/core/llm-manager/llm-providers/groq-llm-provider'
 import OpenRouterLLMProvider from '@/core/llm-manager/llm-providers/openrouter-llm-provider'
 import CerebrasLLMProvider from '@/core/llm-manager/llm-providers/cerebras-llm-provider'
 import HuggingFaceLLMProvider from '@/core/llm-manager/llm-providers/huggingface-llm-provider'
-import { LLM_MANAGER } from '@/core'
+import { BRAIN, LLM_MANAGER } from '@/core'
 
 interface CompletionResult {
   dutyType: LLMDuties
@@ -292,6 +292,24 @@ export default class LLMProvider {
     } catch (e) {
       LogHelper.title('LLM Provider')
       LogHelper.error(`Error to complete prompt: ${e}`)
+
+      if (axios.isAxiosError(e)) {
+        const apiError = e.response?.data
+        let apiErrorDetails = ''
+
+        if (apiError) {
+          apiErrorDetails =
+            typeof apiError === 'string' ? apiError : JSON.stringify(apiError)
+        }
+
+        const brainMessage = BRAIN.wernicke('llm_provider_http_error', '', {
+          '{{ provider }}': LLM_PROVIDER,
+          '{{ error }}': String(e),
+          '{{ api_error }}': apiErrorDetails ? `\n${apiErrorDetails}` : ''
+        })
+
+        await BRAIN.talk(brainMessage, true)
+      }
 
       // throw new Error('Prompt failed after all retries')
       return null
