@@ -11,7 +11,7 @@ export class LoaderHelper {
     'This process takes time, please go for a coffee (or a fruit juice)',
     'This may take a while, grab a drink and come back later',
     'Go for a walk, this action takes time',
-    "That may take some time, let's chill and relax",
+    'That may take some time, let\'s chill and relax',
     'Leon will be ready for you in a moment'
   ]
 

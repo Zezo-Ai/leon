@@ -1,3 +1,6 @@
 {
-  "name": "Sport"
+  "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
+  "name": "Sport",
+  "description": "Tools for sports data and updates.",
+  "tools": []
 }

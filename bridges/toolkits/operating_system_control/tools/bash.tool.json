@@ -1,0 +1,53 @@
+{
+  "$schema": "../../../../schemas/tool-schemas/tool.json",
+  "tool_id": "bash",
+  "toolkit_id": "operating_system_control",
+  "name": "Bash",
+  "description": "A tool for executing bash commands on the operating system.",
+  "author": {
+    "name": "Louis Grenard",
+    "email": "louis@getleon.ai",
+    "url": "https://twitter.com/grenlouis"
+  },
+  "functions": {
+    "executeBashCommand": {
+      "description": "Execute a bash command and return the result.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": { "type": "string" },
+          "options": {
+            "type": "object",
+            "properties": {
+              "cwd": { "type": "string" },
+              "timeout": { "type": "number" },
+              "captureOutput": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["command"]
+      }
+    },
+    "isSafeCommand": {
+      "description": "Check whether a bash command appears safe to execute.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": { "type": "string" }
+        },
+        "required": ["command"]
+      }
+    },
+    "getCommandRiskLevel": {
+      "description": "Assess the risk level of a bash command.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": { "type": "string" }
+        },
+        "required": ["command"]
+      }
+    }
+  }
+}

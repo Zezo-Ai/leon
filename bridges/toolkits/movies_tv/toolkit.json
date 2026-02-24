@@ -1,3 +1,6 @@
 {
-  "name": "Movies & TV"
+  "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
+  "name": "Movies & TV",
+  "description": "Tools for movies and TV information.",
+  "tools": []
 }

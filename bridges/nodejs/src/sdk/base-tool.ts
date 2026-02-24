@@ -8,6 +8,7 @@ import { downloadFile } from 'ipull'
 
 import { TOOLKITS_PATH } from '@bridge/constants'
 import { ToolkitConfig } from '@sdk/toolkit-config'
+import { reportToolOutput } from '@sdk/tool-reporter'
 import {
   isWindows,
   isMacOS,
@@ -18,7 +19,6 @@ import {
   formatFilePath,
   extractArchive
 } from '@sdk/utils'
-import { leon } from '@sdk/leon'
 
 // Progress callback type for reporting tool progress
 export type ProgressCallback = (progress: {
@@ -47,6 +47,15 @@ export interface ExecuteCommandOptions {
 }
 
 export abstract class Tool {
+  private static isToolRuntime: boolean = (() => {
+    const args = process.argv
+    const runtimeIndex = args.indexOf('--runtime')
+    if (runtimeIndex === -1) {
+      return false
+    }
+    return args[runtimeIndex + 1] === 'tool'
+  })()
+
   /**
    * Tool settings loaded from toolkit settings.json
    */
@@ -103,7 +112,7 @@ export abstract class Tool {
       TOOLKITS_PATH,
       this.toolkit,
       'settings',
-      `${resolvedToolName}.json`
+      `${resolvedToolName}.settings.json`
     )
   }
 
@@ -164,11 +173,19 @@ export abstract class Tool {
       coreData['toolGroupId'] = toolGroupId
     }
 
-    await leon.answer({
-      key,
-      data: data || {},
-      core: coreData
-    })
+    try {
+      await reportToolOutput({
+        key,
+        data: data || {},
+        core: coreData
+      })
+    } catch (error) {
+      console.warn(
+        `[LEON_TOOL_LOG] Failed to report tool output: ${
+          (error as Error).message
+        }`
+      )
+    }
   }
 
   /**
@@ -568,7 +585,7 @@ export abstract class Tool {
 
   /**
    * Get resource path and ensure all resource files are downloaded
-   * @param resourceName The name of the resource as defined in toolkit.json
+   * @param resourceName The name of the resource as defined in the tool manifest
    * @returns A promise that resolves to the path of the resource directory
    */
   async getResourcePath(resourceName: string): Promise<string> {
@@ -1169,7 +1186,11 @@ export abstract class Tool {
     const logMessage = `[LEON_TOOL_LOG] ${message}${
       args.length > 0 ? ' ' + args.join(' ') : ''
     }`
-    process.stdout.write(logMessage + '\n')
+    if (Tool.isToolRuntime) {
+      process.stderr.write(logMessage + '\n')
+    } else {
+      process.stdout.write(logMessage + '\n')
+    }
   }
 
   /**

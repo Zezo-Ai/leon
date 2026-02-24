@@ -19,16 +19,6 @@ const globs = [
 ]
 const src = globs.join(' ')
 
-async function prettier() {
-  await command('prettier --write . --ignore-pattern .gitignore', {
-    shell: true
-  })
-  await command(`prettier --check ${src} --ignore-pattern .gitignore`, {
-    shell: true,
-    stdio: 'inherit'
-  })
-}
-
 /**
  * This script ensures the correct coding syntax of the whole project
  */
@@ -38,8 +28,7 @@ async function prettier() {
 
   try {
     await Promise.all([
-      prettier(),
-      command(`eslint ${src} --ignore-pattern .gitignore`, {
+      command(`eslint ${src} --fix --ignore-pattern .gitignore`, {
         shell: true,
         stdio: 'inherit'
       })

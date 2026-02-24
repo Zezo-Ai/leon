@@ -116,7 +116,7 @@ export default class LLMManager {
   private _shouldWarmUpLLMDuties = false
   private _areLLMDutiesWarmedUp = false
   private _llama: LLMManagerLlama = null
-  private _model: LLMManagerModel = null
+  private _localModel: LLMManagerModel = null
   private _context: LLMManagerContext = null
   private _llmActionsClassifierContent: ActionsClassifierContent = null
   private _skillListContent: SkillListContent = null
@@ -127,7 +127,7 @@ export default class LLMManager {
   }
 
   get model(): LlamaModel {
-    return this._model as LlamaModel
+    return this._localModel as LlamaModel
   }
 
   get context(): LlamaContext {
@@ -197,8 +197,8 @@ export default class LLMManager {
    * files that only need to be loaded once
    */
   private async singleLoad(): Promise<void> {
-    if (!this._model) {
-      throw new Error('LLM model is not loaded yet')
+    if (LLM_PROVIDER === LLMProviders.Local && !this._localModel) {
+      throw new Error('Local LLM model is not loaded yet')
     }
 
     try {
@@ -223,9 +223,9 @@ export default class LLMManager {
         '%SKILL_LIST%': this._skillListContent || ''
       }
     )
-    const skillRouterSystemPromptLength = this._model.tokenize(
+    const skillRouterSystemPromptLength = this._localModel?.tokenize(
       completeSkillRouterSystemPrompt as string
-    ).length
+    ).length || 0
     const skillRouterContextSize =
       skillRouterSystemPromptLength +
       (this._coreLLMDuties[LLMDuties.SkillRouter].maxTokens ?? 0) +
@@ -335,7 +335,7 @@ export default class LLMManager {
       try {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-expect-error
-        this._model = await this._llama.loadModel({
+        this._localModel = await this._llama.loadModel({
           modelPath: LLM_PATH,
           // Option available from node-llama-cpp@3.0.0-beta.38 but cannot compile well yet (in 2024-08-01)
           defaultContextFlashAttention: true
@@ -671,7 +671,7 @@ export default class LLMManager {
         const minCoreLLMContextSize = Math.min(...coreLLMContextSizeValues)
         const maxCoreLLMContextSize = Math.max(...coreLLMContextSizeValues)
 
-        this._context = await this._model.createContext({
+        this._context = await this._localModel.createContext({
           sequences: Object.keys(this._coreLLMDuties).length,
           // threads: LLM_THREADS,
           contextSize: {
@@ -703,6 +703,16 @@ export default class LLMManager {
       }
       if (HAS_LLM_ACTION_RECOGNITION) {
         this._isLLMActionRecognitionEnabled = true
+      }
+
+      try {
+        // Load files that only need to be loaded once
+        await this.singleLoad()
+      } catch (e) {
+        LogHelper.title('LLM Manager')
+        LogHelper.error(`LLM Manager failed to single load: ${e}`)
+
+        process.exit(1)
       }
     }
 

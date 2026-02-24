@@ -2,6 +2,8 @@ import axios, { type AxiosError, type AxiosResponse } from 'axios'
 
 import type {
   CompletionParams,
+  OpenAITool,
+  OpenAIToolChoice,
   PromptOrChatHistory
 } from '@/core/llm-manager/types'
 import { LogHelper } from '@/helpers/log-helper'
@@ -9,9 +11,6 @@ import { LogHelper } from '@/helpers/log-helper'
 /**
  * @see https://console.groq.com/docs/text-chat
  */
-enum GroqModels {
-  Llama3_1_8b_instant = 'llama-3.1-8b-instant'
-}
 interface GroqMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
@@ -19,7 +18,7 @@ interface GroqMessage {
   seed?: number
 }
 interface GroqChatCompletionParams {
-  model: GroqModels
+  model: string
   messages: GroqMessage[]
   max_tokens?: number
   temperature?: number
@@ -30,12 +29,16 @@ interface GroqChatCompletionParams {
   response_format?: {
     type: 'json_object'
   }
+  tools?: OpenAITool[]
+  tool_choice?: OpenAIToolChoice
 }
 type GroqCompletionParams = Omit<CompletionParams, ''>
 
 export default class GroqLLMProvider {
   protected readonly name = 'Groq LLM Provider'
-  protected readonly apiKey = process.env['LEON_LLM_PROVIDER_API_KEY']
+  protected readonly apiKey = process.env['LEON_GROQ_API_KEY']
+  protected readonly model =
+    process.env['LEON_GROQ_MODEL'] || 'llama-3.1-8b-instant'
   private readonly axios = axios.create({
     baseURL: 'https://api.groq.com/openai/v1',
     timeout: 7_000
@@ -113,12 +116,18 @@ export default class GroqLLMProvider {
 
         let chatCompletionParams: GroqChatCompletionParams = {
           messages: messagesHistory,
-          model: GroqModels.Llama3_1_8b_instant,
+          model: this.model,
           temperature: completionParams.temperature || 0,
           stream: false
         }
 
-        if (isJSONMode) {
+        if (completionParams.tools && completionParams.tools.length > 0) {
+          chatCompletionParams = {
+            ...chatCompletionParams,
+            tools: completionParams.tools,
+            tool_choice: completionParams.toolChoice || 'auto'
+          }
+        } else if (isJSONMode) {
           chatCompletionParams = {
             ...chatCompletionParams,
             response_format: {

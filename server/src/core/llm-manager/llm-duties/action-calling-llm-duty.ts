@@ -20,7 +20,8 @@ import {
   ActionCallingOutput,
   ActionCallingStatus,
   LLMDuties,
-  LLMProviders
+  LLMProviders,
+  type OpenAITool
 } from '@/core/llm-manager/types'
 import { LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
@@ -231,6 +232,55 @@ Follow these rules exactly:
     })
 
     return functions
+  }
+
+  /**
+   * Converts skill actions to OpenAI-compatible tool definitions for remote
+   * providers that support native tool calling.
+   */
+  private actionsToOpenAITools(
+    actions: SkillSchema['actions']
+  ): OpenAITool[] {
+    const tools: OpenAITool[] = []
+
+    for (const [actionName, action] of Object.entries(actions)) {
+      if (!action || !action.type) {
+        continue
+      }
+
+      const properties: Record<
+        string,
+        { type: string, description: string }
+      > = {}
+      const required: string[] = []
+
+      if (action.parameters) {
+        for (const [paramName, param] of Object.entries(action.parameters)) {
+          properties[paramName] = {
+            type: param.type,
+            description: formatParameterDescription(param)
+          }
+          // All parameters are required by default in Leon skills
+          // (optional_parameters are handled post-LLM in parseOptionalParameters)
+          required.push(paramName)
+        }
+      }
+
+      tools.push({
+        type: 'function',
+        function: {
+          name: actionName,
+          description: action.description,
+          parameters: {
+            type: 'object',
+            properties,
+            ...(required.length > 0 ? { required } : {})
+          }
+        }
+      })
+    }
+
+    return tools
   }
 
   /**
@@ -535,7 +585,134 @@ Follow these rules exactly:
           }
         }
       } else {
-        completionResult = await LLM_PROVIDER.prompt(prompt, completionParams)
+        // Remote provider path: use native tool calling
+        const openAITools = this.actionsToOpenAITools(filteredActions)
+        const toolChoice =
+          preselectedSingleActionName && openAITools.length === 1
+            ? ({
+                type: 'function' as const,
+                function: { name: preselectedSingleActionName }
+              } as const)
+            : ('auto' as const)
+
+        completionResult = await LLM_PROVIDER.prompt(prompt, {
+          ...completionParams,
+          tools: openAITools,
+          toolChoice
+        })
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const toolCalls = (completionResult as any)?.toolCalls as
+          | { id: string, type: string, function: { name: string, arguments: string } }[]
+          | undefined
+
+        if (toolCalls && toolCalls.length > 0) {
+          for (const call of toolCalls) {
+            const functionName = call.function.name
+            let params: Record<string, unknown> = {}
+            try {
+              params = JSON.parse(call.function.arguments)
+            } catch {
+              // If arguments aren't valid JSON, treat as empty
+            }
+
+            const actionExists = filteredActions[functionName]
+            let actionOutput: ActionCallingOutput | null = null
+
+            if (!actionExists) {
+              actionOutput = {
+                status: ActionCallingStatus.NotFound
+              }
+            } else {
+              const actionParams = actionExists.parameters || {}
+              const requiredParams = Object.keys(actionParams).filter(
+                (p) =>
+                  !actionExists.optional_parameters?.includes(p)
+              )
+              const missingParams = requiredParams.filter(
+                (required) => params[required] == null
+              )
+
+              if (missingParams.length > 0) {
+                actionOutput = {
+                  status: ActionCallingStatus.MissingParams,
+                  required_params: missingParams,
+                  name: functionName,
+                  arguments: params
+                }
+              } else {
+                actionOutput = {
+                  status: ActionCallingStatus.Success,
+                  name: functionName,
+                  arguments: params
+                }
+              }
+            }
+
+            if (actionOutput) {
+              const finalActionOutput = this.parseOptionalParameters(
+                skillConfig as SkillSchema,
+                actionOutput
+              )
+              dutyOutput.push(finalActionOutput)
+            }
+          }
+        } else {
+          // Fallback: try parsing the text output as JSON (same as local manual parsing)
+          LogHelper.title(this.name)
+          LogHelper.warning(
+            'Remote provider did not return tool calls, trying manual JSON parsing...'
+          )
+
+          try {
+            const rawOutput =
+              typeof completionResult?.output === 'string'
+                ? completionResult.output
+                : JSON.stringify(completionResult?.output)
+            const tmpResponse = JSON.parse(rawOutput)
+            let parsedOutput: ActionCallingOutput | null = null
+
+            if (tmpResponse.status) {
+              if (tmpResponse.status === ActionCallingStatus.MissingParams) {
+                parsedOutput = {
+                  status: ActionCallingStatus.MissingParams,
+                  required_params: tmpResponse.required_params || [],
+                  name: tmpResponse.name || '',
+                  arguments: tmpResponse.arguments || {}
+                }
+              } else if (
+                tmpResponse.status === ActionCallingStatus.NotFound
+              ) {
+                parsedOutput = {
+                  status: ActionCallingStatus.NotFound
+                }
+              }
+            } else if (tmpResponse.name) {
+              parsedOutput = {
+                status: ActionCallingStatus.Success,
+                name: tmpResponse.name,
+                arguments: tmpResponse.arguments || {}
+              }
+            } else {
+              parsedOutput = {
+                status: ActionCallingStatus.NotFound
+              }
+            }
+
+            if (parsedOutput) {
+              dutyOutput.push(
+                this.parseOptionalParameters(
+                  skillConfig as SkillSchema,
+                  parsedOutput
+                )
+              )
+            }
+          } catch {
+            dutyOutput.push({
+              status: ActionCallingStatus.NotFound
+            })
+          }
+        }
       }
 
       if (dutyOutput.length === 0) {

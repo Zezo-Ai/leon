@@ -132,6 +132,7 @@ export const PYTORCH_VERSION = PYTORCH_VERSIONS.torch
  */
 export const BINARIES_FOLDER_NAME = SystemHelper.getBinariesFolderName()
 export const BRIDGES_PATH = path.join(process.cwd(), 'bridges')
+export const TOOLKITS_PATH = path.join(BRIDGES_PATH, 'toolkits')
 export const NODEJS_BRIDGE_ROOT_PATH = path.join(BRIDGES_PATH, 'nodejs')
 export const PYTHON_BRIDGE_ROOT_PATH = path.join(BRIDGES_PATH, 'python')
 export const PYTHON_TCP_SERVER_ROOT_PATH = path.join(
@@ -153,6 +154,14 @@ export const PYTHON_TCP_SERVER_DIST_PATH = path.join(
 )
 
 export const NODEJS_BRIDGE_SRC_PATH = path.join(NODEJS_BRIDGE_ROOT_PATH, 'src')
+export const NODEJS_BRIDGE_TOOL_RUNTIME_SRC_PATH = path.join(
+  NODEJS_BRIDGE_SRC_PATH,
+  'tool-runtime.ts'
+)
+export const NODEJS_BRIDGE_TOOL_RUNTIME_DIST_PATH = path.join(
+  NODEJS_BRIDGE_DIST_PATH,
+  'tool-runtime.js'
+)
 export const PYTHON_BRIDGE_SRC_PATH = path.join(PYTHON_BRIDGE_ROOT_PATH, 'src')
 export const PYTHON_TCP_SERVER_SRC_PATH = path.join(
   PYTHON_TCP_SERVER_ROOT_PATH,
@@ -209,13 +218,13 @@ const PYTHON_TCP_SERVER_VERSION_FILE_PATH = path.join(
 )
 export const [, NODEJS_BRIDGE_VERSION] = fs
   .readFileSync(NODEJS_BRIDGE_VERSION_FILE_PATH, 'utf8')
-  .split("'")
+  .split('\'')
 export const [, PYTHON_BRIDGE_VERSION] = fs
   .readFileSync(PYTHON_BRIDGE_VERSION_FILE_PATH, 'utf8')
-  .split("'")
+  .split('\'')
 export const [, PYTHON_TCP_SERVER_VERSION] = fs
   .readFileSync(PYTHON_TCP_SERVER_VERSION_FILE_PATH, 'utf8')
-  .split("'")
+  .split('\'')
 
 export const NODEJS_BRIDGE_BIN_NAME = 'leon-nodejs-bridge.cjs'
 export const PYTHON_BRIDGE_BIN_NAME = 'leon-python-bridge'
@@ -238,6 +247,13 @@ export const NODEJS_BRIDGE_BIN_PATH = `${path.join(
   'dist',
   'cli.mjs'
 )} ${path.join(NODEJS_BRIDGE_DIST_PATH, 'bin', NODEJS_BRIDGE_BIN_NAME)}`
+export const TSX_CLI_PATH = path.join(
+  process.cwd(),
+  'node_modules',
+  'tsx',
+  'dist',
+  'cli.mjs'
+)
 
 export const LEON_VERSION = process.env['npm_package_version']
 
@@ -309,6 +325,7 @@ export const HAS_LLM = process.env['LEON_LLM'] === 'true'
 export const HAS_LLM_NLG = process.env['LEON_LLM_NLG'] === 'true' && HAS_LLM
 export const HAS_LLM_ACTION_RECOGNITION =
   process.env['LEON_LLM_ACTION_RECOGNITION'] === 'true' && HAS_LLM
+export const LEON_ROUTING_MODE = process.env['LEON_ROUTING_MODE'] || 'smart'
 export const LLM_PROVIDER = process.env['LEON_LLM_PROVIDER']
 // export const LLM_VERSION = 'v0.2.Q4_K_S'
 // export const LLM_VERSION = '8B-Instruct.Q5_K_S'

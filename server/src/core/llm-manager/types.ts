@@ -16,7 +16,8 @@ export enum LLMDuties {
   CustomNER = 'custom-ner',
   Paraphrase = 'paraphrase',
   Conversation = 'conversation',
-  Custom = 'custom'
+  Custom = 'custom',
+  ReAct = 'react'
   // TODO
   /*SentimentAnalysis = 'sentiment-analysis',
   QuestionAnswering = 'question-answering',
@@ -27,7 +28,10 @@ export enum LLMDuties {
 
 export enum LLMProviders {
   Local = 'local',
-  Groq = 'groq'
+  Groq = 'groq',
+  OpenRouter = 'openrouter',
+  Cerebras = 'cerebras',
+  HuggingFace = 'huggingface'
 }
 
 export enum ActionCallingStatus {
@@ -41,6 +45,41 @@ export enum SlotFillingStatus {
 }
 
 export type PromptOrChatHistory = string | ChatHistoryItem[]
+
+/**
+ * OpenAI-compatible tool definition for remote providers that support
+ * native tool/function calling (e.g. OpenRouter).
+ */
+export interface OpenAIToolFunction {
+  name: string
+  description?: string
+  parameters: Record<string, unknown>
+}
+export interface OpenAITool {
+  type: 'function'
+  function: OpenAIToolFunction
+}
+export type OpenAIToolChoice =
+  | 'none'
+  | 'auto'
+  | {
+      type: 'function'
+      function: {
+        name: string
+      }
+    }
+
+/**
+ * Represents a tool call returned by the model when using native tool calling.
+ */
+export interface OpenAIToolCall {
+  id: string
+  type: 'function'
+  function: {
+    name: string
+    arguments: string
+  }
+}
 
 export interface CompletionParams {
   dutyType: LLMDuties
@@ -56,6 +95,13 @@ export interface CompletionParams {
   data?: Record<string, unknown> | null
   history?: MessageLog[]
   onToken?: (tokens: Token[]) => void
+  /**
+   * OpenAI-compatible tools for remote providers that support native
+   * tool/function calling. When set, the provider sends these as `tools`
+   * in the API request instead of (or in addition to) JSON mode.
+   */
+  tools?: OpenAITool[]
+  toolChoice?: OpenAIToolChoice
 }
 
 /**

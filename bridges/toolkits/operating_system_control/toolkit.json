@@ -1,10 +1,6 @@
 {
+  "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Operating System Control",
   "description": "Tools for interacting with and controlling the operating system.",
-  "tools": {
-    "bash": {
-      "name": "Bash",
-      "description": "A tool for executing bash commands on the operating system."
-    }
-  }
+  "tools": ["bash"]
 }

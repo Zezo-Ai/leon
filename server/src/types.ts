@@ -39,6 +39,15 @@ export enum CPUArchitectures {
 }
 
 /**
+ * Routing mode
+ */
+export enum RoutingMode {
+  Smart = 'smart',
+  Workflow = 'workflow',
+  Agent = 'agent'
+}
+
+/**
  * Logger
  */
 

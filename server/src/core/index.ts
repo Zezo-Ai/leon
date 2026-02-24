@@ -19,6 +19,8 @@ import Brain from '@/core/brain/brain'
 import LLMManager from '@/core/llm-manager/llm-manager'
 import LLMProvider from '@/core/llm-manager/llm-provider'
 import Persona from '@/core/llm-manager/persona'
+import ToolkitRegistry from '@/core/toolkit-registry'
+import ToolExecutor from '@/core/tool-executor'
 import { ConversationLogger } from '@/conversation-logger'
 
 /**
@@ -59,6 +61,10 @@ export const HTTP_SERVER = new HTTPServer(String(HOST), PORT)
 export const SOCKET_SERVER = new SocketServer()
 
 export const PERSONA = new Persona()
+
+export const TOOLKIT_REGISTRY = new ToolkitRegistry()
+
+export const TOOL_EXECUTOR = new ToolExecutor()
 
 export const STT = new SpeechToText()
 

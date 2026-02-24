@@ -1,3 +1,6 @@
 {
-  "name": "Calendar & Scheduling"
+  "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
+  "name": "Calendar & Scheduling",
+  "description": "Tools for calendars and scheduling.",
+  "tools": []
 }

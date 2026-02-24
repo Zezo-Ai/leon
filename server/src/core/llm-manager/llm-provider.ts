@@ -1,10 +1,11 @@
 import path from 'node:path'
 
-import type { AxiosResponse } from 'axios'
+import axios, { type AxiosResponse } from 'axios'
 
 import {
   type CompletionParams,
   type LLMDuties,
+  type OpenAIToolCall,
   type PromptOrChatHistory,
   LLMProviders
 } from '@/core/llm-manager/types'
@@ -13,7 +14,10 @@ import { LogHelper } from '@/helpers/log-helper'
 import { FileHelper } from '@/helpers/file-helper'
 import LocalLLMProvider from '@/core/llm-manager/llm-providers/local-llm-provider'
 import GroqLLMProvider from '@/core/llm-manager/llm-providers/groq-llm-provider'
-import { LLM_MANAGER } from '@/core'
+import OpenRouterLLMProvider from '@/core/llm-manager/llm-providers/openrouter-llm-provider'
+import CerebrasLLMProvider from '@/core/llm-manager/llm-providers/cerebras-llm-provider'
+import HuggingFaceLLMProvider from '@/core/llm-manager/llm-providers/huggingface-llm-provider'
+import { BRAIN, LLM_MANAGER } from '@/core'
 
 interface CompletionResult {
   dutyType: LLMDuties
@@ -27,19 +31,35 @@ interface CompletionResult {
   usedInputTokens: number
   usedOutputTokens: number
   temperature: number
+  /**
+   * When the model responds with tool calls (native tool calling),
+   * this field contains the parsed tool_calls array.
+   */
+  toolCalls?: OpenAIToolCall[]
 }
 interface NormalizedCompletionResult {
   rawResult: string
   usedInputTokens: number
   usedOutputTokens: number
+  toolCalls?: OpenAIToolCall[]
 }
-type Provider = LocalLLMProvider | GroqLLMProvider | undefined
+type Provider =
+  | LocalLLMProvider
+  | GroqLLMProvider
+  | OpenRouterLLMProvider
+  | CerebrasLLMProvider
+  | HuggingFaceLLMProvider
+  | undefined
 
 const LLM_PROVIDERS_MAP = {
   [LLMProviders.Local]: 'local-llm-provider',
-  [LLMProviders.Groq]: 'groq-llm-provider'
+  [LLMProviders.Groq]: 'groq-llm-provider',
+  [LLMProviders.OpenRouter]: 'openrouter-llm-provider',
+  [LLMProviders.Cerebras]: 'cerebras-llm-provider',
+  [LLMProviders.HuggingFace]: 'huggingface-llm-provider'
 }
-const DEFAULT_MAX_EXECUTION_TIMOUT = 32_000
+const DEFAULT_MAX_EXECUTION_TIMOUT =
+  LLM_PROVIDER === LLMProviders.Local ? 32_000 : 120_000
 const DEFAULT_MAX_EXECUTION_RETRIES = 2
 const DEFAULT_TEMPERATURE = 0 // Disabled
 const DEFAULT_MAX_TOKENS = 8_192
@@ -128,12 +148,76 @@ export default class LLMProvider {
     rawResult: AxiosResponse
   ): NormalizedCompletionResult {
     const parsedCompletionResult = JSON.parse(rawResult.data)
+    const message = parsedCompletionResult.choices[0].message
 
-    return {
-      rawResult: parsedCompletionResult.choices[0].message.content,
+    const result: NormalizedCompletionResult = {
+      rawResult: message.content || '',
       usedInputTokens: parsedCompletionResult.usage.prompt_tokens,
       usedOutputTokens: parsedCompletionResult.usage.completion_tokens
     }
+
+    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      result.toolCalls = message.tool_calls as OpenAIToolCall[]
+    }
+
+    return result
+  }
+
+  private normalizeCompletionResultForOpenRouterProvider(
+    rawResult: AxiosResponse
+  ): NormalizedCompletionResult {
+    const parsedCompletionResult = rawResult.data
+    const message = parsedCompletionResult.choices[0].message
+
+    const result: NormalizedCompletionResult = {
+      rawResult: message.content || '',
+      usedInputTokens: parsedCompletionResult.usage.prompt_tokens,
+      usedOutputTokens: parsedCompletionResult.usage.completion_tokens
+    }
+
+    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      result.toolCalls = message.tool_calls as OpenAIToolCall[]
+    }
+
+    return result
+  }
+
+  private normalizeCompletionResultForCerebrasProvider(
+    rawResult: AxiosResponse
+  ): NormalizedCompletionResult {
+    const parsedCompletionResult = rawResult.data
+    const message = parsedCompletionResult.choices[0].message
+
+    const result: NormalizedCompletionResult = {
+      rawResult: message.content || '',
+      usedInputTokens: parsedCompletionResult.usage.prompt_tokens,
+      usedOutputTokens: parsedCompletionResult.usage.completion_tokens
+    }
+
+    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      result.toolCalls = message.tool_calls as OpenAIToolCall[]
+    }
+
+    return result
+  }
+
+  private normalizeCompletionResultForHuggingFaceProvider(
+    rawResult: AxiosResponse
+  ): NormalizedCompletionResult {
+    const parsedCompletionResult = rawResult.data
+    const message = parsedCompletionResult.choices[0].message
+
+    const result: NormalizedCompletionResult = {
+      rawResult: message.content || '',
+      usedInputTokens: parsedCompletionResult.usage.prompt_tokens,
+      usedOutputTokens: parsedCompletionResult.usage.completion_tokens
+    }
+
+    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      result.toolCalls = message.tool_calls as OpenAIToolCall[]
+    }
+
+    return result
   }
 
   public cleanUpResult(str: string): string {
@@ -209,6 +293,24 @@ export default class LLMProvider {
       LogHelper.title('LLM Provider')
       LogHelper.error(`Error to complete prompt: ${e}`)
 
+      if (axios.isAxiosError(e)) {
+        const apiError = e.response?.data
+        let apiErrorDetails = ''
+
+        if (apiError) {
+          apiErrorDetails =
+            typeof apiError === 'string' ? apiError : JSON.stringify(apiError)
+        }
+
+        const brainMessage = BRAIN.wernicke('llm_provider_http_error', '', {
+          '{{ provider }}': LLM_PROVIDER,
+          '{{ error }}': String(e),
+          '{{ api_error }}': apiErrorDetails ? `\n${apiErrorDetails}` : ''
+        })
+
+        await BRAIN.talk(brainMessage, true)
+      }
+
       // throw new Error('Prompt failed after all retries')
       return null
 
@@ -235,6 +337,7 @@ export default class LLMProvider {
 
     let usedInputTokens = 0
     let usedOutputTokens = 0
+    let toolCalls: OpenAIToolCall[] | undefined
 
     /**
      * Normalize the completion result according to the provider
@@ -255,17 +358,41 @@ export default class LLMProvider {
         usedOutputTokens = outputTokens
       }
     } else if (LLM_PROVIDER === LLMProviders.Groq) {
-      const {
-        rawResult: result,
-        usedInputTokens: inputTokens,
-        usedOutputTokens: outputTokens
-      } = this.normalizeCompletionResultForGroqProvider(
+      const normalized = this.normalizeCompletionResultForGroqProvider(
         rawResult as AxiosResponse
       )
 
-      rawResult = result
-      usedInputTokens = inputTokens
-      usedOutputTokens = outputTokens
+      rawResult = normalized.rawResult
+      usedInputTokens = normalized.usedInputTokens
+      usedOutputTokens = normalized.usedOutputTokens
+      toolCalls = normalized.toolCalls
+    } else if (LLM_PROVIDER === LLMProviders.OpenRouter) {
+      const normalized = this.normalizeCompletionResultForOpenRouterProvider(
+        rawResult as AxiosResponse
+      )
+
+      rawResult = normalized.rawResult
+      usedInputTokens = normalized.usedInputTokens
+      usedOutputTokens = normalized.usedOutputTokens
+      toolCalls = normalized.toolCalls
+    } else if (LLM_PROVIDER === LLMProviders.Cerebras) {
+      const normalized = this.normalizeCompletionResultForCerebrasProvider(
+        rawResult as AxiosResponse
+      )
+
+      rawResult = normalized.rawResult
+      usedInputTokens = normalized.usedInputTokens
+      usedOutputTokens = normalized.usedOutputTokens
+      toolCalls = normalized.toolCalls
+    } else if (LLM_PROVIDER === LLMProviders.HuggingFace) {
+      const normalized = this.normalizeCompletionResultForHuggingFaceProvider(
+        rawResult as AxiosResponse
+      )
+
+      rawResult = normalized.rawResult
+      usedInputTokens = normalized.usedInputTokens
+      usedOutputTokens = normalized.usedOutputTokens
+      toolCalls = normalized.toolCalls
     } else {
       LogHelper.error(`The LLM provider "${LLM_PROVIDER}" is not yet supported`)
       return null
@@ -295,14 +422,32 @@ export default class LLMProvider {
         typeof promptOrChatHistory === 'string'
           ? promptOrChatHistory
           : JSON.stringify(promptOrChatHistory),
-      output: isJSONMode ? JSON.parse(rawResultString) : rawResultString,
+      // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+      output: (() => {
+        if (!isJSONMode) {
+          return rawResultString
+        }
+
+        try {
+          return JSON.parse(rawResultString)
+        } catch (error) {
+          LogHelper.title('LLM Provider')
+          LogHelper.warning(
+            `Failed to parse JSON output for ${completionParams.dutyType}: ${
+              (error as Error).message
+            }`
+          )
+          return rawResultString
+        }
+      })(),
       data: completionParams.data,
       functions: completionParams.functions,
       maxTokens: completionParams.maxTokens,
       thoughtTokensBudget: completionParams.thoughtTokensBudget,
       // Current used context size
       usedInputTokens,
-      usedOutputTokens
+      usedOutputTokens,
+      ...(toolCalls ? { toolCalls } : {})
     }
   }
 }

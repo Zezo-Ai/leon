@@ -25,6 +25,11 @@
       "Sorry, I don't understand your query",
       "Sorry, I'm still very young, I didn't get your point"
     ],
+    "skill_not_found_offer_create": [
+      "I don't have a skill for that yet, but I can develop it for you right now.",
+      "That skill doesn't exist yet, but I can create it for you now.",
+      "I don't have this skill yet. I can build it for you right away."
+    ],
     "random_not_sure": [
       "Sorry, you may repeat in an another way",
       "Sorry, I'm not sure I understood correctly",
@@ -61,6 +66,9 @@
       "I can't fulfill this request because my large language model is not enabled",
       "Sorry, I need my large language model to answer this request, but it's not enabled",
       "My large language model is not enabled, so I can't answer this request"
+    ],
+    "llm_provider_http_error": [
+      "{{ provider }} provider: error to complete prompt: {{ error }}{{ api_error }}"
     ],
     "action_loop_stopped": [
       "Sure, let me know if you need anything else",

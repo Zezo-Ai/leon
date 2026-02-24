@@ -1,3 +1,6 @@
 {
-  "name": "Business & Finance"
+  "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
+  "name": "File System",
+  "description": "Tools for file system operations.",
+  "tools": []
 }
