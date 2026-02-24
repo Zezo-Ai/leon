@@ -82,6 +82,7 @@ No other keys, no null values.`
 export const MAX_EXECUTIONS = 20
 export const MAX_REPLANS = 3
 export const MAX_RETRIES_PER_FUNCTION = 2
+export const MAX_TOOL_FAILURE_RETRIES = 2
 export const REACT_TEMPERATURE = 0.2
 
 export const REACT_LOCAL_PROVIDER_HISTORY_LOGS = 8

@@ -117,8 +117,7 @@ export default class OpenRouterLLMProvider {
           messages: messagesHistory,
           model: this.model,
           temperature: 0.7,
-          stream: false,
-          order: ['cerebras']
+          stream: false
         }
 
         if (completionParams.tools && completionParams.tools.length > 0) {
@@ -133,6 +132,13 @@ export default class OpenRouterLLMProvider {
             response_format: {
               type: 'json_object'
             }
+          }
+        }
+
+        if (!completionParams.tools || completionParams.tools.length === 0) {
+          chatCompletionParams = {
+            ...chatCompletionParams,
+            order: ['cerebras']
           }
         }
 

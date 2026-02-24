@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync, unlinkSync } from 'node:fs'
+import { writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -18,7 +18,8 @@ import {
   PLAN_SYSTEM_PROMPT,
   EXECUTE_SYSTEM_PROMPT,
   RESOLVE_FUNCTION_SYSTEM_PROMPT,
-  MAX_RETRIES_PER_FUNCTION
+  MAX_RETRIES_PER_FUNCTION,
+  MAX_TOOL_FAILURE_RETRIES
 } from './constants'
 import type {
   PlanStep,
@@ -218,6 +219,11 @@ export async function runPlanningPhase(
 
     if (toolResult?.toolCall) {
       try {
+        if (toolResult.toolCall.functionName !== 'create_plan') {
+          LogHelper.debug(
+            `Planning: unexpected tool call "${toolResult.toolCall.functionName}", falling back to JSON mode`
+          )
+        } else {
         const parsedArgs = JSON.parse(toolResult.toolCall.arguments)
         if (Array.isArray(parsedArgs.steps)) {
           const steps = parseStepsFromArgs(parsedArgs.steps)
@@ -237,6 +243,7 @@ export async function runPlanningPhase(
             type: 'final',
             answer: (parsedArgs.summary as string).trim()
           }
+        }
         }
       } catch {
         LogHelper.debug('Planning: failed to parse create_plan arguments')
@@ -259,10 +266,24 @@ export async function runPlanningPhase(
       }
     }
 
-    return {
-      type: 'final',
-      answer: 'I could not determine what to do.'
+    // Final fallback: JSON mode planning
+    const jsonModeResult = await caller.callLLM(
+      prompt,
+      planSystemPrompt,
+      planSchema,
+      history
+    )
+    const parsed = parseOutput(jsonModeResult?.output)
+    const planResult = extractPlanFromParsed(parsed)
+    if (planResult) {
+      return planResult
     }
+
+    const raw =
+      typeof jsonModeResult?.output === 'string'
+        ? jsonModeResult.output.trim()
+        : ''
+    return { type: 'final', answer: raw || 'I could not determine what to do.' }
   }
 
   // --- Local provider: use grammar-constrained JSON mode ---
@@ -772,6 +793,7 @@ async function executeFunctionWithNativeTools(
 
   let retries = 0
   let lastError = ''
+  let toolFailureRetries = 0
 
   while (retries <= MAX_RETRIES_PER_FUNCTION) {
     const retryNote = lastError
@@ -807,7 +829,7 @@ async function executeFunctionWithNativeTools(
         continue
       }
 
-      return runToolExecution(
+      const toolResult = await runToolExecution(
         toolkitId,
         toolId,
         functionName,
@@ -815,6 +837,24 @@ async function executeFunctionWithNativeTools(
         functionConfig,
         inputValidation.parsedValue
       )
+
+      if (toolResult.missingSettingsMessage) {
+        return toolResult
+      }
+
+      if (toolResult.finalAnswer) {
+        return toolResult
+      }
+
+      if (toolResult.execution.status === 'error') {
+        if (toolFailureRetries < 2) {
+          toolFailureRetries += 1
+          lastError = `Tool execution failed: ${toolResult.execution.observation}`
+          continue
+        }
+      }
+
+      return toolResult
     }
 
     // Model responded with text instead of a tool call — parse for replan/final
@@ -907,6 +947,7 @@ async function executeFunctionWithJSONMode(
 
   let retries = 0
   let lastError = ''
+  let toolFailureRetries = 0
 
   while (retries <= MAX_RETRIES_PER_FUNCTION) {
     const retryNote = lastError
@@ -956,7 +997,7 @@ async function executeFunctionWithJSONMode(
         continue
       }
 
-      return runToolExecution(
+      const toolResult = await runToolExecution(
         toolkitId,
         toolId,
         functionName,
@@ -964,6 +1005,24 @@ async function executeFunctionWithJSONMode(
         functionConfig,
         inputValidation.parsedValue
       )
+
+      if (toolResult.missingSettingsMessage) {
+        return toolResult
+      }
+
+      if (toolResult.finalAnswer) {
+        return toolResult
+      }
+
+      if (toolResult.execution.status === 'error') {
+        if (toolFailureRetries < MAX_TOOL_FAILURE_RETRIES) {
+          toolFailureRetries += 1
+          lastError = `Tool execution failed: ${toolResult.execution.observation}`
+          continue
+        }
+      }
+
+      return toolResult
     }
 
     retries += 1
@@ -1045,15 +1104,6 @@ export async function runToolExecution(
 
   const toolExecutionResult =
     await TOOL_EXECUTOR.executeTool(toolExecutionInput)
-
-  // Clean up temp script
-  if (bashScriptPath) {
-    try {
-      unlinkSync(bashScriptPath)
-    } catch {
-      // Ignore cleanup errors
-    }
-  }
 
   LogHelper.title(DUTY_NAME)
   LogHelper.debug(

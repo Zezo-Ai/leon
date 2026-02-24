@@ -442,6 +442,23 @@ export class ReActLLMDuty extends LLMDuty {
     ).toolCalls
     if (toolCalls && toolCalls.length > 0) {
       const firstCall = toolCalls[0]!
+      const allowedToolNames = new Set(tools.map((t) => t.function.name))
+      if (!allowedToolNames.has(firstCall.function.name)) {
+        LogHelper.title(this.name)
+        LogHelper.warning(
+          `callLLMWithTools: unexpected tool call "${firstCall.function.name}" (allowed: ${[...allowedToolNames].join(', ') || 'none'})`
+        )
+
+        const textContentFallback =
+          typeof completionResult.output === 'string'
+            ? completionResult.output
+            : ''
+        return {
+          textContent: textContentFallback,
+          usedInputTokens: completionResult.usedInputTokens,
+          usedOutputTokens: completionResult.usedOutputTokens
+        }
+      }
       LogHelper.title(this.name)
       LogHelper.debug(
         `callLLMWithTools: tool call received — ${firstCall.function.name}(${firstCall.function.arguments.slice(0, 200)})`
