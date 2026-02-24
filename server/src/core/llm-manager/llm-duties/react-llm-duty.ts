@@ -396,6 +396,20 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
           const onlyInvalidResponses = steps.length
             ? steps.every((step) => step.action === 'invalid_response')
             : false
+          const hasToolActions = steps.some((step) =>
+            step.action.startsWith('toolkit:') ||
+            step.action.startsWith('tool:') ||
+            step.action.startsWith('function:')
+          )
+          if (!parsedOutput && !hasToolActions) {
+            return {
+              dutyType: LLMDuties.ReAct,
+              systemPrompt: this.systemPrompt,
+              input: this.input,
+              output: rawOutput.trim(),
+              data: {}
+            } as unknown as LLMDutyResult
+          }
           if (!parsedOutput && onlyInvalidResponses) {
             return {
               dutyType: LLMDuties.ReAct,
@@ -408,7 +422,7 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
         }
         if (!responseValidation.isValid) {
           invalidResponseCount += 1
-          if (invalidResponseCount >= 2) {
+          if (invalidResponseCount >= MAX_INVALID_INPUTS) {
             return {
               dutyType: LLMDuties.ReAct,
               systemPrompt: this.systemPrompt,
@@ -566,9 +580,17 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
               })
               continue
             }
+            const availableTools = selectedToolkitId
+              ? toolkitsMap.get(selectedToolkitId)?.tools || []
+              : []
+            const toolsHint = availableTools.length
+              ? ` Available tools: ${availableTools
+                  .map((tool) => tool.id)
+                  .join(', ')}.`
+              : ''
             steps.push({
               action: `tool:${toolId || 'unknown_tool'}`,
-              observation: 'Unknown tool_id for selected toolkit.'
+              observation: `Unknown tool_id for selected toolkit.${toolsHint}`
             })
             continue
           }

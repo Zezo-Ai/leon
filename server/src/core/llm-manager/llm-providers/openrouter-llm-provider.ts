@@ -25,6 +25,7 @@ interface OpenRouterChatCompletionParams {
   response_format?: {
     type: 'json_object'
   }
+  order?: string[]
 }
 type OpenRouterCompletionParams = Omit<CompletionParams, ''>
 
@@ -111,8 +112,9 @@ export default class OpenRouterLLMProvider {
         let chatCompletionParams: OpenRouterChatCompletionParams = {
           messages: messagesHistory,
           model: this.model,
-          temperature: 1.0,
-          stream: false
+          temperature: 0.7,
+          stream: false,
+          order: ['cerebras']
         }
 
         if (isJSONMode) {
