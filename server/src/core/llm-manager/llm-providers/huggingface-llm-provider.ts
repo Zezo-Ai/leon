@@ -2,23 +2,21 @@ import axios, { type AxiosError, type AxiosResponse } from 'axios'
 
 import type {
   CompletionParams,
-  OpenAITool,
-  OpenAIToolChoice,
   PromptOrChatHistory
 } from '@/core/llm-manager/types'
 import { LogHelper } from '@/helpers/log-helper'
 
 /**
- * @see https://openrouter.ai/docs
+ * @see https://router.huggingface.co/v1/chat/completions
  */
-interface OpenRouterMessage {
+interface HuggingFaceMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   name?: string
 }
-interface OpenRouterChatCompletionParams {
+interface HuggingFaceChatCompletionParams {
   model: string
-  messages: OpenRouterMessage[]
+  messages: HuggingFaceMessage[]
   max_tokens?: number
   temperature?: number
   top_p?: number
@@ -27,19 +25,17 @@ interface OpenRouterChatCompletionParams {
   response_format?: {
     type: 'json_object'
   }
-  order?: string[]
-  tools?: OpenAITool[]
-  tool_choice?: OpenAIToolChoice
 }
-type OpenRouterCompletionParams = Omit<CompletionParams, ''>
+type HuggingFaceCompletionParams = Omit<CompletionParams, ''>
 
-export default class OpenRouterLLMProvider {
-  protected readonly name = 'OpenRouter LLM Provider'
-  protected readonly apiKey = process.env['LEON_OPENROUTER_API_KEY']
+export default class HuggingFaceLLMProvider {
+  protected readonly name = 'HuggingFace LLM Provider'
+  protected readonly apiKey = process.env['LEON_HUGGINGFACE_API_KEY']
   protected readonly model =
-    process.env['LEON_OPENROUTER_MODEL'] || 'openrouter/auto'
+    process.env['LEON_HUGGINGFACE_MODEL'] ||
+    'meta-llama/Meta-Llama-3.1-8B-Instruct'
   private readonly axios = axios.create({
-    baseURL: 'https://openrouter.ai/api/v1',
+    baseURL: 'https://router.huggingface.co/v1',
     timeout: 120_000
   })
 
@@ -62,7 +58,7 @@ export default class OpenRouterLLMProvider {
 
   public runChatCompletion(
     prompt: PromptOrChatHistory,
-    completionParams: OpenRouterCompletionParams
+    completionParams: HuggingFaceCompletionParams
   ): Promise<AxiosResponse> {
     return new Promise(async (resolve, reject) => {
       try {
@@ -79,7 +75,7 @@ export default class OpenRouterLLMProvider {
           )}`
         }
 
-        let messagesHistory: OpenRouterMessage[] = []
+        let messagesHistory: HuggingFaceMessage[] = []
         if (completionParams.history) {
           messagesHistory = completionParams.history.map((message) => {
             if (message.who === 'leon') {
@@ -113,21 +109,14 @@ export default class OpenRouterLLMProvider {
           })
         }
 
-        let chatCompletionParams: OpenRouterChatCompletionParams = {
+        let chatCompletionParams: HuggingFaceChatCompletionParams = {
           messages: messagesHistory,
           model: this.model,
           temperature: 0.7,
-          stream: false,
-          order: ['cerebras']
+          stream: false
         }
 
-        if (completionParams.tools && completionParams.tools.length > 0) {
-          chatCompletionParams = {
-            ...chatCompletionParams,
-            tools: completionParams.tools,
-            tool_choice: completionParams.toolChoice || 'auto'
-          }
-        } else if (isJSONMode) {
+        if (isJSONMode) {
           chatCompletionParams = {
             ...chatCompletionParams,
             response_format: {
@@ -136,16 +125,14 @@ export default class OpenRouterLLMProvider {
           }
         }
 
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`
-        }
-
         const promise = this.axios.request({
           url: '/chat/completions',
           method: 'POST',
           data: chatCompletionParams,
-          headers
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`
+          }
         })
 
         return resolve(promise)

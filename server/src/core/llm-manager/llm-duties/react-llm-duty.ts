@@ -18,8 +18,15 @@ import {
   CONVERSATION_LOGGER,
   BRAIN
 } from '@/core'
-import { LLMDuties, LLMProviders } from '@/core/llm-manager/types'
+import {
+  LLMDuties,
+  LLMProviders,
+  type OpenAITool,
+  type OpenAIToolCall,
+  type OpenAIToolChoice
+} from '@/core/llm-manager/types'
 import { LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
+import type { MessageLog } from '@/types'
 
 type ReactLLMDutyParams = LLMDutyParams;
 
@@ -27,45 +34,100 @@ const formatFilePath = (filePath: string): string => {
   return `[FILE_PATH]${filePath}[/FILE_PATH]`
 }
 
-const SYSTEM_PROMPT = `You are an autonomous reasoning and acting agent. Your goal is to solve the user's request.
+/**
+ * Catalog token budget. When the lightweight function catalog exceeds this
+ * estimated token count we fall back to a tool-level catalog (no individual
+ * functions) and resolve functions during the execution phase.
+ *
+ * ~4 chars per token is a conservative estimate that works across model
+ * tokenizers.
+ */
+const CATALOG_TOKEN_BUDGET = 2000
+const CHARS_PER_TOKEN = 4
 
-You may choose a toolkit, then choose a tool, then choose a function, or provide a final answer. Tools ARE executed, and after a function call you will receive an observation with the tool result. Use observations to decide the next step.
+const PLAN_SYSTEM_PROMPT = `You are an autonomous planning and acting agent. Your goal is to solve the user's request.
+
+You have access to a catalog of available tools and functions. Your job is to:
+1. Analyze the user request
+2. Select the functions (or tools) you need to call, in order
+3. Provide a short natural language summary of your plan for the user
+
+Only use functions/tools that are listed in the catalog. If no function/tool is relevant, provide a direct answer.
+
+Prefer dedicated tools over the operating_system_control toolkit.
+You must always consider other tools before using the operating_system_control toolkit. Use the operating_system_control toolkit and bash tool only as a last resort when no suitable tool exists.
+
+If your answers include a file path, wrap it as [FILE_PATH]/the_path_here[/FILE_PATH].
+
+Return ONLY one of the following JSON shapes:
+- {"type":"plan","steps":[{"function":"toolkit_id.tool_id.function_name"},...],"summary":"..."}
+- {"type":"final","answer":"..."}
+
+"steps" is an ordered array of functions to call. Each step has a "function" field with the fully qualified name (toolkit_id.tool_id.function_name).
+If the catalog only lists tools (without functions), use the format toolkit_id.tool_id in the "function" field.
+"summary" is a short natural language description of the plan for the user.
+
+No other keys, no null values.`
+
+const EXECUTE_SYSTEM_PROMPT = `You are an autonomous acting agent executing a plan step by step.
+
+You are now executing a specific function. You are given the function signature with its parameters.
+Fill in the tool_input based on the user request and any observations from previous steps.
 
 When chaining tools, reuse fields from the latest observation to fill the next tool_input whenever possible.
-If the latest observation includes tool output data, prefer to copy exact values into the next tool_input rather than paraphrasing.
-
-Select a toolkit to see its tools. Select a tool to see its functions. You can select different toolkits/tools later if needed.
-
-Only use toolkits, tools, and functions that are listed. If unsure, select a toolkit or tool to see the available options.
-
-After a successful tool result, decide the next tool or finish. Do not repeat the same tool selection.
-
-Prefer dedicated toolkits/tools over the operating_system_control toolkit.
-You must always go through other toolkits and tools before using the operating_system_control toolkit. Use the operating_system_control toolkit and bash tool only as a last resort when no suitable tool exists.
 
 When the next action is based on uncertainty, assumptions, ambiguous selection, or could be irreversible, ask for confirmation before executing the tool.
 
 tool_input must be a JSON string.
 
+If your answers include a file path, wrap it as [FILE_PATH]/the_path_here[/FILE_PATH].
+
 Return ONLY one of the following JSON shapes:
-- {"type":"toolkit","toolkit_id":"..."}
-- {"type":"tool","tool_id":"..."}
-- {"type":"function","function_name":"...","tool_input":"{...}"}
+- {"type":"execute","function_name":"...","tool_input":"{...}"}
+- {"type":"replan","functions":["toolkit_id.tool_id.function_name",...],"reason":"..."}
 - {"type":"final","answer":"..."}
+
+No other keys, no null values.`
+
+const RESOLVE_FUNCTION_SYSTEM_PROMPT = `You are selecting a function from a tool to execute.
+
+You are given the available functions for a specific tool. Choose the most appropriate function for the current step and provide the tool_input.
+
+tool_input must be a JSON string.
 
 If your answers include a file path, wrap it as [FILE_PATH]/the_path_here[/FILE_PATH].
 
-Do not output schema keywords like "oneOf", "properties", or "required".
+Return ONLY one of the following JSON shapes:
+- {"type":"execute","function_name":"...","tool_input":"{...}"}
+- {"type":"replan","functions":["toolkit_id.tool_id.function_name",...],"reason":"..."}
+- {"type":"final","answer":"..."}
+
 No other keys, no null values.`
-const MAX_STEPS = 64
+
+const MAX_EXECUTIONS = 20
+const MAX_REPLANS = 3
+const MAX_RETRIES_PER_FUNCTION = 2
 const REACT_TEMPERATURE = 0.2
-const MAX_INVALID_INPUTS = 4
 const REACT_LOCAL_PROVIDER_HISTORY_LOGS = 8
 const REACT_REMOTE_PROVIDER_HISTORY_LOGS = 16
-const TOOL_DISABLED_OBSERVATION =
-  'No valid action received. Choose a toolkit, tool, function, or provide a final answer.'
-const FINAL_FALLBACK_RESPONSE =
-  'I need a clear toolkit/tool/function selection or a final answer to proceed.'
+
+interface PlanStep {
+  function: string
+}
+
+interface ExecutionRecord {
+  function: string
+  status: string
+  observation: string
+}
+
+/**
+ * Determines whether a catalog entry refers to a tool (toolkit.tool) rather
+ * than a fully-qualified function (toolkit.tool.function).
+ */
+const isToolLevel = (qualifiedName: string): boolean => {
+  return qualifiedName.split('.').length <= 2
+}
 
 export class ReActLLMDuty extends LLMDuty {
   private static instance: ReActLLMDuty
@@ -87,7 +149,7 @@ export class ReActLLMDuty extends LLMDuty {
     }
 
     this.input = params.input
-    this.systemPrompt = PERSONA.getCompactDutySystemPrompt(SYSTEM_PROMPT)
+    this.systemPrompt = PERSONA.getCompactDutySystemPrompt(PLAN_SYSTEM_PROMPT)
   }
 
   public async init(
@@ -143,711 +205,81 @@ export class ReActLLMDuty extends LLMDuty {
           : await CONVERSATION_LOGGER.load({
               nbOfLogsToLoad: REACT_LOCAL_PROVIDER_HISTORY_LOGS
             })
-      const flattenedTools = TOOLKIT_REGISTRY.getFlattenedTools()
-      const toolkitsMap = new Map<
-        string,
-        {
-          name: string
-          description: string
-          tools: { id: string, name: string, description: string }[]
-        }
-      >()
-      const steps: { action: string, observation?: string }[] = []
 
-      flattenedTools.forEach((tool) => {
-        if (!toolkitsMap.has(tool.toolkitId)) {
-          toolkitsMap.set(tool.toolkitId, {
-            name: tool.toolkitName,
-            description: tool.toolkitDescription,
-            tools: []
-          })
-        }
+      // --- Build adaptive catalog ---
+      const catalog = this.buildCatalog()
 
-        toolkitsMap.get(tool.toolkitId)?.tools.push({
-          id: tool.toolId,
-          name: tool.toolName,
-          description: tool.toolDescription
-        })
-      })
-
-      const toolkitsList = Array.from(toolkitsMap.entries())
-        .map(
-          ([toolkitId, toolkit]) =>
-            `- ${toolkit.name} (${toolkitId}): ${toolkit.description}`
-        )
-        .join('\n')
-      const toolkitsSectionCache = toolkitsList
-        ? `Available Toolkits:\n${toolkitsList}`
-        : 'Available Toolkits: none'
-      const toolsSectionCache = new Map<string, string>()
-      const functionsSectionCache = new Map<string, string>()
-
-      toolkitsMap.forEach((toolkit, toolkitId) => {
-        const toolsList = toolkit.tools
-          .map((tool) => `  - ${tool.id}: ${tool.name} — ${tool.description}`)
-          .join('\n')
-        toolsSectionCache.set(
-          toolkitId,
-          toolsList
-            ? `Available Tools (Selected Toolkit):\n${toolsList}`
-            : 'Available Tools (Selected Toolkit): none'
-        )
-      })
-
-      const getFunctionsSection = (
-        toolkitId: string | null,
-        toolId: string | null
-      ): string => {
-        if (!toolkitId || !toolId) {
-          return 'Available Functions (Selected Tool): none'
-        }
-        const cacheKey = `${toolkitId}/${toolId}`
-        const cached = functionsSectionCache.get(cacheKey)
-        if (cached) {
-          return cached
-        }
-        const toolFunctions = TOOLKIT_REGISTRY.getToolFunctions(
-          toolkitId,
-          toolId
-        )
-        const functionsList = toolFunctions
-          ? Object.entries(toolFunctions)
-              .map(([functionName, config]) => {
-                const inputs = JSON.stringify(config.parameters)
-                return `  - ${functionName}: ${config.description} ${inputs}`
-              })
-              .join('\n')
-          : ''
-        const section = toolFunctions
-          ? `Available Functions (Selected Tool):\n${functionsList}`
-          : 'Available Functions (Selected Tool): none'
-        functionsSectionCache.set(cacheKey, section)
-        return section
+      // --- Phase 1: Planning ---
+      const planResult = await this.runPlanningPhase(catalog, history)
+      if (planResult.type === 'final') {
+        return this.makeDutyResult(planResult.answer)
       }
 
-      let selectedToolkitId: string | null = null
-      let selectedToolId: string | null = null
-      let invalidResponseCount = 0
-      let invalidInputCount = 0
-      let maxSteps = MAX_STEPS
-      let lastSuccessfulToolId: string | null = null
-      const emitProgress = async (message: string): Promise<void> => {
-        if (!message) {
-          return
-        }
-        await BRAIN.talk(message)
-      }
+      let pendingSteps = [...planResult.steps]
+      const executionHistory: ExecutionRecord[] = []
+      let replanCount = 0
+      let executionCount = 0
 
-      for (let stepIndex = 0; stepIndex < maxSteps; stepIndex += 1) {
-        const stepsSection = steps.length
-          ? `Previous Steps:\n${steps
-              .map((step, index) => {
-                const observation = step.observation
-                  ? `\n  Observation: ${step.observation}`
-                  : ''
-                return `Step ${index + 1}: ${step.action}${observation}`
-              })
-              .join('\n')}`
-          : 'Previous Steps: none'
+      // --- Phase 2: Execution loop ---
+      while (pendingSteps.length > 0 && executionCount < MAX_EXECUTIONS) {
+        const currentStep = pendingSteps.shift()!
+        executionCount += 1
 
-        const selectedToolkitSection = selectedToolkitId
-          ? `Selected Toolkit: ${selectedToolkitId}`
-          : 'Selected Toolkit: none'
-        const selectedToolSection = selectedToolId
-          ? `Selected Tool: ${selectedToolId}`
-          : 'Selected Tool: none'
-
-        const toolsSection = selectedToolkitId
-          ? toolsSectionCache.get(selectedToolkitId) ||
-            'Available Tools (Selected Toolkit): none'
-          : 'Available Tools (Selected Toolkit): none'
-        const functionsSection = getFunctionsSection(
-          selectedToolkitId,
-          selectedToolId
+        const stepResult = await this.runExecutionStep(
+          currentStep,
+          executionHistory,
+          catalog
         )
-        const toolkitsSection = toolkitsSectionCache
 
-        const latestObservation = steps.length
-          ? steps[steps.length - 1]?.observation
-          : null
-        const latestObservationSection = latestObservation
-          ? `Latest Observation:\n${latestObservation}`
-          : 'Latest Observation: none'
-        const prompt = `${toolkitsSection}\n\n${selectedToolkitSection}\n\n${toolsSection}\n\n${selectedToolSection}\n\n${functionsSection}\n\n${stepsSection}\n\n${latestObservationSection}\n\nUser Request: "${this.input}"`
-        const responseSchema = {
-          oneOf: [
-            {
-              type: 'object',
-              properties: {
-                type: { type: 'string', enum: ['toolkit'] },
-                toolkit_id: { type: 'string' }
-              },
-              required: ['type', 'toolkit_id'],
-              additionalProperties: false
-            },
-            {
-              type: 'object',
-              properties: {
-                type: { type: 'string', enum: ['tool'] },
-                tool_id: { type: 'string' }
-              },
-              required: ['type', 'tool_id'],
-              additionalProperties: false
-            },
-            {
-              type: 'object',
-              properties: {
-                type: { type: 'string', enum: ['function'] },
-                function_name: { type: 'string' },
-                tool_input: { type: 'string' }
-              },
-              required: ['type', 'function_name', 'tool_input'],
-              additionalProperties: false
-            },
-            {
-              type: 'object',
-              properties: {
-                type: { type: 'string', enum: ['final'] },
-                answer: { type: 'string' }
-              },
-              required: ['type', 'answer'],
-              additionalProperties: false
-            }
-          ]
+        if (stepResult.type === 'final') {
+          return this.makeDutyResult(stepResult.answer)
         }
-        const completionParams = {
-          dutyType: LLMDuties.ReAct,
-          systemPrompt: this.systemPrompt as string,
-          data:
-            LLM_PROVIDER_NAME === LLMProviders.Local ? responseSchema : null,
-          temperature: REACT_TEMPERATURE
-        }
-        let completionResult
 
-        if (LLM_PROVIDER_NAME === LLMProviders.Local) {
-          completionResult = await LLM_PROVIDER.prompt(prompt, {
-            ...completionParams,
-            history,
-            session: ReActLLMDuty.session
-          })
-        } else {
-          const completionParamsWithHistory = history
-            ? { ...completionParams, history }
-            : completionParams
-          completionResult = await LLM_PROVIDER.prompt(
-            prompt,
-            completionParamsWithHistory
+        if (stepResult.type === 'replan') {
+          replanCount += 1
+          if (replanCount > MAX_REPLANS) {
+            LogHelper.title(this.name)
+            LogHelper.warning('Max re-plans reached, synthesizing answer')
+            break
+          }
+
+          await this.emitProgress(
+            `Adjusting plan: ${stepResult.reason}. New steps: ${stepResult.functions.join(', ')}`
           )
-        }
-
-        const rawOutput = completionResult?.output
-        if (LLM_PROVIDER_NAME !== LLMProviders.Local) {
-          LogHelper.title(this.name)
-          LogHelper.debug(`Step ${stepIndex + 1} prompt — ${prompt}`)
-          LogHelper.debug(
-            `Step ${stepIndex + 1} output — ${JSON.stringify(rawOutput)}`
-          )
-        }
-        let parsedOutput: {
-          type?: string
-          toolkit_id?: string
-          tool_id?: string
-          function_name?: string
-          tool_input?: string
-          answer?: string
-        } | null = null
-
-        if (rawOutput && typeof rawOutput === 'object') {
-          parsedOutput = rawOutput as typeof parsedOutput
-        } else if (typeof rawOutput === 'string') {
-          const parsed = this.parseModelOutput(rawOutput)
-          if (parsed?.parsedOutput) {
-            parsedOutput = parsed.parsedOutput
-          }
-          if (parsed?.preamble) {
-            await emitProgress(parsed.preamble)
-          }
-        }
-
-        if (parsedOutput?.type === 'final' && parsedOutput?.answer) {
-          if (completionResult) {
-            completionResult.output = parsedOutput.answer
-          }
-
-          LogHelper.title(this.name)
-          LogHelper.success('Duty executed')
-          LogHelper.success(`Prompt — ${prompt}`)
-          LogHelper.success(`Output — ${JSON.stringify(
-            completionResult?.output
-          )}
-usedInputTokens: ${completionResult?.usedInputTokens}
-usedOutputTokens: ${completionResult?.usedOutputTokens}`)
-
-          return completionResult as unknown as LLMDutyResult
-        }
-
-        const parsedOutputRecord = parsedOutput as Record<
-          string,
-          unknown
-        > | null
-        const responseValidation =
-          this.validateResponseShape(parsedOutputRecord)
-        if (!responseValidation.isValid && typeof rawOutput === 'string') {
-          const onlyInvalidResponses = steps.length
-            ? steps.every((step) => step.action === 'invalid_response')
-            : false
-          const hasToolActions = steps.some((step) =>
-            step.action.startsWith('toolkit:') ||
-            step.action.startsWith('tool:') ||
-            step.action.startsWith('function:')
-          )
-          if (!parsedOutput && !hasToolActions) {
-            return {
-              dutyType: LLMDuties.ReAct,
-              systemPrompt: this.systemPrompt,
-              input: this.input,
-              output: rawOutput.trim(),
-              data: {}
-            } as unknown as LLMDutyResult
-          }
-          if (!parsedOutput && onlyInvalidResponses) {
-            return {
-              dutyType: LLMDuties.ReAct,
-              systemPrompt: this.systemPrompt,
-              input: this.input,
-              output: rawOutput.trim(),
-              data: {}
-            } as unknown as LLMDutyResult
-          }
-        }
-        if (!responseValidation.isValid) {
-          invalidResponseCount += 1
-          if (invalidResponseCount >= MAX_INVALID_INPUTS) {
-            return {
-              dutyType: LLMDuties.ReAct,
-              systemPrompt: this.systemPrompt,
-              input: this.input,
-              output: responseValidation.message || FINAL_FALLBACK_RESPONSE,
-              data: {}
-            } as unknown as LLMDutyResult
-          }
-
-          steps.push({
-            action: 'invalid_response',
-            observation:
-              responseValidation.message ||
-              'Return a JSON object with type=toolkit|tool|function|final and required fields.'
-          })
+          pendingSteps = stepResult.functions.map((f) => ({ function: f }))
           continue
         }
 
-        if (parsedOutput?.type === 'toolkit') {
-          const toolkitId = parsedOutput?.toolkit_id || ''
-          if (!toolkitId) {
-            steps.push({
-              action: 'toolkit:missing_id',
-              observation: 'toolkit_id is required when type=toolkit.'
-            })
-            continue
-          }
-          const hasToolkit = TOOLKIT_REGISTRY.toolkits.some(
-            (toolkit) => toolkit.id === toolkitId
-          )
-          if (hasToolkit) {
-            selectedToolkitId = toolkitId
-            selectedToolId = null
-            steps.push({
-              action: `toolkit:${toolkitId}`
-            })
-          } else {
-            steps.push({
-              action: `toolkit:${toolkitId || 'unknown_toolkit'}`,
-              observation: 'Unknown toolkit_id. Choose an existing toolkit.'
-            })
-          }
-          continue
+        // Record execution
+        executionHistory.push(stepResult.execution)
+
+        // Emit progress
+        const nextStep = pendingSteps[0]
+        const progressMsg = nextStep
+          ? `Completed: ${stepResult.execution.function}. Next: ${nextStep.function}`
+          : `Completed: ${stepResult.execution.function}. Preparing final answer...`
+        await this.emitProgress(progressMsg)
+
+        // Check for short-circuit final answer from tool result
+        if (stepResult.finalAnswer) {
+          return this.makeDutyResult(stepResult.finalAnswer)
         }
 
-        if (parsedOutput?.type === 'tool') {
-          const toolId = parsedOutput?.tool_id || ''
-          if (!toolId) {
-            steps.push({
-              action: 'tool:missing_id',
-              observation: 'tool_id is required when type=tool.'
-            })
-            continue
-          }
-          if (lastSuccessfulToolId && toolId === lastSuccessfulToolId) {
-            selectedToolId = null
-            steps.push({
-              action: `tool:${toolId}`,
-              observation:
-                'Tool already succeeded. Choose the next tool or function.'
-            })
-            continue
-          }
-          if (selectedToolId && toolId === selectedToolId) {
-            const toolFunctions = TOOLKIT_REGISTRY.getToolFunctions(
-              selectedToolkitId || '',
-              selectedToolId
-            )
-            const availableFunctions = toolFunctions
-              ? Object.keys(toolFunctions).join(', ')
-              : ''
-            steps.push({
-              action: `tool:${toolId}`,
-              observation: availableFunctions
-                ? `Tool already selected. Choose a function next. Available functions: ${availableFunctions}.`
-                : 'Tool already selected. Choose a function next.'
-            })
-            continue
-          }
-          if (selectedToolkitId && toolId === selectedToolkitId) {
-            selectedToolId = null
-            steps.push({
-              action: `toolkit:${selectedToolkitId}`,
-              observation:
-                'Interpreted tool_id as a toolkit_id. Choose a tool next.'
-            })
-            const toolkitTools: {
-              id: string
-              name: string
-              description: string
-            }[] = toolkitsMap.get(selectedToolkitId)?.tools || []
-            if (toolkitTools.length === 1) {
-              selectedToolId = toolkitTools[0]?.id || null
-              if (selectedToolId) {
-                steps.push({
-                  action: `tool:${selectedToolId}`,
-                  observation:
-                    'Auto-selected the only available tool in this toolkit.'
-                })
-              }
-            }
-            continue
-          }
-          const toolIdParts = toolId.split('/')
-          if (toolIdParts.length === 2 && toolIdParts[0] && toolIdParts[1]) {
-            selectedToolkitId = toolIdParts[0]
-            selectedToolId = toolIdParts[1]
-          }
-          if (!selectedToolkitId) {
-            const toolkitMatch = TOOLKIT_REGISTRY.toolkits.find(
-              (toolkit) => toolkit.id === toolId
-            )
-            if (toolkitMatch) {
-              selectedToolkitId = toolkitMatch.id
-              selectedToolId = null
-              steps.push({
-                action: `toolkit:${toolkitMatch.id}`,
-                observation:
-                  'Interpreted tool_id as a toolkit_id. Choose a tool next.'
-              })
-              continue
-            }
-
-            const resolvedTool = TOOLKIT_REGISTRY.resolveToolById(toolId)
-            if (resolvedTool) {
-              selectedToolkitId = resolvedTool.toolkitId
-              selectedToolId = resolvedTool.toolId
-              steps.push({
-                action: `tool:${resolvedTool.toolId}`
-              })
-              continue
-            }
-
-            steps.push({
-              action: `tool:${toolId || 'unknown_tool'}`,
-              observation: 'Select a toolkit before choosing a tool.'
-            })
-            continue
-          }
-
-          const resolvedTool = TOOLKIT_REGISTRY.resolveToolById(
-            selectedToolId || toolId,
-            selectedToolkitId
-          )
-          if (!resolvedTool) {
-            const resolvedAnyToolkit = TOOLKIT_REGISTRY.resolveToolById(
-              selectedToolId || toolId
-            )
-            if (resolvedAnyToolkit) {
-              selectedToolkitId = resolvedAnyToolkit.toolkitId
-              selectedToolId = resolvedAnyToolkit.toolId
-              steps.push({
-                action: `tool:${resolvedAnyToolkit.toolId}`,
-                observation: 'Switched toolkit to match the requested tool_id.'
-              })
-              continue
-            }
-            const availableTools = selectedToolkitId
-              ? toolkitsMap.get(selectedToolkitId)?.tools || []
-              : []
-            const toolsHint = availableTools.length
-              ? ` Available tools: ${availableTools
-                  .map((tool) => tool.id)
-                  .join(', ')}.`
-              : ''
-            steps.push({
-              action: `tool:${toolId || 'unknown_tool'}`,
-              observation: `Unknown tool_id for selected toolkit.${toolsHint}`
-            })
-            continue
-          }
-
-          selectedToolId = resolvedTool.toolId
-          steps.push({
-            action: `tool:${resolvedTool.toolId}`
-          })
-          continue
+        // Check for missing settings error — return immediately
+        if (stepResult.missingSettingsMessage) {
+          return this.makeDutyResult(stepResult.missingSettingsMessage)
         }
-
-        if (parsedOutput?.type === 'function') {
-          const functionName = parsedOutput?.function_name || ''
-          const normalizedFunctionName =
-            functionName.split(/[./]/).filter(Boolean).pop() || ''
-          const toolInput = parsedOutput?.tool_input || ''
-
-          if (!functionName) {
-            steps.push({
-              action: 'function:missing_name',
-              observation: 'function_name is required when type=function.'
-            })
-            continue
-          }
-
-          if (!selectedToolId && functionName.includes('.')) {
-            const parts = functionName.split(/[./]/).filter(Boolean)
-            const candidates = parts.slice(0, -1).reverse()
-            let resolvedFromFunction = null as null | {
-              toolkitId: string
-              toolId: string
-            }
-            for (const candidate of candidates) {
-              const resolvedTool = selectedToolkitId
-                ? TOOLKIT_REGISTRY.resolveToolById(candidate, selectedToolkitId)
-                : TOOLKIT_REGISTRY.resolveToolById(candidate)
-              if (resolvedTool) {
-                resolvedFromFunction = resolvedTool
-                break
-              }
-            }
-            if (resolvedFromFunction) {
-              selectedToolkitId = resolvedFromFunction.toolkitId
-              selectedToolId = resolvedFromFunction.toolId
-              steps.push({
-                action: `tool:${resolvedFromFunction.toolId}`,
-                observation:
-                  'Interpreted function_name as a tool_id. Choose a function next.'
-              })
-              continue
-            }
-          }
-
-          if (normalizedFunctionName && !selectedToolId) {
-            const resolvedTool = selectedToolkitId
-              ? TOOLKIT_REGISTRY.resolveToolById(
-                  normalizedFunctionName,
-                  selectedToolkitId
-                )
-              : TOOLKIT_REGISTRY.resolveToolById(normalizedFunctionName)
-            if (resolvedTool) {
-              selectedToolkitId = resolvedTool.toolkitId
-              selectedToolId = resolvedTool.toolId
-              steps.push({
-                action: `tool:${resolvedTool.toolId}`,
-                observation:
-                  'Interpreted function_name as a tool_id. Choose a function next.'
-              })
-              continue
-            }
-          }
-
-          if (selectedToolId && normalizedFunctionName === selectedToolId) {
-            steps.push({
-              action: `tool:${selectedToolId}`,
-              observation:
-                'Interpreted function_name as a tool_id. Choose a function next.'
-            })
-            continue
-          }
-
-          if (!selectedToolkitId || !selectedToolId) {
-            const toolkitTools = selectedToolkitId
-              ? toolkitsMap.get(selectedToolkitId)?.tools || []
-              : []
-            const toolsHint = toolkitTools.length
-              ? ` Available tools: ${toolkitTools
-                  .map((tool) => tool.id)
-                  .join(', ')}.`
-              : ''
-            steps.push({
-              action: `function:${functionName || 'unknown_function'}`,
-              observation: `Select a toolkit and tool before choosing a function.${toolsHint}`
-            })
-            continue
-          }
-
-          const toolFunctions = TOOLKIT_REGISTRY.getToolFunctions(
-            selectedToolkitId,
-            selectedToolId
-          )
-          const functionConfig = toolFunctions?.[normalizedFunctionName]
-          if (!functionConfig) {
-            const availableFunctions = toolFunctions
-              ? Object.keys(toolFunctions).join(', ')
-              : ''
-            steps.push({
-              action: `function:${functionName || 'unknown_function'}`,
-              observation: availableFunctions
-                ? `Unknown function_name for selected tool. Available functions: ${availableFunctions}.`
-                : 'Unknown function_name for selected tool.'
-            })
-            continue
-          }
-          const inputValidation = this.validateToolInput(
-            toolInput,
-            functionConfig?.parameters || null
-          )
-
-          if (!inputValidation.isValid) {
-            invalidInputCount += 1
-            if (invalidInputCount >= MAX_INVALID_INPUTS) {
-              return {
-                dutyType: LLMDuties.ReAct,
-                systemPrompt: this.systemPrompt,
-                input: this.input,
-                output:
-                  'I need a bit more detail to proceed. Please provide the missing fields for this function input.',
-                data: {}
-              } as unknown as LLMDutyResult
-            }
-
-            steps.push({
-              action: `function:${functionName || 'unknown_function'}`,
-              observation:
-                inputValidation.message ||
-                'Invalid tool_input. Provide JSON matching the function parameters.'
-            })
-            continue
-          }
-
-          const toolInputToUse = inputValidation.repairedToolInput ?? toolInput
-
-          const toolExecutionInput = {
-            toolId: selectedToolId,
-            toolkitId: selectedToolkitId,
-            functionName: normalizedFunctionName,
-            toolInput: toolInputToUse
-          } as {
-            toolId: string
-            toolkitId: string
-            functionName: string
-            toolInput: string
-            parsedInput?: Record<string, unknown>
-          }
-
-          if (inputValidation.parsedValue) {
-            toolExecutionInput.parsedInput = inputValidation.parsedValue
-          }
-
-          const toolExecutionResult =
-            await TOOL_EXECUTOR.executeTool(toolExecutionInput)
-          const finalAnswer =
-            this.extractFinalAnswerFromToolResult(toolExecutionResult)
-          if (finalAnswer) {
-            return {
-              dutyType: LLMDuties.ReAct,
-              systemPrompt: this.systemPrompt,
-              input: this.input,
-              output: finalAnswer,
-              data: {}
-            } as unknown as LLMDutyResult
-          }
-          if (toolExecutionResult.status === 'success') {
-            lastSuccessfulToolId = selectedToolId
-          }
-          const missingSettings =
-            toolExecutionResult.status === 'error'
-              ? (toolExecutionResult.data.output?.['missing_settings'] as
-                  | string[]
-                  | undefined)
-              : undefined
-          const settingsPath =
-            toolExecutionResult.status === 'error'
-              ? (toolExecutionResult.data.output?.['settings_path'] as
-                  | string
-                  | undefined)
-              : undefined
-          if (missingSettings && missingSettings.length > 0 && settingsPath) {
-            const formattedPath = formatFilePath(settingsPath)
-            return {
-              dutyType: LLMDuties.ReAct,
-              systemPrompt: this.systemPrompt,
-              input: this.input,
-              output: `Missing tool settings: ${missingSettings.join(
-                ', '
-              )}. Please set them in ${formattedPath}.`,
-              data: {}
-            } as unknown as LLMDutyResult
-          }
-          if (toolExecutionResult.status === 'invalid_input') {
-            invalidInputCount += 1
-            if (invalidInputCount >= MAX_INVALID_INPUTS) {
-              return {
-                dutyType: LLMDuties.ReAct,
-                systemPrompt: this.systemPrompt,
-                input: this.input,
-                output:
-                  'I need a bit more detail to proceed. Please provide the missing fields for this function input.',
-                data: {}
-              } as unknown as LLMDutyResult
-            }
-          }
-          const toolLabel =
-            toolExecutionResult.toolLabel || selectedToolId || 'unknown_tool'
-          const observationPayload: Record<string, unknown> = {
-            status: toolExecutionResult.status,
-            message: toolExecutionResult.message,
-            data: toolExecutionResult.data
-          }
-          if (toolExecutionResult.status === 'invalid_input') {
-            observationPayload['repair_hint'] =
-              toolExecutionResult.message ||
-              'Fix tool_input using required fields and correct order.'
-          }
-          const observation = JSON.stringify(observationPayload)
-
-          steps.push({
-            action: `function:${toolLabel}.${functionName}${
-              toolInputToUse ? `(${toolInputToUse})` : ''
-            }`,
-            observation
-          })
-          if (stepIndex >= maxSteps - 1) {
-            maxSteps += 1
-          }
-          continue
-        }
-
-        steps.push({
-          action: 'final',
-          observation: TOOL_DISABLED_OBSERVATION
-        })
       }
 
-      const completionResult = {
-        output: FINAL_FALLBACK_RESPONSE,
-        dutyType: LLMDuties.ReAct,
-        systemPrompt: this.systemPrompt as string,
-        input: this.input
-      } as unknown as LLMDutyResult
+      // --- Phase 3: Final answer synthesis ---
+      if (executionHistory.length === 0) {
+        return this.makeDutyResult(
+          'I was unable to find the right tools to help with your request.'
+        )
+      }
 
-      LogHelper.title(this.name)
-      LogHelper.success('Duty executed')
-      LogHelper.success(`Output — ${JSON.stringify(completionResult?.output)}`)
-
-      return completionResult
+      const finalAnswer = await this.runFinalAnswerPhase(executionHistory)
+      return this.makeDutyResult(finalAnswer)
     } catch (e) {
       LogHelper.title(this.name)
       LogHelper.error(`Failed to execute: ${e}`)
@@ -856,114 +288,1274 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
     return null
   }
 
-  private validateResponseShape(output: Record<string, unknown> | null): {
-    isValid: boolean
-    message?: string
+  // ---------------------------------------------------------------------------
+  // Catalog building
+  // ---------------------------------------------------------------------------
+
+  private buildCatalog(): {
+    text: string
+    mode: 'function' | 'tool'
   } {
-    if (!output || typeof output !== 'object') {
+    const flattenedTools = TOOLKIT_REGISTRY.getFlattenedTools()
+
+    // First try function-level catalog
+    const functionLines: string[] = []
+    for (const tool of flattenedTools) {
+      const toolFunctions = TOOLKIT_REGISTRY.getToolFunctions(
+        tool.toolkitId,
+        tool.toolId
+      )
+      if (toolFunctions) {
+        for (const [fnName, fnConfig] of Object.entries(toolFunctions)) {
+          functionLines.push(
+            `- ${tool.toolkitId}.${tool.toolId}.${fnName}: ${fnConfig.description}`
+          )
+        }
+      }
+    }
+
+    const functionCatalog = functionLines.join('\n')
+    const estimatedTokens = Math.ceil(
+      functionCatalog.length / CHARS_PER_TOKEN
+    )
+
+    if (estimatedTokens <= CATALOG_TOKEN_BUDGET) {
       return {
-        isValid: false,
-        message:
-          'Return a JSON object with type=toolkit|tool|function|final and required fields.'
+        text: `Available Functions:\n${functionCatalog}`,
+        mode: 'function'
       }
     }
 
-    if (
-      output['oneOf'] !== undefined ||
-      output['properties'] !== undefined ||
-      output['required'] !== undefined
-    ) {
-      return {
-        isValid: false,
-        message:
-          'Do not output schema keywords like oneOf/properties/required.'
-      }
-    }
-
-    const type = output['type']
-    if (typeof type !== 'string') {
-      return {
-        isValid: false,
-        message: 'Field "type" must be one of: toolkit, tool, function, final.'
-      }
-    }
-
-    const keys = Object.keys(output)
-    if (type === 'toolkit') {
-      if (!output['toolkit_id']) {
-        return {
-          isValid: false,
-          message: 'toolkit_id is required when type=toolkit.'
-        }
-      }
-      if (keys.some((key) => !['type', 'toolkit_id'].includes(key))) {
-        return {
-          isValid: false,
-          message: 'Only type and toolkit_id are allowed for type=toolkit.'
-        }
-      }
-      return { isValid: true }
-    }
-
-    if (type === 'tool') {
-      if (!output['tool_id']) {
-        return {
-          isValid: false,
-          message: 'tool_id is required when type=tool.'
-        }
-      }
-      if (keys.some((key) => !['type', 'tool_id'].includes(key))) {
-        return {
-          isValid: false,
-          message: 'Only type and tool_id are allowed for type=tool.'
-        }
-      }
-      return { isValid: true }
-    }
-
-    if (type === 'function') {
-      if (!output['function_name'] || !output['tool_input']) {
-        return {
-          isValid: false,
-          message:
-            'function_name and tool_input are required when type=function.'
-        }
-      }
-      if (
-        keys.some(
-          (key) => !['type', 'function_name', 'tool_input'].includes(key)
-        )
-      ) {
-        return {
-          isValid: false,
-          message:
-            'Only type, function_name, and tool_input are allowed for type=function.'
-        }
-      }
-      return { isValid: true }
-    }
-
-    if (type === 'final') {
-      if (!output['answer']) {
-        return {
-          isValid: false,
-          message: 'answer is required when type=final.'
-        }
-      }
-      if (keys.some((key) => !['type', 'answer'].includes(key))) {
-        return {
-          isValid: false,
-          message: 'Only type and answer are allowed for type=final.'
-        }
-      }
-      return { isValid: true }
+    // Fall back to tool-level catalog
+    const toolLines: string[] = []
+    for (const tool of flattenedTools) {
+      toolLines.push(
+        `- ${tool.toolkitId}.${tool.toolId}: ${tool.toolDescription}`
+      )
     }
 
     return {
-      isValid: false,
-      message: 'Field "type" must be one of: toolkit, tool, function, final.'
+      text: `Available Tools:\n${toolLines.join('\n')}`,
+      mode: 'tool'
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Phase 1: Planning
+  // ---------------------------------------------------------------------------
+
+  private async runPlanningPhase(
+    catalog: { text: string, mode: 'function' | 'tool' },
+    history: MessageLog[]
+  ): Promise<
+    | { type: 'plan', steps: PlanStep[], summary: string }
+    | { type: 'final', answer: string }
+  > {
+    const catalogNote =
+      catalog.mode === 'tool'
+        ? '\nNote: The catalog lists tools, not individual functions. Use the format toolkit_id.tool_id in your plan steps.'
+        : ''
+    const planSystemPrompt = PERSONA.getCompactDutySystemPrompt(
+      PLAN_SYSTEM_PROMPT
+    )
+    const prompt = `${catalog.text}${catalogNote}\n\nUser Request: "${this.input}"`
+
+    const planSchema = {
+      oneOf: [
+        {
+          type: 'object',
+          properties: {
+            type: { type: 'string', enum: ['plan'] },
+            steps: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  function: { type: 'string' }
+                },
+                required: ['function'],
+                additionalProperties: false
+              }
+            },
+            summary: { type: 'string' }
+          },
+          required: ['type', 'steps', 'summary'],
+          additionalProperties: false
+        },
+        {
+          type: 'object',
+          properties: {
+            type: { type: 'string', enum: ['final'] },
+            answer: { type: 'string' }
+          },
+          required: ['type', 'answer'],
+          additionalProperties: false
+        }
+      ]
+    }
+
+    const completionParams = {
+      dutyType: LLMDuties.ReAct,
+      systemPrompt: planSystemPrompt,
+      data: planSchema,
+      temperature: REACT_TEMPERATURE,
+      history
+    }
+
+    let completionResult
+    if (LLM_PROVIDER_NAME === LLMProviders.Local) {
+      completionResult = await LLM_PROVIDER.prompt(prompt, {
+        ...completionParams,
+        session: ReActLLMDuty.session
+      })
+    } else {
+      completionResult = await LLM_PROVIDER.prompt(prompt, completionParams)
+    }
+
+    const parsed = this.parseOutput(completionResult?.output)
+    if (!parsed) {
+      // If the LLM couldn't produce structured output, treat raw as final answer
+      const raw =
+        typeof completionResult?.output === 'string'
+          ? completionResult.output.trim()
+          : ''
+      return { type: 'final', answer: raw || 'I could not understand how to help with that request.' }
+    }
+
+    if (parsed['type'] === 'final' && parsed['answer']) {
+      return { type: 'final', answer: parsed['answer'] as string }
+    }
+
+    if (
+      parsed['type'] === 'plan' &&
+      Array.isArray(parsed['steps']) &&
+      (parsed['steps'] as unknown[]).length > 0
+    ) {
+      const rawSteps = parsed['steps'] as Record<string, unknown>[]
+      const steps = rawSteps
+        .filter(
+          (s) =>
+            typeof s['function'] === 'string' && (s['function'] as string).trim()
+        )
+        .map((s) => ({
+          function: (s['function'] as string).trim()
+        }))
+
+      if (steps.length > 0) {
+        const summary =
+          typeof parsed['summary'] === 'string' ? (parsed['summary'] as string) : ''
+        if (summary) {
+          await this.emitProgress(summary)
+        }
+        return { type: 'plan', steps, summary }
+      }
+    }
+
+    // Fallback
+    const raw =
+      typeof completionResult?.output === 'string'
+        ? completionResult.output.trim()
+        : ''
+    return { type: 'final', answer: raw || 'I could not determine what to do.' }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phase 2: Execution
+  // ---------------------------------------------------------------------------
+
+  private async runExecutionStep(
+    step: PlanStep,
+    executionHistory: ExecutionRecord[],
+    catalog: { text: string, mode: 'function' | 'tool' }
+  ): Promise<
+    | { type: 'final', answer: string }
+    | {
+        type: 'replan'
+        reason: string
+        functions: string[]
+      }
+    | {
+        type: 'executed'
+        execution: ExecutionRecord
+        finalAnswer?: string
+        missingSettingsMessage?: string
+      }
+  > {
+    const qualifiedName = step.function
+    const parts = qualifiedName.split('.')
+
+    // If the plan only has tool-level references (from tool-level catalog),
+    // we need an extra resolution step to pick the right function.
+    if (isToolLevel(qualifiedName) || catalog.mode === 'tool') {
+      return this.runToolLevelExecution(
+        qualifiedName,
+        parts,
+        executionHistory,
+        catalog
+      )
+    }
+
+    // Function-level: we have toolkit.tool.function
+    const toolkitId = parts[0] || ''
+    const toolId = parts[1] || ''
+    const functionName = parts.slice(2).join('.') || ''
+
+    if (!toolkitId || !toolId || !functionName) {
+      return {
+        type: 'executed',
+        execution: {
+          function: qualifiedName,
+          status: 'error',
+          observation: `Invalid function reference "${qualifiedName}". Expected format: toolkit_id.tool_id.function_name.`
+        }
+      }
+    }
+
+    // Get function schema for this specific function
+    const toolFunctions = TOOLKIT_REGISTRY.getToolFunctions(
+      toolkitId,
+      toolId
+    )
+    const functionConfig = toolFunctions?.[functionName]
+
+    if (!functionConfig) {
+      // Try resolving via registry
+      const resolved = TOOLKIT_REGISTRY.resolveToolById(toolId, toolkitId)
+      if (!resolved) {
+        return {
+          type: 'executed',
+          execution: {
+            function: qualifiedName,
+            status: 'error',
+            observation: `Function "${qualifiedName}" not found in the registry.`
+          }
+        }
+      }
+      const resolvedFunctions = TOOLKIT_REGISTRY.getToolFunctions(
+        resolved.toolkitId,
+        resolved.toolId
+      )
+      if (!resolvedFunctions?.[functionName]) {
+        return {
+          type: 'executed',
+          execution: {
+            function: qualifiedName,
+            status: 'error',
+            observation: `Function "${functionName}" not found in tool "${resolved.toolId}". Available: ${resolvedFunctions ? Object.keys(resolvedFunctions).join(', ') : 'none'}.`
+          }
+        }
+      }
+    }
+
+    const resolvedConfig = functionConfig || TOOLKIT_REGISTRY.getToolFunctions(
+      toolkitId,
+      toolId
+    )?.[functionName]
+
+    if (!resolvedConfig) {
+      return {
+        type: 'executed',
+        execution: {
+          function: qualifiedName,
+          status: 'error',
+          observation: `Could not resolve function config for "${qualifiedName}".`
+        }
+      }
+    }
+
+    // Ask the LLM to fill in tool_input
+    return this.executeFunction(
+      toolkitId,
+      toolId,
+      functionName,
+      resolvedConfig,
+      executionHistory
+    )
+  }
+
+  /**
+   * Handles execution when the plan step refers to a tool (toolkit.tool)
+   * rather than a fully-qualified function. Shows the tool's functions
+   * and asks the LLM to pick one and provide input in a single step.
+   */
+  private async runToolLevelExecution(
+    qualifiedName: string,
+    parts: string[],
+    executionHistory: ExecutionRecord[],
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _catalog: { text: string, mode: 'function' | 'tool' }
+  ): Promise<
+    | { type: 'final', answer: string }
+    | { type: 'replan', reason: string, functions: string[] }
+    | {
+        type: 'executed'
+        execution: ExecutionRecord
+        finalAnswer?: string
+        missingSettingsMessage?: string
+      }
+  > {
+    const toolkitId = parts[0] || ''
+    const toolId = parts[1] || parts[0] || ''
+
+    // Try to resolve the tool
+    const resolved = TOOLKIT_REGISTRY.resolveToolById(toolId, toolkitId || undefined)
+    const effectiveToolkitId = resolved?.toolkitId || toolkitId
+    const effectiveToolId = resolved?.toolId || toolId
+
+    const toolFunctions = TOOLKIT_REGISTRY.getToolFunctions(
+      effectiveToolkitId,
+      effectiveToolId
+    )
+
+    if (!toolFunctions || Object.keys(toolFunctions).length === 0) {
+      return {
+        type: 'executed',
+        execution: {
+          function: qualifiedName,
+          status: 'error',
+          observation: `No functions found for tool "${qualifiedName}".`
+        }
+      }
+    }
+
+    const functionEntries = Object.entries(toolFunctions)
+
+    // If only one function, auto-select it
+    if (functionEntries.length === 1) {
+      const [fnName, fnConfig] = functionEntries[0]!
+      return this.executeFunction(
+        effectiveToolkitId,
+        effectiveToolId,
+        fnName,
+        fnConfig,
+        executionHistory
+      )
+    }
+
+    // Multiple functions — ask the LLM to pick one and provide input
+
+    // --- Native tool calling path (OpenRouter) ---
+    if (this.supportsNativeTools) {
+      return this.resolveToolFunctionWithNativeTools(
+        qualifiedName,
+        effectiveToolkitId,
+        effectiveToolId,
+        toolFunctions,
+        executionHistory
+      )
+    }
+
+    // --- JSON mode fallback ---
+    return this.resolveToolFunctionWithJSONMode(
+      qualifiedName,
+      effectiveToolkitId,
+      effectiveToolId,
+      toolFunctions,
+      functionEntries,
+      executionHistory
+    )
+  }
+
+  /**
+   * Uses native tool calling with tool_choice='auto' to let the model pick
+   * the right function from multiple options and provide arguments.
+   */
+  private async resolveToolFunctionWithNativeTools(
+    qualifiedName: string,
+    toolkitId: string,
+    toolId: string,
+    toolFunctions: Record<
+      string,
+      {
+        description: string
+        parameters: Record<string, unknown>
+        output_schema?: Record<string, unknown>
+      }
+    >,
+    executionHistory: ExecutionRecord[]
+  ): Promise<
+    | { type: 'final', answer: string }
+    | { type: 'replan', reason: string, functions: string[] }
+    | {
+        type: 'executed'
+        execution: ExecutionRecord
+        finalAnswer?: string
+        missingSettingsMessage?: string
+      }
+  > {
+    const historySection = this.formatExecutionHistory(executionHistory)
+    const resolveSystemPrompt = PERSONA.getCompactDutySystemPrompt(
+      RESOLVE_FUNCTION_SYSTEM_PROMPT
+    )
+
+    const tools: OpenAITool[] = Object.entries(toolFunctions).map(
+      ([fnName, fnConfig]) => ({
+        type: 'function' as const,
+        function: {
+          name: fnName,
+          description: fnConfig.description,
+          parameters: fnConfig.parameters
+        }
+      })
+    )
+
+    const prompt = `Tool: ${toolkitId}.${toolId}\n\n${historySection}\n\nUser Request: "${this.input}"\n\nSelect the appropriate function and provide arguments.`
+
+    const result = await this.callLLMWithTools(
+      prompt,
+      resolveSystemPrompt,
+      tools,
+      'auto'
+    )
+
+    if (!result) {
+      return {
+        type: 'executed',
+        execution: {
+          function: qualifiedName,
+          status: 'error',
+          observation: 'Failed to determine which function to call.'
+        }
+      }
+    }
+
+    if (result.toolCall) {
+      const fnName = result.toolCall.functionName
+      const fnConfig = toolFunctions[fnName]
+      if (!fnConfig) {
+        return {
+          type: 'executed',
+          execution: {
+            function: `${toolkitId}.${toolId}.${fnName}`,
+            status: 'error',
+            observation: `Function "${fnName}" not found. Available: ${Object.keys(toolFunctions).join(', ')}.`
+          }
+        }
+      }
+
+      const toolInput = result.toolCall.arguments || '{}'
+      return this.runToolExecution(
+        toolkitId,
+        toolId,
+        fnName,
+        toolInput,
+        fnConfig
+      )
+    }
+
+    // Text content fallback — parse for replan/final
+    if (result.textContent) {
+      const parsed = this.parseOutput(result.textContent)
+      if (parsed?.['type'] === 'final' && parsed['answer']) {
+        return { type: 'final', answer: parsed['answer'] as string }
+      }
+      if (parsed?.['type'] === 'replan') {
+        return {
+          type: 'replan',
+          reason: (parsed['reason'] as string) || 'Plan revision needed',
+          functions: Array.isArray(parsed['functions'])
+            ? (parsed['functions'] as string[])
+            : []
+        }
+      }
+    }
+
+    return {
+      type: 'executed',
+      execution: {
+        function: qualifiedName,
+        status: 'error',
+        observation: 'Could not resolve function from tool-level plan step.'
+      }
+    }
+  }
+
+  /**
+   * JSON mode fallback for resolving which function to call when the plan
+   * step refers to a tool with multiple functions.
+   */
+  private async resolveToolFunctionWithJSONMode(
+    qualifiedName: string,
+    effectiveToolkitId: string,
+    effectiveToolId: string,
+    toolFunctions: Record<
+      string,
+      {
+        description: string
+        parameters: Record<string, unknown>
+        output_schema?: Record<string, unknown>
+      }
+    >,
+    functionEntries: [string, { description: string, parameters: Record<string, unknown> }][],
+    executionHistory: ExecutionRecord[]
+  ): Promise<
+    | { type: 'final', answer: string }
+    | { type: 'replan', reason: string, functions: string[] }
+    | {
+        type: 'executed'
+        execution: ExecutionRecord
+        finalAnswer?: string
+        missingSettingsMessage?: string
+      }
+  > {
+    const functionsSection = functionEntries
+      .map(([fnName, fnConfig]) => {
+        const params = JSON.stringify(fnConfig.parameters)
+        return `- ${fnName}: ${fnConfig.description} ${params}`
+      })
+      .join('\n')
+
+    const historySection = this.formatExecutionHistory(executionHistory)
+    const resolveSystemPrompt = PERSONA.getCompactDutySystemPrompt(
+      RESOLVE_FUNCTION_SYSTEM_PROMPT
+    )
+    const prompt = `Tool: ${effectiveToolkitId}.${effectiveToolId}\n\nAvailable Functions:\n${functionsSection}\n\n${historySection}\n\nUser Request: "${this.input}"\n\nSelect the appropriate function and provide tool_input.`
+
+    const resolveSchema = {
+      oneOf: [
+        {
+          type: 'object',
+          properties: {
+            type: { type: 'string', enum: ['execute'] },
+            function_name: { type: 'string' },
+            tool_input: { type: 'string' }
+          },
+          required: ['type', 'function_name', 'tool_input'],
+          additionalProperties: false
+        },
+        {
+          type: 'object',
+          properties: {
+            type: { type: 'string', enum: ['replan'] },
+            functions: {
+              type: 'array',
+              items: { type: 'string' }
+            },
+            reason: { type: 'string' }
+          },
+          required: ['type', 'functions', 'reason'],
+          additionalProperties: false
+        },
+        {
+          type: 'object',
+          properties: {
+            type: { type: 'string', enum: ['final'] },
+            answer: { type: 'string' }
+          },
+          required: ['type', 'answer'],
+          additionalProperties: false
+        }
+      ]
+    }
+
+    const completionResult = await this.callLLM(prompt, resolveSystemPrompt, resolveSchema)
+    const parsed = this.parseOutput(completionResult?.output)
+
+    if (!parsed) {
+      return {
+        type: 'executed',
+        execution: {
+          function: qualifiedName,
+          status: 'error',
+          observation: 'Failed to determine which function to call.'
+        }
+      }
+    }
+
+    if (parsed['type'] === 'final' && parsed['answer']) {
+      return { type: 'final', answer: parsed['answer'] as string }
+    }
+
+    if (parsed['type'] === 'replan') {
+      return {
+        type: 'replan',
+        reason: (parsed['reason'] as string) || 'Plan revision needed',
+        functions: Array.isArray(parsed['functions'])
+          ? (parsed['functions'] as string[])
+          : []
+      }
+    }
+
+    if (parsed['type'] === 'execute' && parsed['function_name']) {
+      const fnName = (parsed['function_name'] as string)
+        .split(/[./]/)
+        .filter(Boolean)
+        .pop() || ''
+      const fnConfig = toolFunctions[fnName]
+      if (!fnConfig) {
+        return {
+          type: 'executed',
+          execution: {
+            function: `${effectiveToolkitId}.${effectiveToolId}.${fnName}`,
+            status: 'error',
+            observation: `Function "${fnName}" not found. Available: ${Object.keys(toolFunctions).join(', ')}.`
+          }
+        }
+      }
+
+      const toolInput = (parsed['tool_input'] as string) || '{}'
+      return this.runToolExecution(
+        effectiveToolkitId,
+        effectiveToolId,
+        fnName,
+        toolInput,
+        fnConfig
+      )
+    }
+
+    return {
+      type: 'executed',
+      execution: {
+        function: qualifiedName,
+        status: 'error',
+        observation: 'Could not resolve function from tool-level plan step.'
+      }
+    }
+  }
+
+  /**
+   * Asks the LLM to fill tool_input for a known function, then executes it.
+   * Uses native tool calling for supported providers (OpenRouter), falls back
+   * to JSON mode for others. Retries on invalid input up to MAX_RETRIES_PER_FUNCTION.
+   */
+  private async executeFunction(
+    toolkitId: string,
+    toolId: string,
+    functionName: string,
+    functionConfig: {
+      description: string
+      parameters: Record<string, unknown>
+      output_schema?: Record<string, unknown>
+    },
+    executionHistory: ExecutionRecord[]
+  ): Promise<
+    | { type: 'final', answer: string }
+    | { type: 'replan', reason: string, functions: string[] }
+    | {
+        type: 'executed'
+        execution: ExecutionRecord
+        finalAnswer?: string
+        missingSettingsMessage?: string
+      }
+  > {
+    // --- Native tool calling path (OpenRouter) ---
+    if (this.supportsNativeTools) {
+      return this.executeFunctionWithNativeTools(
+        toolkitId,
+        toolId,
+        functionName,
+        functionConfig,
+        executionHistory
+      )
+    }
+
+    // --- JSON mode fallback (Local, Groq, Cerebras, etc.) ---
+    return this.executeFunctionWithJSONMode(
+      toolkitId,
+      toolId,
+      functionName,
+      functionConfig,
+      executionHistory
+    )
+  }
+
+  /**
+   * Uses native OpenAI-style tool calling to fill tool_input.
+   * The LLM is forced to call the specific function via tool_choice.
+   */
+  private async executeFunctionWithNativeTools(
+    toolkitId: string,
+    toolId: string,
+    functionName: string,
+    functionConfig: {
+      description: string
+      parameters: Record<string, unknown>
+    },
+    executionHistory: ExecutionRecord[]
+  ): Promise<
+    | { type: 'final', answer: string }
+    | { type: 'replan', reason: string, functions: string[] }
+    | {
+        type: 'executed'
+        execution: ExecutionRecord
+        finalAnswer?: string
+        missingSettingsMessage?: string
+      }
+  > {
+    const qualifiedName = `${toolkitId}.${toolId}.${functionName}`
+    const historySection = this.formatExecutionHistory(executionHistory)
+    const executeSystemPrompt = PERSONA.getCompactDutySystemPrompt(
+      EXECUTE_SYSTEM_PROMPT
+    )
+
+    const tool: OpenAITool = {
+      type: 'function',
+      function: {
+        name: functionName,
+        description: functionConfig.description,
+        parameters: functionConfig.parameters
+      }
+    }
+
+    let retries = 0
+    let lastError = ''
+
+    while (retries <= MAX_RETRIES_PER_FUNCTION) {
+      const retryNote = lastError
+        ? `\n\nPrevious attempt failed: ${lastError}. Please fix the arguments.`
+        : ''
+      const prompt = `${historySection}\n\nUser Request: "${this.input}"${retryNote}`
+
+      const result = await this.callLLMWithTools(
+        prompt,
+        executeSystemPrompt,
+        [tool],
+        { type: 'function', function: { name: functionName } }
+      )
+
+      if (!result) {
+        retries += 1
+        lastError = 'Failed to produce output'
+        continue
+      }
+
+      // Model returned a tool call — extract and validate arguments
+      if (result.toolCall) {
+        const toolInput = result.toolCall.arguments || '{}'
+
+        const inputValidation = this.validateToolInput(
+          toolInput,
+          functionConfig.parameters
+        )
+        if (!inputValidation.isValid) {
+          retries += 1
+          lastError =
+            inputValidation.message || 'tool arguments do not match schema'
+          continue
+        }
+
+        return this.runToolExecution(
+          toolkitId,
+          toolId,
+          functionName,
+          inputValidation.repairedToolInput ?? toolInput,
+          functionConfig,
+          inputValidation.parsedValue
+        )
+      }
+
+      // Model responded with text instead of a tool call — parse for replan/final
+      if (result.textContent) {
+        const parsed = this.parseOutput(result.textContent)
+        if (parsed?.['type'] === 'final' && parsed['answer']) {
+          return { type: 'final', answer: parsed['answer'] as string }
+        }
+        if (parsed?.['type'] === 'replan') {
+          return {
+            type: 'replan',
+            reason: (parsed['reason'] as string) || 'Plan revision needed',
+            functions: Array.isArray(parsed['functions'])
+              ? (parsed['functions'] as string[])
+              : []
+          }
+        }
+      }
+
+      retries += 1
+      lastError = 'Model did not produce a tool call'
+    }
+
+    return {
+      type: 'executed',
+      execution: {
+        function: qualifiedName,
+        status: 'error',
+        observation: `Failed after ${MAX_RETRIES_PER_FUNCTION + 1} attempts: ${lastError}`
+      }
+    }
+  }
+
+  /**
+   * JSON mode fallback for providers that do not support native tool calling.
+   * The function signature is injected into the prompt text and the LLM
+   * returns structured JSON with the tool_input.
+   */
+  private async executeFunctionWithJSONMode(
+    toolkitId: string,
+    toolId: string,
+    functionName: string,
+    functionConfig: {
+      description: string
+      parameters: Record<string, unknown>
+    },
+    executionHistory: ExecutionRecord[]
+  ): Promise<
+    | { type: 'final', answer: string }
+    | { type: 'replan', reason: string, functions: string[] }
+    | {
+        type: 'executed'
+        execution: ExecutionRecord
+        finalAnswer?: string
+        missingSettingsMessage?: string
+      }
+  > {
+    const qualifiedName = `${toolkitId}.${toolId}.${functionName}`
+    const paramsSchema = JSON.stringify(functionConfig.parameters)
+    const historySection = this.formatExecutionHistory(executionHistory)
+    const executeSystemPrompt = PERSONA.getCompactDutySystemPrompt(
+      EXECUTE_SYSTEM_PROMPT
+    )
+
+    const executeSchema = {
+      oneOf: [
+        {
+          type: 'object',
+          properties: {
+            type: { type: 'string', enum: ['execute'] },
+            function_name: { type: 'string' },
+            tool_input: { type: 'string' }
+          },
+          required: ['type', 'function_name', 'tool_input'],
+          additionalProperties: false
+        },
+        {
+          type: 'object',
+          properties: {
+            type: { type: 'string', enum: ['replan'] },
+            functions: {
+              type: 'array',
+              items: { type: 'string' }
+            },
+            reason: { type: 'string' }
+          },
+          required: ['type', 'functions', 'reason'],
+          additionalProperties: false
+        },
+        {
+          type: 'object',
+          properties: {
+            type: { type: 'string', enum: ['final'] },
+            answer: { type: 'string' }
+          },
+          required: ['type', 'answer'],
+          additionalProperties: false
+        }
+      ]
+    }
+
+    let retries = 0
+    let lastError = ''
+
+    while (retries <= MAX_RETRIES_PER_FUNCTION) {
+      const retryNote = lastError
+        ? `\n\nPrevious attempt failed: ${lastError}. Please fix the tool_input.`
+        : ''
+      const prompt = `Function: ${qualifiedName}\nDescription: ${functionConfig.description}\nParameters: ${paramsSchema}\n\n${historySection}\n\nUser Request: "${this.input}"${retryNote}\n\nProvide the tool_input for this function.`
+
+      const completionResult = await this.callLLM(
+        prompt,
+        executeSystemPrompt,
+        executeSchema
+      )
+      const parsed = this.parseOutput(completionResult?.output)
+
+      if (!parsed) {
+        retries += 1
+        lastError = 'Failed to produce valid output'
+        continue
+      }
+
+      if (parsed['type'] === 'final' && parsed['answer']) {
+        return { type: 'final', answer: parsed['answer'] as string }
+      }
+
+      if (parsed['type'] === 'replan') {
+        return {
+          type: 'replan',
+          reason: (parsed['reason'] as string) || 'Plan revision needed',
+          functions: Array.isArray(parsed['functions'])
+            ? (parsed['functions'] as string[])
+            : []
+        }
+      }
+
+      if (parsed['type'] === 'execute') {
+        const toolInput = (parsed['tool_input'] as string) || '{}'
+
+        // Validate input
+        const inputValidation = this.validateToolInput(
+          toolInput,
+          functionConfig.parameters
+        )
+        if (!inputValidation.isValid) {
+          retries += 1
+          lastError =
+            inputValidation.message || 'tool_input does not match schema'
+          continue
+        }
+
+        return this.runToolExecution(
+          toolkitId,
+          toolId,
+          functionName,
+          inputValidation.repairedToolInput ?? toolInput,
+          functionConfig,
+          inputValidation.parsedValue
+        )
+      }
+
+      retries += 1
+      lastError = 'Unexpected response type'
+    }
+
+    return {
+      type: 'executed',
+      execution: {
+        function: qualifiedName,
+        status: 'error',
+        observation: `Failed after ${MAX_RETRIES_PER_FUNCTION + 1} attempts: ${lastError}`
+      }
+    }
+  }
+
+  /**
+   * Actually executes a tool via TOOL_EXECUTOR and processes the result.
+   */
+  private async runToolExecution(
+    toolkitId: string,
+    toolId: string,
+    functionName: string,
+    toolInput: string,
+    _functionConfig: {
+      description: string
+      parameters: Record<string, unknown>
+    },
+    parsedInput?: Record<string, unknown>
+  ): Promise<{
+    type: 'executed'
+    execution: ExecutionRecord
+    finalAnswer?: string
+    missingSettingsMessage?: string
+  }> {
+    const qualifiedName = `${toolkitId}.${toolId}.${functionName}`
+
+    const toolExecutionInput: {
+      toolId: string
+      toolkitId: string
+      functionName: string
+      toolInput: string
+      parsedInput?: Record<string, unknown>
+    } = {
+      toolId,
+      toolkitId,
+      functionName,
+      toolInput
+    }
+
+    if (parsedInput) {
+      toolExecutionInput.parsedInput = parsedInput
+    }
+
+    const toolExecutionResult =
+      await TOOL_EXECUTOR.executeTool(toolExecutionInput)
+
+    // Check for final_answer in tool result
+    const finalAnswer =
+      this.extractFinalAnswerFromToolResult(toolExecutionResult)
+    if (finalAnswer) {
+      return {
+        type: 'executed',
+        execution: {
+          function: qualifiedName,
+          status: 'success',
+          observation: finalAnswer
+        },
+        finalAnswer
+      }
+    }
+
+    // Check for missing settings
+    const missingSettings =
+      toolExecutionResult.status === 'error'
+        ? (toolExecutionResult.data.output?.['missing_settings'] as
+            | string[]
+            | undefined)
+        : undefined
+    const settingsPath =
+      toolExecutionResult.status === 'error'
+        ? (toolExecutionResult.data.output?.['settings_path'] as
+            | string
+            | undefined)
+        : undefined
+    if (missingSettings && missingSettings.length > 0 && settingsPath) {
+      const formattedPath = formatFilePath(settingsPath)
+      return {
+        type: 'executed',
+        execution: {
+          function: qualifiedName,
+          status: 'error',
+          observation: `Missing settings: ${missingSettings.join(', ')}`
+        },
+        missingSettingsMessage: `Missing tool settings: ${missingSettings.join(
+          ', '
+        )}. Please set them in ${formattedPath}.`
+      }
+    }
+
+    const observation = JSON.stringify({
+      status: toolExecutionResult.status,
+      message: toolExecutionResult.message,
+      data: toolExecutionResult.data
+    })
+
+    return {
+      type: 'executed',
+      execution: {
+        function: qualifiedName,
+        status: toolExecutionResult.status,
+        observation
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phase 3: Final answer synthesis
+  // ---------------------------------------------------------------------------
+
+  private async runFinalAnswerPhase(
+    executionHistory: ExecutionRecord[]
+  ): Promise<string> {
+    const historySection = this.formatExecutionHistory(executionHistory)
+    const systemPrompt = PERSONA.getCompactDutySystemPrompt(
+      'You are synthesizing a final answer from tool execution results. Provide a clear, helpful response to the user based on the observations collected.\n\nIf your answers include a file path, wrap it as [FILE_PATH]/the_path_here[/FILE_PATH].'
+    )
+    const prompt = `${historySection}\n\nUser Request: "${this.input}"\n\nBased on the execution results above, provide a final answer to the user.`
+
+    const finalSchema = {
+      type: 'object',
+      properties: {
+        answer: { type: 'string' }
+      },
+      required: ['answer'],
+      additionalProperties: false
+    }
+
+    const completionResult = await this.callLLM(
+      prompt,
+      systemPrompt,
+      finalSchema
+    )
+
+    if (completionResult?.output) {
+      const parsed = this.parseOutput(completionResult.output)
+      if (parsed?.['answer']) {
+        return parsed['answer'] as string
+      }
+      if (typeof completionResult.output === 'string') {
+        return completionResult.output.trim()
+      }
+    }
+
+    // Last resort: summarize from execution history
+    const lastSuccess = executionHistory
+      .filter((e) => e.status === 'success')
+      .pop()
+    if (lastSuccess) {
+      return lastSuccess.observation
+    }
+
+    return 'I completed the requested actions but could not generate a summary.'
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Whether the current LLM provider supports native OpenAI-style tool calling.
+   */
+  private get supportsNativeTools(): boolean {
+    return LLM_PROVIDER_NAME === LLMProviders.OpenRouter
+  }
+
+  private async callLLM(
+    prompt: string,
+    systemPrompt: string,
+    schema: Record<string, unknown>
+  ): Promise<{
+    output: unknown
+    usedInputTokens?: number
+    usedOutputTokens?: number
+  } | null> {
+    const completionParams = {
+      dutyType: LLMDuties.ReAct,
+      systemPrompt,
+      data: schema,
+      temperature: REACT_TEMPERATURE
+    }
+
+    if (LLM_PROVIDER_NAME === LLMProviders.Local) {
+      return LLM_PROVIDER.prompt(prompt, {
+        ...completionParams,
+        session: ReActLLMDuty.session
+      })
+    }
+
+    return LLM_PROVIDER.prompt(prompt, completionParams)
+  }
+
+  /**
+   * Calls the LLM using native tool calling (OpenAI-compatible `tools` API).
+   * Returns parsed tool call if successful, or null if the model responded
+   * with text content instead.
+   */
+  private async callLLMWithTools(
+    prompt: string,
+    systemPrompt: string,
+    tools: OpenAITool[],
+    toolChoice: OpenAIToolChoice
+  ): Promise<{
+    toolCall?: { functionName: string, arguments: string }
+    textContent?: string
+    usedInputTokens?: number
+    usedOutputTokens?: number
+  } | null> {
+    const completionResult = await LLM_PROVIDER.prompt(prompt, {
+      dutyType: LLMDuties.ReAct,
+      systemPrompt,
+      temperature: REACT_TEMPERATURE,
+      tools,
+      toolChoice
+    })
+
+    if (!completionResult) {
+      return null
+    }
+
+    // Check if the model responded with tool calls
+    const toolCalls = (completionResult as unknown as { toolCalls?: OpenAIToolCall[] }).toolCalls
+    if (toolCalls && toolCalls.length > 0) {
+      const firstCall = toolCalls[0]!
+      return {
+        toolCall: {
+          functionName: firstCall.function.name,
+          arguments: firstCall.function.arguments
+        },
+        usedInputTokens: completionResult.usedInputTokens,
+        usedOutputTokens: completionResult.usedOutputTokens
+      }
+    }
+
+    // Model responded with text content (no tool call)
+    const textContent =
+      typeof completionResult.output === 'string'
+        ? completionResult.output
+        : ''
+    return {
+      textContent,
+      usedInputTokens: completionResult.usedInputTokens,
+      usedOutputTokens: completionResult.usedOutputTokens
+    }
+  }
+
+  private formatExecutionHistory(history: ExecutionRecord[]): string {
+    if (history.length === 0) {
+      return 'Previous Executions: none'
+    }
+    return `Previous Executions:\n${history
+      .map(
+        (exec, i) =>
+          `Step ${i + 1}: ${exec.function} [${exec.status}]\n  Observation: ${exec.observation}`
+      )
+      .join('\n')}`
+  }
+
+  private async emitProgress(message: string): Promise<void> {
+    if (!message) {
+      return
+    }
+    await BRAIN.talk(message)
+  }
+
+  private makeDutyResult(output: string): LLMDutyResult {
+    LogHelper.title(this.name)
+    LogHelper.success('Duty executed')
+    LogHelper.success(`Output — ${output}`)
+
+    return {
+      dutyType: LLMDuties.ReAct,
+      systemPrompt: this.systemPrompt,
+      input: this.input,
+      output,
+      data: {}
+    } as unknown as LLMDutyResult
+  }
+
+  /**
+   * Parses raw LLM output into a structured object, handling both JSON
+   * objects from structured output and string responses from remote providers.
+   */
+  private parseOutput(
+    rawOutput: unknown
+  ): Record<string, unknown> | null {
+    if (!rawOutput) {
+      return null
+    }
+
+    if (typeof rawOutput === 'object' && !Array.isArray(rawOutput)) {
+      return rawOutput as Record<string, unknown>
+    }
+
+    if (typeof rawOutput !== 'string') {
+      return null
+    }
+
+    const trimmed = rawOutput.trim()
+    if (!trimmed) {
+      return null
+    }
+
+    // Try tagged JSON
+    const taggedJson = this.extractTaggedJson(trimmed)
+    if (taggedJson) {
+      try {
+        return JSON.parse(taggedJson)
+      } catch {
+        // Continue
+      }
+    }
+
+    // Try direct JSON parse
+    try {
+      return JSON.parse(trimmed)
+    } catch {
+      // Continue
+    }
+
+    // Try extracting JSON substring
+    const extracted = this.extractJsonSubstring(trimmed)
+    if (extracted) {
+      try {
+        const parsed = JSON.parse(extracted)
+        if (Array.isArray(parsed)) {
+          const first = parsed[0]
+          if (first && typeof first === 'object') {
+            return first as Record<string, unknown>
+          }
+          return null
+        }
+        return parsed
+      } catch {
+        // Continue
+      }
+    }
+
+    return null
+  }
+
+  // ---------------------------------------------------------------------------
+  // Validation (kept from original)
+  // ---------------------------------------------------------------------------
 
   private validateToolInput(
     toolInput: string,
@@ -1194,153 +1786,19 @@ usedOutputTokens: ${completionResult?.usedOutputTokens}`)
     return result
   }
 
-  private parseModelOutput(rawOutput: string): {
-    parsedOutput: {
-      type?: string
-      toolkit_id?: string
-      tool_id?: string
-      function_name?: string
-      tool_input?: string
-      answer?: string
-    } | null
-    preamble?: string
-  } | null {
-    const trimmed = rawOutput.trim()
-    if (!trimmed) {
-      return null
-    }
-
-    const taggedJson = this.extractTaggedJson(trimmed)
-    if (taggedJson) {
-      try {
-        return { parsedOutput: JSON.parse(taggedJson) }
-      } catch {
-        // Continue
-      }
-    }
-
-    try {
-      return { parsedOutput: JSON.parse(trimmed) }
-    } catch {
-      // Continue
-    }
-
-    const toolCall = this.parseToolCallFromText(trimmed)
-    if (toolCall) {
-      const functionName = toolCall.functionName
-        ? `${toolCall.toolId}.${toolCall.functionName}`
-        : toolCall.toolId
-      const parsedOutput = toolCall.functionName
-        ? {
-            type: 'function',
-            function_name: functionName,
-            tool_input: JSON.stringify(toolCall.args || {})
-          }
-        : { type: 'tool', tool_id: toolCall.toolId }
-      return toolCall.preamble
-        ? { parsedOutput, preamble: toolCall.preamble }
-        : { parsedOutput }
-    }
-
-    const extractedJson = this.extractJsonSubstring(trimmed)
-    if (!extractedJson) {
-      return null
-    }
-
-    try {
-      const parsed = JSON.parse(extractedJson) as
-        | {
-            type?: string
-            toolkit_id?: string
-            tool_id?: string
-            function_name?: string
-            tool_input?: string
-            answer?: string
-          }
-        | unknown[]
-      if (Array.isArray(parsed)) {
-        const [first] = parsed
-        if (first && typeof first === 'object') {
-          return { parsedOutput: first as Record<string, unknown> }
-        }
-        return null
-      }
-      return { parsedOutput: parsed }
-    } catch {
-      return null
-    }
-  }
+  // ---------------------------------------------------------------------------
+  // Output parsing helpers (kept from original)
+  // ---------------------------------------------------------------------------
 
   private extractTaggedJson(input: string): string | null {
-    const tagMatch = input.match(/\[(TOOL|TOOLKIT|FUNCTION|FINAL)\]/i)
+    const tagMatch = input.match(/\[(TOOL|TOOLKIT|FUNCTION|FINAL|PLAN|EXECUTE|REPLAN)\]/i)
     if (!tagMatch || tagMatch.index === undefined) {
       return null
     }
 
     const startIndex = tagMatch.index + tagMatch[0].length
     const rest = input.slice(startIndex).trim()
-    const json = this.extractJsonSubstring(rest)
-    return json
-  }
-
-  private parseToolCallFromText(input: string): {
-    toolId: string
-    functionName?: string
-    args?: Record<string, string>
-    preamble?: string
-  } | null {
-    const toolCallMatch = input.match(
-      /\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/i
-    )
-    if (!toolCallMatch) {
-      return null
-    }
-
-    const toolCallBody = toolCallMatch[1] || ''
-    const toolMatch = toolCallBody.match(/tool\s*=>\s*"([^"]+)"/i)
-    const toolId = toolMatch?.[1]
-    if (!toolId) {
-      return null
-    }
-
-    const functionMatch = toolCallBody.match(/function\s*=>\s*"([^"]+)"/i)
-    const args = this.parseToolCallArgs(toolCallBody)
-    const preamble = input.slice(0, toolCallMatch.index || 0).trim()
-
-    const toolCallResult: {
-      toolId: string
-      functionName?: string
-      args?: Record<string, string>
-      preamble?: string
-    } = {
-      toolId,
-      args
-    }
-
-    if (functionMatch?.[1]) {
-      toolCallResult.functionName = functionMatch[1]
-    }
-
-    if (preamble) {
-      toolCallResult.preamble = preamble
-    }
-
-    return toolCallResult
-  }
-
-  private parseToolCallArgs(input: string): Record<string, string> {
-    const args: Record<string, string> = {}
-    const argPattern = /--([a-zA-Z0-9_-]+)\s+(?:"([^"]*)"|'([^']*)')/g
-    let match: RegExpExecArray | null
-    while ((match = argPattern.exec(input)) !== null) {
-      const key = match[1]
-      const value = match[2] ?? match[3] ?? ''
-      if (!key) {
-        continue
-      }
-      args[key] = value
-    }
-    return args
+    return this.extractJsonSubstring(rest)
   }
 
   private extractJsonSubstring(input: string): string | null {

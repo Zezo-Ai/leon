@@ -5,6 +5,7 @@ import type { AxiosResponse } from 'axios'
 import {
   type CompletionParams,
   type LLMDuties,
+  type OpenAIToolCall,
   type PromptOrChatHistory,
   LLMProviders
 } from '@/core/llm-manager/types'
@@ -15,6 +16,7 @@ import LocalLLMProvider from '@/core/llm-manager/llm-providers/local-llm-provide
 import GroqLLMProvider from '@/core/llm-manager/llm-providers/groq-llm-provider'
 import OpenRouterLLMProvider from '@/core/llm-manager/llm-providers/openrouter-llm-provider'
 import CerebrasLLMProvider from '@/core/llm-manager/llm-providers/cerebras-llm-provider'
+import HuggingFaceLLMProvider from '@/core/llm-manager/llm-providers/huggingface-llm-provider'
 import { LLM_MANAGER } from '@/core'
 
 interface CompletionResult {
@@ -29,24 +31,32 @@ interface CompletionResult {
   usedInputTokens: number
   usedOutputTokens: number
   temperature: number
+  /**
+   * When the model responds with tool calls (native tool calling),
+   * this field contains the parsed tool_calls array.
+   */
+  toolCalls?: OpenAIToolCall[]
 }
 interface NormalizedCompletionResult {
   rawResult: string
   usedInputTokens: number
   usedOutputTokens: number
+  toolCalls?: OpenAIToolCall[]
 }
 type Provider =
   | LocalLLMProvider
   | GroqLLMProvider
   | OpenRouterLLMProvider
   | CerebrasLLMProvider
+  | HuggingFaceLLMProvider
   | undefined
 
 const LLM_PROVIDERS_MAP = {
   [LLMProviders.Local]: 'local-llm-provider',
   [LLMProviders.Groq]: 'groq-llm-provider',
   [LLMProviders.OpenRouter]: 'openrouter-llm-provider',
-  [LLMProviders.Cerebras]: 'cerebras-llm-provider'
+  [LLMProviders.Cerebras]: 'cerebras-llm-provider',
+  [LLMProviders.HuggingFace]: 'huggingface-llm-provider'
 }
 const DEFAULT_MAX_EXECUTION_TIMOUT =
   LLM_PROVIDER === LLMProviders.Local ? 32_000 : 120_000
@@ -150,6 +160,25 @@ export default class LLMProvider {
     rawResult: AxiosResponse
   ): NormalizedCompletionResult {
     const parsedCompletionResult = rawResult.data
+    const message = parsedCompletionResult.choices[0].message
+
+    const result: NormalizedCompletionResult = {
+      rawResult: message.content || '',
+      usedInputTokens: parsedCompletionResult.usage.prompt_tokens,
+      usedOutputTokens: parsedCompletionResult.usage.completion_tokens
+    }
+
+    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      result.toolCalls = message.tool_calls as OpenAIToolCall[]
+    }
+
+    return result
+  }
+
+  private normalizeCompletionResultForCerebrasProvider(
+    rawResult: AxiosResponse
+  ): NormalizedCompletionResult {
+    const parsedCompletionResult = rawResult.data
 
     return {
       rawResult: parsedCompletionResult.choices[0].message.content,
@@ -158,7 +187,7 @@ export default class LLMProvider {
     }
   }
 
-  private normalizeCompletionResultForCerebrasProvider(
+  private normalizeCompletionResultForHuggingFaceProvider(
     rawResult: AxiosResponse
   ): NormalizedCompletionResult {
     const parsedCompletionResult = rawResult.data
@@ -269,6 +298,7 @@ export default class LLMProvider {
 
     let usedInputTokens = 0
     let usedOutputTokens = 0
+    let toolCalls: OpenAIToolCall[] | undefined
 
     /**
      * Normalize the completion result according to the provider
@@ -301,23 +331,32 @@ export default class LLMProvider {
       usedInputTokens = inputTokens
       usedOutputTokens = outputTokens
     } else if (LLM_PROVIDER === LLMProviders.OpenRouter) {
-      const {
-        rawResult: result,
-        usedInputTokens: inputTokens,
-        usedOutputTokens: outputTokens
-      } = this.normalizeCompletionResultForOpenRouterProvider(
+      const normalized = this.normalizeCompletionResultForOpenRouterProvider(
         rawResult as AxiosResponse
       )
 
-      rawResult = result
-      usedInputTokens = inputTokens
-      usedOutputTokens = outputTokens
+      rawResult = normalized.rawResult
+      usedInputTokens = normalized.usedInputTokens
+      usedOutputTokens = normalized.usedOutputTokens
+      toolCalls = normalized.toolCalls
     } else if (LLM_PROVIDER === LLMProviders.Cerebras) {
       const {
         rawResult: result,
         usedInputTokens: inputTokens,
         usedOutputTokens: outputTokens
       } = this.normalizeCompletionResultForCerebrasProvider(
+        rawResult as AxiosResponse
+      )
+
+      rawResult = result
+      usedInputTokens = inputTokens
+      usedOutputTokens = outputTokens
+    } else if (LLM_PROVIDER === LLMProviders.HuggingFace) {
+      const {
+        rawResult: result,
+        usedInputTokens: inputTokens,
+        usedOutputTokens: outputTokens
+      } = this.normalizeCompletionResultForHuggingFaceProvider(
         rawResult as AxiosResponse
       )
 
@@ -377,7 +416,8 @@ export default class LLMProvider {
       thoughtTokensBudget: completionParams.thoughtTokensBudget,
       // Current used context size
       usedInputTokens,
-      usedOutputTokens
+      usedOutputTokens,
+      ...(toolCalls ? { toolCalls } : {})
     }
   }
 }
