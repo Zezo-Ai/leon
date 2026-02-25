@@ -32,6 +32,7 @@ import {
   PLAN_SYSTEM_PROMPT,
   REACT_TEMPERATURE,
   REACT_INFERENCE_TIMEOUT_MS,
+  REACT_TIMEOUT_MAX_RETRIES,
   REACT_LOCAL_PROVIDER_HISTORY_LOGS,
   REACT_REMOTE_PROVIDER_HISTORY_LOGS,
   MAX_EXECUTIONS,
@@ -435,6 +436,7 @@ export class ReActLLMDuty extends LLMDuty {
       data: schema,
       temperature: REACT_TEMPERATURE,
       timeout: REACT_INFERENCE_TIMEOUT_MS,
+      maxRetries: REACT_TIMEOUT_MAX_RETRIES,
       ...(history ? { history } : {})
     }
 
@@ -494,6 +496,7 @@ export class ReActLLMDuty extends LLMDuty {
       systemPrompt,
       temperature: REACT_TEMPERATURE,
       timeout: REACT_INFERENCE_TIMEOUT_MS,
+      maxRetries: REACT_TIMEOUT_MAX_RETRIES,
       tools,
       toolChoice,
       ...(history ? { history } : {})

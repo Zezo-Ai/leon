@@ -1820,6 +1820,8 @@ export async function runFinalAnswerPhase(
   )
   const prompt = `${historySection}\n\nUser Request: "${caller.input}"\n\nBased on the execution results above, provide a final answer to the user.`
 
+  const finalAnswerRetryIncrementMs = 30_000
+
   for (
     let attempt = 0;
     attempt <= FINAL_ANSWER_MAX_RETRIES;
@@ -1906,13 +1908,17 @@ export async function runFinalAnswerPhase(
       continue
     }
 
+    const currentSlowThresholdMs =
+      FINAL_ANSWER_RETRY_DURATION_MS +
+      attempt * finalAnswerRetryIncrementMs
+
     if (
-      elapsedMs > FINAL_ANSWER_RETRY_DURATION_MS &&
+      elapsedMs > currentSlowThresholdMs &&
       attempt < FINAL_ANSWER_MAX_RETRIES
     ) {
       LogHelper.title(DUTY_NAME)
       LogHelper.warning(
-        `Final answer inference took ${elapsedMs}ms (> ${FINAL_ANSWER_RETRY_DURATION_MS}ms); retrying (${attempt + 1}/${FINAL_ANSWER_MAX_RETRIES})`
+        `Final answer inference took ${elapsedMs}ms (> ${currentSlowThresholdMs}ms); retrying (${attempt + 1}/${FINAL_ANSWER_MAX_RETRIES})`
       )
       continue
     }

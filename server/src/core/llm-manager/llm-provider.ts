@@ -61,6 +61,7 @@ const LLM_PROVIDERS_MAP = {
 const DEFAULT_MAX_EXECUTION_TIMOUT =
   LLM_PROVIDER === LLMProviders.Local ? 32_000 : 120_000
 const DEFAULT_MAX_EXECUTION_RETRIES = 2
+const TIMEOUT_RETRY_INCREMENT_MS = 30_000
 const DEFAULT_TEMPERATURE = 0 // Disabled
 const DEFAULT_MAX_TOKENS = 8_192
 const DEFAULT_THOUGHT_TOKENS_BUDGET = Infinity
@@ -313,6 +314,26 @@ export default class LLMProvider {
 
       LogHelper.title('LLM Provider')
       LogHelper.error(`Error to complete prompt: ${e}`)
+      LogHelper.timeEnd(measureExecutionTimeLabel)
+
+      const isTimeoutError =
+        (e instanceof Error && e.message.startsWith('Timeout (')) ||
+        (axios.isAxiosError(e) && e.code === 'ECONNABORTED')
+      const remainingRetries = completionParams.maxRetries ?? 0
+
+      if (isTimeoutError && remainingRetries > 0) {
+        const nextTimeout = (completionParams.timeout ?? 0) + TIMEOUT_RETRY_INCREMENT_MS
+        LogHelper.title('LLM Provider')
+        LogHelper.warning(
+          `Prompt timed out. Retrying with timeout=${nextTimeout}ms (${remainingRetries} retry left)`
+        )
+
+        return this.prompt(promptOrChatHistory, {
+          ...completionParams,
+          timeout: nextTimeout,
+          maxRetries: remainingRetries - 1
+        })
+      }
 
       if (axios.isAxiosError(e)) {
         const apiError = e.response?.data
