@@ -48,6 +48,7 @@ import { widgetId, emitPlanWidget } from './react-llm-duty/plan-widget'
 import {
   buildCatalog,
   runPlanningPhase,
+  runRecoveryPlanningPhase,
   runExecutionStep,
   runFinalAnswerPhase
 } from './react-llm-duty/phases'
@@ -297,6 +298,67 @@ export class ReActLLMDuty extends LLMDuty {
           LogHelper.debug(`Missing settings detected: "${stepResult.missingSettingsMessage}"`)
           return this.makeDutyResult(stepResult.missingSettingsMessage)
         }
+
+        if (stepResult.execution.status === 'error') {
+          if (replanCount >= MAX_REPLANS) {
+            LogHelper.title(this.name)
+            LogHelper.warning(
+              'Recovery replanning skipped: max re-plans reached'
+            )
+            continue
+          }
+
+          const recoveryPlanResult = await runRecoveryPlanningPhase(
+            caller,
+            catalog,
+            history,
+            executionHistory,
+            currentStep,
+            pendingSteps
+          )
+
+          if (recoveryPlanResult?.type === 'final') {
+            LogHelper.title(this.name)
+            LogHelper.debug(
+              `Recovery planning returned final answer: "${recoveryPlanResult.answer}"`
+            )
+            return this.makeDutyResult(recoveryPlanResult.answer)
+          }
+
+          if (
+            recoveryPlanResult?.type === 'plan' &&
+            recoveryPlanResult.steps.length > 0
+          ) {
+            replanCount += 1
+            pendingSteps = [...recoveryPlanResult.steps]
+
+            LogHelper.title(this.name)
+            LogHelper.debug(
+              `Recovery re-plan ${replanCount}/${MAX_REPLANS}: ${pendingSteps.map((s) => s.function).join(' -> ')}`
+            )
+            if (recoveryPlanResult.summary) {
+              LogHelper.debug(
+                `Recovery plan summary: "${recoveryPlanResult.summary}"`
+              )
+              await this.emitProgress(recoveryPlanResult.summary)
+            }
+
+            const completedSteps = trackedSteps.filter(
+              (s) => s.status === 'completed'
+            )
+            const newSteps: TrackedPlanStep[] = pendingSteps.map((s) => ({
+              label: s.label,
+              status: 'pending' as PlanStepStatus
+            }))
+            if (newSteps.length > 0) {
+              newSteps[0]!.status = 'in_progress'
+            }
+            trackedSteps = [...completedSteps, ...newSteps]
+            currentStepIndex = completedSteps.length
+
+            emitPlanWidget(trackedSteps, null, planWidgetIdValue, true)
+          }
+        }
       }
 
       // --- Phase 3: Final answer synthesis ---
@@ -411,6 +473,7 @@ export class ReActLLMDuty extends LLMDuty {
     history?: MessageLog[]
   ): Promise<{
     toolCall?: { functionName: string, arguments: string }
+    unexpectedToolCall?: { functionName: string, arguments: string }
     textContent?: string
     usedInputTokens?: number
     usedOutputTokens?: number
@@ -466,6 +529,10 @@ export class ReActLLMDuty extends LLMDuty {
             ? completionResult.output
             : ''
         return {
+          unexpectedToolCall: {
+            functionName: firstCall.function.name,
+            arguments: firstCall.function.arguments
+          },
           textContent: textContentFallback,
           usedInputTokens: completionResult.usedInputTokens,
           usedOutputTokens: completionResult.usedOutputTokens

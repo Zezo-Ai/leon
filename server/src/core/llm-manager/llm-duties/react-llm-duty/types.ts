@@ -85,6 +85,7 @@ export interface LLMCaller {
     history?: MessageLog[]
   ): Promise<{
     toolCall?: { functionName: string, arguments: string }
+    unexpectedToolCall?: { functionName: string, arguments: string }
     textContent?: string
     usedInputTokens?: number
     usedOutputTokens?: number

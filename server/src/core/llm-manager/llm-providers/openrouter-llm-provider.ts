@@ -24,10 +24,9 @@ interface OpenRouterChatCompletionParams {
   top_p?: number
   stream?: boolean
   stop?: string | null
-  response_format?: {
-    type: 'json_object'
+  provider?: {
+    order?: string[]
   }
-  order?: string[]
   tools?: OpenAITool[]
   tool_choice?: OpenAIToolChoice
 }
@@ -120,25 +119,26 @@ export default class OpenRouterLLMProvider {
           stream: false
         }
 
+        const providerPreferences: NonNullable<
+          OpenRouterChatCompletionParams['provider']
+        > = {}
+
         if (completionParams.tools && completionParams.tools.length > 0) {
           chatCompletionParams = {
             ...chatCompletionParams,
             tools: completionParams.tools,
             tool_choice: completionParams.toolChoice || 'auto'
           }
-        } else if (isJSONMode) {
-          chatCompletionParams = {
-            ...chatCompletionParams,
-            response_format: {
-              type: 'json_object'
-            }
-          }
         }
 
         if (!completionParams.tools || completionParams.tools.length === 0) {
+          providerPreferences.order = ['cerebras']
+        }
+
+        if (Object.keys(providerPreferences).length > 0) {
           chatCompletionParams = {
             ...chatCompletionParams,
-            order: ['cerebras']
+            provider: providerPreferences
           }
         }
 
@@ -147,7 +147,7 @@ export default class OpenRouterLLMProvider {
           Authorization: `Bearer ${this.apiKey}`
         }
 
-        const promise = this.axios.request({
+        const requestConfig = {
           url: '/chat/completions',
           method: 'POST',
           data: chatCompletionParams,
@@ -158,9 +158,10 @@ export default class OpenRouterLLMProvider {
             ? { signal: completionParams.signal }
             : {}),
           headers
-        })
+        } as const
 
-        return resolve(promise)
+        const response = await this.axios.request(requestConfig)
+        return resolve(response)
       } catch (e) {
         const err = e as Error | AxiosError
         let errorMessage = `Failed to run completion: ${err}`

@@ -9,7 +9,7 @@ import {
   TOOL_EXECUTOR,
   CONTEXT_MANAGER
 } from '@/core'
-import type { OpenAITool, OpenAIToolChoice } from '@/core/llm-manager/types'
+import type { OpenAITool } from '@/core/llm-manager/types'
 import type { MessageLog } from '@/types'
 
 import {
@@ -17,10 +17,13 @@ import {
   CHARS_PER_TOKEN,
   FORMATTING_RULES,
   PLAN_SYSTEM_PROMPT,
+  RECOVERY_PLAN_SYSTEM_PROMPT,
   EXECUTE_SYSTEM_PROMPT,
   RESOLVE_FUNCTION_SYSTEM_PROMPT,
   MAX_RETRIES_PER_FUNCTION,
-  MAX_TOOL_FAILURE_RETRIES
+  MAX_TOOL_FAILURE_RETRIES,
+  FINAL_ANSWER_RETRY_DURATION_MS,
+  FINAL_ANSWER_MAX_RETRIES
 } from './constants'
 import type {
   PlanStep,
@@ -229,6 +232,23 @@ function stripInlineToolMarkup(text: string): string {
     .trim()
 }
 
+function shouldTreatPlanningTextAsFinalAnswer(text: string): boolean {
+  const trimmedText = text.trim()
+  if (!trimmedText) {
+    return false
+  }
+
+  if (
+    /^(\{|\[)/.test(trimmedText) ||
+    /<tool_call>|<function=|<parameter=/i.test(trimmedText) ||
+    /([a-z_]+\.[a-z_]+\.[a-zA-Z_]+)/.test(trimmedText)
+  ) {
+    return false
+  }
+
+  return true
+}
+
 // ---------------------------------------------------------------------------
 // Catalog building
 // ---------------------------------------------------------------------------
@@ -398,81 +418,105 @@ export async function runPlanningPhase(
       }
     ]
 
-    const planToolChoice: OpenAIToolChoice = {
-      type: 'function',
-      function: { name: 'create_plan' }
-    }
-    const maxStructuredPlanAttempts = 3
-    let lastTextFallback = ''
+    const toolResult = await caller.callLLMWithTools(
+      prompt,
+      planSystemPrompt,
+      planTools,
+      'auto',
+      history
+    )
 
-    for (
-      let planAttempt = 1;
-      planAttempt <= maxStructuredPlanAttempts;
-      planAttempt += 1
-    ) {
-      const retryInstruction =
-        planAttempt > 1
-          ? '\n\nIMPORTANT: You must call the "create_plan" function now. Do not answer with plain text.'
-          : ''
-      const planningPrompt = `${prompt}${retryInstruction}`
+    LogHelper.title(DUTY_NAME)
+    LogHelper.debug(
+      `Planning tool result: ${JSON.stringify(toolResult).slice(0, 500)}`
+    )
 
-      const toolResult = await caller.callLLMWithTools(
-        planningPrompt,
+    let textFallback = toolResult?.textContent?.trim() || ''
+    let sawUnexpectedToolCall = false
+
+    if (toolResult?.toolCall) {
+      if (toolResult.toolCall.functionName !== 'create_plan') {
+        LogHelper.debug(
+          `Planning: unexpected tool call "${toolResult.toolCall.functionName}" (expected "create_plan"), falling back to JSON mode`
+        )
+      } else {
+        try {
+          const parsedArgs = JSON.parse(toolResult.toolCall.arguments)
+          if (Array.isArray(parsedArgs.steps)) {
+            const steps = parseStepsFromArgs(parsedArgs.steps)
+            if (steps.length > 0) {
+              const summary =
+                typeof parsedArgs.summary === 'string'
+                  ? (parsedArgs.summary as string)
+                  : ''
+              return { type: 'plan', steps, summary }
+            }
+          }
+
+          // Model returned create_plan with empty steps — treat the summary
+          // as a direct answer (conversational response)
+          if (parsedArgs.summary) {
+            return {
+              type: 'final',
+              answer: (parsedArgs.summary as string).trim()
+            }
+          }
+        } catch {
+          LogHelper.debug('Planning: failed to parse create_plan arguments')
+        }
+      }
+    } else if (toolResult?.unexpectedToolCall) {
+      sawUnexpectedToolCall = true
+      LogHelper.debug(
+        `Planning: model attempted direct tool call "${toolResult.unexpectedToolCall.functionName}", retrying with forced create_plan`
+      )
+
+      const forcedPlanResult = await caller.callLLMWithTools(
+        `${prompt}\n\nIMPORTANT: Do not call execution tools directly. You must only call "create_plan".`,
         planSystemPrompt,
         planTools,
-        planToolChoice,
+        { type: 'function', function: { name: 'create_plan' } },
         history
       )
 
-      LogHelper.title(DUTY_NAME)
       LogHelper.debug(
-        `Planning attempt ${planAttempt}/${maxStructuredPlanAttempts} result: ${JSON.stringify(toolResult).slice(0, 500)}`
+        `Planning forced result: ${JSON.stringify(forcedPlanResult).slice(0, 500)}`
       )
 
-      if (!toolResult) {
-        continue
+      if (forcedPlanResult?.textContent?.trim()) {
+        textFallback = forcedPlanResult.textContent.trim()
       }
 
-      if (toolResult.textContent?.trim()) {
-        lastTextFallback = toolResult.textContent.trim()
-      }
-
-      if (!toolResult.toolCall) {
-        LogHelper.debug('Planning: no tool call returned')
-        continue
-      }
-
-      if (toolResult.toolCall.functionName !== 'create_plan') {
-        LogHelper.debug(
-          `Planning: unexpected tool call "${toolResult.toolCall.functionName}" (expected "create_plan")`
-        )
-        continue
-      }
-
-      try {
-        const parsedArgs = JSON.parse(toolResult.toolCall.arguments)
-        if (Array.isArray(parsedArgs.steps)) {
-          const steps = parseStepsFromArgs(parsedArgs.steps)
-          if (steps.length > 0) {
-            const summary =
-              typeof parsedArgs.summary === 'string'
-                ? (parsedArgs.summary as string)
-                : ''
-            return { type: 'plan', steps, summary }
+      if (forcedPlanResult?.toolCall?.functionName === 'create_plan') {
+        try {
+          const parsedArgs = JSON.parse(forcedPlanResult.toolCall.arguments)
+          if (Array.isArray(parsedArgs.steps)) {
+            const steps = parseStepsFromArgs(parsedArgs.steps)
+            if (steps.length > 0) {
+              const summary =
+                typeof parsedArgs.summary === 'string'
+                  ? (parsedArgs.summary as string)
+                  : ''
+              return { type: 'plan', steps, summary }
+            }
           }
-        }
 
-        // Model returned create_plan with empty steps — treat the summary
-        // as a direct answer (conversational response)
-        if (parsedArgs.summary) {
-          return {
-            type: 'final',
-            answer: (parsedArgs.summary as string).trim()
+          if (parsedArgs.summary) {
+            return {
+              type: 'final',
+              answer: (parsedArgs.summary as string).trim()
+            }
           }
+        } catch {
+          LogHelper.debug(
+            'Planning: failed to parse forced create_plan arguments'
+          )
         }
-      } catch {
-        LogHelper.debug('Planning: failed to parse create_plan arguments')
+      } else if (forcedPlanResult?.unexpectedToolCall) {
+        sawUnexpectedToolCall = true
       }
+    } else {
+      LogHelper.debug('Planning: no tool call returned, falling back to JSON mode')
     }
 
     // Final fallback: JSON mode planning
@@ -488,11 +532,25 @@ export async function runPlanningPhase(
       return planResult
     }
 
-    const textFallbackParsed = parseOutput(lastTextFallback)
+    const textFallbackParsed = parseOutput(textFallback)
     const textFallbackPlan = extractPlanFromParsed(textFallbackParsed)
     if (textFallbackPlan) {
       LogHelper.debug('Planning: recovered structured output from text fallback')
       return textFallbackPlan
+    }
+
+    if (
+      textFallback &&
+      !sawUnexpectedToolCall &&
+      shouldTreatPlanningTextAsFinalAnswer(textFallback)
+    ) {
+      LogHelper.debug(
+        'Planning: treating plain text fallback as final conversational answer'
+      )
+      return {
+        type: 'final',
+        answer: stripInlineToolMarkup(textFallback) || textFallback
+      }
     }
 
     const raw =
@@ -503,8 +561,8 @@ export async function runPlanningPhase(
       return { type: 'final', answer: stripInlineToolMarkup(raw) || raw }
     }
 
-    if (lastTextFallback) {
-      const sanitizedTextFallback = stripInlineToolMarkup(lastTextFallback)
+    if (textFallback) {
+      const sanitizedTextFallback = stripInlineToolMarkup(textFallback)
       return {
         type: 'final',
         answer:
@@ -542,6 +600,218 @@ export async function runPlanningPhase(
       ? completionResult.output.trim()
       : ''
   return { type: 'final', answer: raw || 'I could not determine what to do.' }
+}
+
+// ---------------------------------------------------------------------------
+// Recovery re-planning
+// ---------------------------------------------------------------------------
+
+export async function runRecoveryPlanningPhase(
+  caller: LLMCaller,
+  catalog: Catalog,
+  history: MessageLog[],
+  executionHistory: ExecutionRecord[],
+  failedStep: PlanStep,
+  pendingSteps: PlanStep[]
+): Promise<PlanResult | null> {
+  const catalogNote =
+    catalog.mode === 'tool'
+      ? '\nNote: The catalog lists tools, not individual functions. Use the format toolkit_id.tool_id in your plan steps.'
+      : ''
+  const recoverySystemPrompt = PERSONA.getCompactDutySystemPrompt(
+    RECOVERY_PLAN_SYSTEM_PROMPT
+  )
+  const contextManifest = CONTEXT_MANAGER.getManifest()
+  const failedExecution = executionHistory[executionHistory.length - 1]
+  const historySection = formatExecutionHistory(executionHistory)
+  const pendingStepsSection =
+    pendingSteps.length > 0
+      ? pendingSteps
+          .map(
+            (step, index) => `- ${index + 1}. ${step.function} | "${step.label}"`
+          )
+          .join('\n')
+      : '- none'
+  const contextManifestSection = contextManifest
+    ? `\n\nEnvironment Context Manifest:\n${contextManifest}`
+    : ''
+
+  const prompt = `${catalog.text}${catalogNote}${contextManifestSection}
+
+Recovery Context:
+- Failed Step Function: ${failedStep.function}
+- Failed Step Label: ${failedStep.label}
+- Failed Observation: ${failedExecution?.observation || 'No observation available'}
+
+Current Remaining Steps:
+${pendingStepsSection}
+
+${historySection}
+
+User Request: "${caller.input}"
+
+Create a revised plan from this point to complete the user request.`
+
+  const planSchema = {
+    oneOf: [
+      {
+        type: 'object',
+        properties: {
+          type: { type: 'string', enum: ['plan'] },
+          steps: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                function: { type: 'string' },
+                label: { type: 'string' }
+              },
+              required: ['function', 'label'],
+              additionalProperties: false
+            }
+          },
+          summary: { type: 'string' }
+        },
+        required: ['type', 'steps', 'summary'],
+        additionalProperties: false
+      },
+      {
+        type: 'object',
+        properties: {
+          type: { type: 'string', enum: ['final'] },
+          answer: { type: 'string' }
+        },
+        required: ['type', 'answer'],
+        additionalProperties: false
+      }
+    ]
+  }
+
+  LogHelper.title(DUTY_NAME)
+  LogHelper.debug(
+    `Recovery planning triggered after failed step "${failedStep.label}" (${failedStep.function})`
+  )
+
+  if (caller.supportsNativeTools) {
+    const planTools: OpenAITool[] = [
+      {
+        type: 'function',
+        function: {
+          name: 'create_plan',
+          description:
+            'Create a revised execution plan. Return empty steps with summary if user clarification is needed.',
+          parameters: {
+            type: 'object',
+            properties: {
+              steps: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    function: {
+                      type: 'string',
+                      description:
+                        'Fully qualified function name: toolkit_id.tool_id.function_name'
+                    },
+                    label: {
+                      type: 'string',
+                      description:
+                        'Short user-facing task description starting with a verb, under 8 words'
+                    }
+                  },
+                  required: ['function', 'label']
+                }
+              },
+              summary: {
+                type: 'string',
+                description:
+                  'Short natural language summary of the revised plan, or clarification request if steps is empty'
+              }
+            },
+            required: ['steps', 'summary']
+          }
+        }
+      }
+    ]
+
+    const toolResult = await caller.callLLMWithTools(
+      prompt,
+      recoverySystemPrompt,
+      planTools,
+      { type: 'function', function: { name: 'create_plan' } },
+      history
+    )
+
+    LogHelper.title(DUTY_NAME)
+    LogHelper.debug(
+      `Recovery planning tool result: ${JSON.stringify(toolResult).slice(0, 500)}`
+    )
+
+    if (toolResult?.toolCall?.functionName === 'create_plan') {
+      try {
+        const parsedArgs = JSON.parse(toolResult.toolCall.arguments)
+        if (Array.isArray(parsedArgs.steps)) {
+          const steps = parseStepsFromArgs(parsedArgs.steps)
+          if (steps.length > 0) {
+            return {
+              type: 'plan',
+              steps,
+              summary:
+                typeof parsedArgs.summary === 'string'
+                  ? (parsedArgs.summary as string)
+                  : ''
+            }
+          }
+        }
+
+        if (typeof parsedArgs.summary === 'string' && parsedArgs.summary.trim()) {
+          return {
+            type: 'final',
+            answer: parsedArgs.summary.trim() as string
+          }
+        }
+      } catch {
+        LogHelper.debug('Recovery planning: failed to parse create_plan arguments')
+      }
+    }
+
+    const textFallback = toolResult?.textContent?.trim() || ''
+    const parsedTextFallback = parseOutput(textFallback)
+    const extractedPlan = extractPlanFromParsed(parsedTextFallback)
+    if (extractedPlan) {
+      return extractedPlan
+    }
+
+    if (textFallback && shouldTreatPlanningTextAsFinalAnswer(textFallback)) {
+      return {
+        type: 'final',
+        answer: stripInlineToolMarkup(textFallback) || textFallback
+      }
+    }
+  }
+
+  const jsonModeResult = await caller.callLLM(
+    prompt,
+    recoverySystemPrompt,
+    planSchema,
+    history
+  )
+  const parsed = parseOutput(jsonModeResult?.output)
+  const planResult = extractPlanFromParsed(parsed)
+  if (planResult) {
+    return planResult
+  }
+
+  const raw =
+    typeof jsonModeResult?.output === 'string'
+      ? jsonModeResult.output.trim()
+      : ''
+
+  if (raw && shouldTreatPlanningTextAsFinalAnswer(raw)) {
+    return { type: 'final', answer: stripInlineToolMarkup(raw) || raw }
+  }
+
+  return null
 }
 
 // ---------------------------------------------------------------------------
@@ -1550,78 +1820,104 @@ export async function runFinalAnswerPhase(
   )
   const prompt = `${historySection}\n\nUser Request: "${caller.input}"\n\nBased on the execution results above, provide a final answer to the user.`
 
-  // Use native tool calling for remote providers to get a proper answer
-  if (caller.supportsNativeTools) {
-    const answerTool: OpenAITool = {
-      type: 'function',
-      function: {
-        name: 'provide_answer',
-        description:
-          'Provide the final answer to the user. Include all relevant details from the tool execution results. Use plain text only, no markdown.',
-        parameters: {
-          type: 'object',
-          properties: {
-            answer: {
-              type: 'string',
-              description:
-                'A clear, complete, and helpful plain text answer (no markdown) to the user request based on the tool results. Wrap any file paths with [FILE_PATH]/path[/FILE_PATH].'
-            }
-          },
-          required: ['answer']
+  for (
+    let attempt = 0;
+    attempt <= FINAL_ANSWER_MAX_RETRIES;
+    attempt += 1
+  ) {
+    let candidateAnswer: string | null = null
+    const attemptStart = Date.now()
+
+    // Use native tool calling for remote providers to get a proper answer
+    if (caller.supportsNativeTools) {
+      const answerTool: OpenAITool = {
+        type: 'function',
+        function: {
+          name: 'provide_answer',
+          description:
+            'Provide the final answer to the user. Include all relevant details from the tool execution results. Use plain text only, no markdown.',
+          parameters: {
+            type: 'object',
+            properties: {
+              answer: {
+                type: 'string',
+                description:
+                  'A clear, complete, and helpful plain text answer (no markdown) to the user request based on the tool results. Wrap any file paths with [FILE_PATH]/path[/FILE_PATH].'
+              }
+            },
+            required: ['answer']
+          }
+        }
+      }
+
+      const result = await caller.callLLMWithTools(
+        prompt,
+        systemPrompt,
+        [answerTool],
+        { type: 'function', function: { name: 'provide_answer' } },
+        caller.history
+      )
+
+      if (result?.toolCall) {
+        try {
+          const parsed = JSON.parse(result.toolCall.arguments)
+          if (typeof parsed.answer === 'string' && parsed.answer.trim()) {
+            candidateAnswer = parsed.answer.trim()
+          }
+        } catch {
+          // Fall through
+        }
+      }
+
+      // If the model responded with text instead
+      if (!candidateAnswer && result?.textContent?.trim()) {
+        candidateAnswer = result.textContent.trim()
+      }
+    } else {
+      // Local provider: use JSON mode
+      const finalSchema = {
+        type: 'object',
+        properties: {
+          answer: { type: 'string' }
+        },
+        required: ['answer'],
+        additionalProperties: false
+      }
+
+      const completionResult = await caller.callLLM(
+        prompt,
+        systemPrompt,
+        finalSchema,
+        caller.history
+      )
+
+      if (completionResult?.output) {
+        const parsed = parseOutput(completionResult.output)
+        if (parsed?.['answer']) {
+          candidateAnswer = parsed['answer'] as string
+        } else if (typeof completionResult.output === 'string') {
+          candidateAnswer = completionResult.output.trim()
         }
       }
     }
 
-    const result = await caller.callLLMWithTools(
-      prompt,
-      systemPrompt,
-      [answerTool],
-      { type: 'function', function: { name: 'provide_answer' } },
-      caller.history
-    )
-
-    if (result?.toolCall) {
-      try {
-        const parsed = JSON.parse(result.toolCall.arguments)
-        if (typeof parsed.answer === 'string' && parsed.answer.trim()) {
-          return parsed.answer.trim()
-        }
-      } catch {
-        // Fall through
-      }
+    const elapsedMs = Date.now() - attemptStart
+    if (!candidateAnswer) {
+      continue
     }
 
-    // If the model responded with text instead
-    if (result?.textContent?.trim()) {
-      return result.textContent.trim()
-    }
-  } else {
-    // Local provider: use JSON mode
-    const finalSchema = {
-      type: 'object',
-      properties: {
-        answer: { type: 'string' }
-      },
-      required: ['answer'],
-      additionalProperties: false
+    if (
+      elapsedMs > FINAL_ANSWER_RETRY_DURATION_MS &&
+      attempt < FINAL_ANSWER_MAX_RETRIES
+    ) {
+      LogHelper.title(DUTY_NAME)
+      LogHelper.warning(
+        `Final answer inference took ${elapsedMs}ms (> ${FINAL_ANSWER_RETRY_DURATION_MS}ms); retrying (${attempt + 1}/${FINAL_ANSWER_MAX_RETRIES})`
+      )
+      continue
     }
 
-    const completionResult = await caller.callLLM(
-      prompt,
-      systemPrompt,
-      finalSchema,
-      caller.history
-    )
-
-    if (completionResult?.output) {
-      const parsed = parseOutput(completionResult.output)
-      if (parsed?.['answer']) {
-        return parsed['answer'] as string
-      }
-      if (typeof completionResult.output === 'string') {
-        return completionResult.output.trim()
-      }
-    }
+    return candidateAnswer
   }
 
   // Last resort: summarize from execution history

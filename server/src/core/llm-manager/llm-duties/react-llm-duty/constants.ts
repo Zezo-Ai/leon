@@ -79,12 +79,34 @@ Return ONLY one of the following JSON shapes:
 
 No other keys, no null values.`
 
+export const RECOVERY_PLAN_SYSTEM_PROMPT = `You are revising a failed execution plan for an autonomous agent.
+
+A previous plan step failed. Your job is to propose the next best actionable steps to still fulfill the original user request.
+
+If recovery is possible:
+- Return steps that continue from now (do not repeat already successful work unless needed).
+- Add discovery/verification steps when required to resolve missing or invalid inputs.
+- Keep steps ordered and concrete.
+
+If recovery is not possible without user input:
+- Return an empty steps array and put a clear clarification request in summary.
+
+Use only functions/tools listed in the catalog.
+
+${FORMATTING_RULES}
+
+Return only:
+- steps: ordered step list (can be empty)
+- summary: short explanation of the revised plan or clarification request`
+
 export const MAX_EXECUTIONS = 20
 export const MAX_REPLANS = 3
 export const MAX_RETRIES_PER_FUNCTION = 2
 export const MAX_TOOL_FAILURE_RETRIES = 2
 export const REACT_TEMPERATURE = 0.2
-export const REACT_INFERENCE_TIMEOUT_MS = 60_000
+export const REACT_INFERENCE_TIMEOUT_MS = 300_000
+export const FINAL_ANSWER_RETRY_DURATION_MS = 60_000
+export const FINAL_ANSWER_MAX_RETRIES = 2
 
 export const REACT_LOCAL_PROVIDER_HISTORY_LOGS = 8
 export const REACT_REMOTE_PROVIDER_HISTORY_LOGS = 16
