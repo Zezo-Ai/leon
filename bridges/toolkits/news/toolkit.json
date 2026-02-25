@@ -2,5 +2,6 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "News",
   "description": "Tools for news and current events.",
+  "context_files": [],
   "tools": []
 }

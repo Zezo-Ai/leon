@@ -6,7 +6,8 @@ import { LogHelper } from '@/helpers/log-helper'
 import {
   PERSONA,
   TOOLKIT_REGISTRY,
-  TOOL_EXECUTOR
+  TOOL_EXECUTOR,
+  CONTEXT_MANAGER
 } from '@/core'
 import type { OpenAITool } from '@/core/llm-manager/types'
 import type { MessageLog } from '@/types'
@@ -43,6 +44,177 @@ import {
 } from './utils'
 
 const DUTY_NAME = 'ReAct LLM Duty'
+
+interface DuplicateInputMatch {
+  stepNumber: number
+  stepLabel: string | null
+}
+
+function normalizeStepLabel(label: string | null | undefined): string {
+  if (!label) {
+    return ''
+  }
+
+  return label.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function stableSerialize(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerialize(item)).join(',')}]`
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, val]) => `"${key}":${stableSerialize(val)}`)
+    return `{${entries.join(',')}}`
+  }
+
+  return JSON.stringify(value)
+}
+
+function normalizeToolInputForComparison(toolInput: string): string {
+  const trimmed = toolInput.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed)
+    return stableSerialize(parsed)
+  } catch {
+    return trimmed.replace(/\s+/g, ' ')
+  }
+}
+
+function extractRequestedToolInputFromObservation(
+  observation: string
+): string | null {
+  try {
+    const parsedObservation = JSON.parse(observation) as Record<string, unknown>
+    const requestedInput = parsedObservation['requested_input']
+    if (typeof requestedInput === 'string' && requestedInput.trim()) {
+      return requestedInput
+    }
+  } catch {
+    // Ignore malformed observation payload
+  }
+
+  return null
+}
+
+function getExecutionRequestedToolInput(execution: ExecutionRecord): string | null {
+  if (execution.requestedToolInput && execution.requestedToolInput.trim()) {
+    return execution.requestedToolInput
+  }
+
+  return extractRequestedToolInputFromObservation(execution.observation)
+}
+
+function findDuplicateToolInputMatch(
+  executionHistory: ExecutionRecord[],
+  qualifiedName: string,
+  stepLabel: string,
+  candidateToolInput: string
+): DuplicateInputMatch | null {
+  const normalizedCandidateInput = normalizeToolInputForComparison(
+    candidateToolInput
+  )
+  if (!normalizedCandidateInput) {
+    return null
+  }
+
+  const normalizedCurrentLabel = normalizeStepLabel(stepLabel)
+
+  for (let i = executionHistory.length - 1; i >= 0; i -= 1) {
+    const previousExecution = executionHistory[i]!
+    if (previousExecution.function !== qualifiedName) {
+      continue
+    }
+
+    const previousInput = getExecutionRequestedToolInput(previousExecution)
+    if (!previousInput) {
+      continue
+    }
+
+    const normalizedPreviousInput = normalizeToolInputForComparison(previousInput)
+    if (normalizedPreviousInput !== normalizedCandidateInput) {
+      continue
+    }
+
+    const previousLabel = normalizeStepLabel(previousExecution.stepLabel)
+    if (
+      normalizedCurrentLabel &&
+      previousLabel &&
+      normalizedCurrentLabel === previousLabel
+    ) {
+      continue
+    }
+
+    return {
+      stepNumber: i + 1,
+      stepLabel: previousExecution.stepLabel || null
+    }
+  }
+
+  return null
+}
+
+function buildPreviouslyUsedInputsSection(
+  executionHistory: ExecutionRecord[],
+  qualifiedName: string
+): string {
+  const previousInputs = executionHistory
+    .map((execution, index) => ({
+      execution,
+      stepNumber: index + 1
+    }))
+    .filter(({ execution }) => execution.function === qualifiedName)
+    .map(({ execution, stepNumber }) => {
+      const requestedToolInput = getExecutionRequestedToolInput(execution)
+      if (!requestedToolInput) {
+        return null
+      }
+
+      const labelPart = execution.stepLabel
+        ? ` | label="${execution.stepLabel}"`
+        : ''
+      return `- Step ${stepNumber}${labelPart}: ${requestedToolInput}`
+    })
+    .filter((line): line is string => Boolean(line))
+
+  if (previousInputs.length === 0) {
+    return ''
+  }
+
+  return `\nPreviously executed inputs for this function in this run:\n${previousInputs.join('\n')}\nDo not reuse the exact same tool_input unless the current step explicitly asks to repeat it.`
+}
+
+function buildToolkitContextSection(
+  caller: LLMCaller,
+  toolkitId: string
+): string {
+  const injectedContextFiles = [
+    ...new Set(TOOLKIT_REGISTRY.getToolkitContextFiles(toolkitId))
+  ]
+  const toolkitContext = caller.getContextForToolkit(toolkitId).trim()
+
+  const contextCharCount = toolkitContext.length
+  const estimatedContextTokens = Math.ceil(
+    contextCharCount / CHARS_PER_TOKEN
+  )
+
+  LogHelper.title(DUTY_NAME)
+  LogHelper.debug(
+    `Toolkit context injection [${toolkitId}] files=${injectedContextFiles.length > 0 ? injectedContextFiles.join(', ') : 'none'} | chars=${contextCharCount} | est_tokens=${estimatedContextTokens}`
+  )
+
+  if (!toolkitContext) {
+    return 'Toolkit Context: none'
+  }
+
+  return `Toolkit Context:\n${toolkitContext}`
+}
 
 // ---------------------------------------------------------------------------
 // Catalog building
@@ -122,7 +294,18 @@ export async function runPlanningPhase(
   const planSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     PLAN_SYSTEM_PROMPT
   )
-  const prompt = `${catalog.text}${catalogNote}\n\nUser Request: "${caller.input}"`
+  const contextManifest = CONTEXT_MANAGER.getManifest()
+  LogHelper.title(DUTY_NAME)
+  LogHelper.debug(
+    `Planning context manifest injected:\n${
+      contextManifest || '- none'
+    }`
+  )
+
+  const contextManifestSection = contextManifest
+    ? `\n\nEnvironment Context Manifest:\n${contextManifest}`
+    : ''
+  const prompt = `${catalog.text}${catalogNote}${contextManifestSection}\n\nUser Request: "${caller.input}"`
 
   const planSchema = {
     oneOf: [
@@ -212,9 +395,9 @@ export async function runPlanningPhase(
     )
 
     LogHelper.title(DUTY_NAME)
-    LogHelper.debug(`Planning prompt: "${prompt.slice(0, 300)}..."`)
+    LogHelper.debug(`Planning prompt: "${prompt}"`)
     LogHelper.debug(
-      `Planning tool result: ${JSON.stringify(toolResult).slice(0, 500)}`
+      `Planning tool result: ${JSON.stringify(toolResult)}`
     )
 
     if (toolResult?.toolCall) {
@@ -295,9 +478,9 @@ export async function runPlanningPhase(
   )
 
   LogHelper.title(DUTY_NAME)
-  LogHelper.debug(`Planning prompt: "${prompt.slice(0, 300)}..."`)
+  LogHelper.debug(`Planning prompt: "${prompt}..."`)
   LogHelper.debug(
-    `Planning raw output: ${JSON.stringify(completionResult?.output).slice(0, 500)}`
+    `Planning raw output: ${JSON.stringify(completionResult?.output)}`
   )
 
   const parsed = parseOutput(completionResult?.output)
@@ -333,6 +516,7 @@ export async function runExecutionStep(
     return runToolLevelExecution(
       caller,
       qualifiedName,
+      step.label,
       parts,
       executionHistory,
       catalog
@@ -413,6 +597,7 @@ export async function runExecutionStep(
     toolkitId,
     toolId,
     functionName,
+    step.label,
     resolvedConfig,
     executionHistory
   )
@@ -426,6 +611,7 @@ export async function runExecutionStep(
 async function runToolLevelExecution(
   caller: LLMCaller,
   qualifiedName: string,
+  stepLabel: string,
   parts: string[],
   executionHistory: ExecutionRecord[],
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -470,6 +656,7 @@ async function runToolLevelExecution(
       effectiveToolkitId,
       effectiveToolId,
       fnName,
+      stepLabel,
       fnConfig,
       executionHistory
     )
@@ -482,6 +669,7 @@ async function runToolLevelExecution(
     return resolveToolFunctionWithNativeTools(
       caller,
       qualifiedName,
+      stepLabel,
       effectiveToolkitId,
       effectiveToolId,
       toolFunctions as Record<string, FunctionConfig>,
@@ -493,6 +681,7 @@ async function runToolLevelExecution(
   return resolveToolFunctionWithJSONMode(
     caller,
     qualifiedName,
+    stepLabel,
     effectiveToolkitId,
     effectiveToolId,
     toolFunctions as Record<string, FunctionConfig>,
@@ -508,11 +697,13 @@ async function runToolLevelExecution(
 async function resolveToolFunctionWithNativeTools(
   caller: LLMCaller,
   qualifiedName: string,
+  stepLabel: string,
   toolkitId: string,
   toolId: string,
   toolFunctions: Record<string, FunctionConfig>,
   executionHistory: ExecutionRecord[]
 ): Promise<ExecutionStepResult> {
+  const toolkitContextSection = buildToolkitContextSection(caller, toolkitId)
   const historySection = formatExecutionHistory(executionHistory)
   const resolveSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     RESOLVE_FUNCTION_SYSTEM_PROMPT
@@ -529,7 +720,7 @@ async function resolveToolFunctionWithNativeTools(
     })
   )
 
-  const prompt = `Tool: ${toolkitId}.${toolId}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function and provide arguments.`
+  const prompt = `Tool: ${toolkitId}.${toolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide arguments.`
 
   const result = await caller.callLLMWithTools(
     prompt,
@@ -570,7 +761,9 @@ async function resolveToolFunctionWithNativeTools(
       toolId,
       fnName,
       toolInput,
-      fnConfig
+      fnConfig,
+      undefined,
+      stepLabel
     )
   }
 
@@ -608,12 +801,17 @@ async function resolveToolFunctionWithNativeTools(
 async function resolveToolFunctionWithJSONMode(
   caller: LLMCaller,
   qualifiedName: string,
+  stepLabel: string,
   effectiveToolkitId: string,
   effectiveToolId: string,
   toolFunctions: Record<string, FunctionConfig>,
   functionEntries: [string, FunctionConfig][],
   executionHistory: ExecutionRecord[]
 ): Promise<ExecutionStepResult> {
+  const toolkitContextSection = buildToolkitContextSection(
+    caller,
+    effectiveToolkitId
+  )
   const functionsSection = functionEntries
     .map(([fnName, fnConfig]) => {
       const params = JSON.stringify(fnConfig.parameters)
@@ -625,7 +823,7 @@ async function resolveToolFunctionWithJSONMode(
   const resolveSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     RESOLVE_FUNCTION_SYSTEM_PROMPT
   )
-  const prompt = `Tool: ${effectiveToolkitId}.${effectiveToolId}\n\nAvailable Functions:\n${functionsSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function and provide tool_input.`
+  const prompt = `Tool: ${effectiveToolkitId}.${effectiveToolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\nAvailable Functions:\n${functionsSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide tool_input.`
 
   const resolveSchema = {
     oneOf: [
@@ -720,7 +918,9 @@ async function resolveToolFunctionWithJSONMode(
       effectiveToolId,
       fnName,
       toolInput,
-      fnConfig
+      fnConfig,
+      undefined,
+      stepLabel
     )
   }
 
@@ -744,6 +944,7 @@ async function executeFunction(
   toolkitId: string,
   toolId: string,
   functionName: string,
+  stepLabel: string,
   functionConfig: FunctionConfig,
   executionHistory: ExecutionRecord[]
 ): Promise<ExecutionStepResult> {
@@ -754,6 +955,7 @@ async function executeFunction(
       toolkitId,
       toolId,
       functionName,
+      stepLabel,
       functionConfig,
       executionHistory
     )
@@ -765,6 +967,7 @@ async function executeFunction(
     toolkitId,
     toolId,
     functionName,
+    stepLabel,
     functionConfig,
     executionHistory
   )
@@ -779,10 +982,18 @@ async function executeFunctionWithNativeTools(
   toolkitId: string,
   toolId: string,
   functionName: string,
+  stepLabel: string,
   functionConfig: FunctionConfig,
   executionHistory: ExecutionRecord[]
 ): Promise<ExecutionStepResult> {
   const qualifiedName = `${toolkitId}.${toolId}.${functionName}`
+  const currentStepLabel = stepLabel || qualifiedName
+  const currentStepNumber = executionHistory.length + 1
+  const previousInputsSection = buildPreviouslyUsedInputsSection(
+    executionHistory,
+    qualifiedName
+  )
+  const toolkitContextSection = buildToolkitContextSection(caller, toolkitId)
   const historySection = formatExecutionHistory(executionHistory)
   const executeSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     EXECUTE_SYSTEM_PROMPT
@@ -805,7 +1016,7 @@ async function executeFunctionWithNativeTools(
     const retryNote = lastError
       ? `\n\nPrevious attempt failed: ${lastError}. Please fix the arguments.`
       : ''
-    const prompt = `${historySection}\n\nUser Request: "${caller.input}"${retryNote}`
+    const prompt = `Current Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\n\n${toolkitContextSection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}`
 
     const result = await caller.callLLMWithTools(
       prompt,
@@ -816,9 +1027,20 @@ async function executeFunctionWithNativeTools(
     )
 
     if (!result) {
-      retries += 1
-      lastError = 'Failed to produce output'
-      continue
+      const providerFailureObservation =
+        'Provider did not return a response (timeout or network issue).'
+      LogHelper.title(DUTY_NAME)
+      LogHelper.warning(
+        `Execution aborted for "${qualifiedName}": ${providerFailureObservation}`
+      )
+      return {
+        type: 'executed',
+        execution: {
+          function: qualifiedName,
+          status: 'error',
+          observation: providerFailureObservation
+        }
+      }
     }
 
     // Model returned a tool call — extract and validate arguments
@@ -836,13 +1058,35 @@ async function executeFunctionWithNativeTools(
         continue
       }
 
+      const validatedToolInput =
+        inputValidation.repairedToolInput ?? toolInput
+      const duplicateInputMatch = findDuplicateToolInputMatch(
+        executionHistory,
+        qualifiedName,
+        currentStepLabel,
+        validatedToolInput
+      )
+      if (duplicateInputMatch) {
+        retries += 1
+        const previousStepLabel = duplicateInputMatch.stepLabel
+          ? `"${duplicateInputMatch.stepLabel}"`
+          : '(no label)'
+        lastError = `tool_input duplicates Step ${duplicateInputMatch.stepNumber} ${previousStepLabel}; provide different arguments for the current step`
+        LogHelper.title(DUTY_NAME)
+        LogHelper.debug(
+          `Rejected duplicate tool_input for "${qualifiedName}" at step ${currentStepNumber}: matches step ${duplicateInputMatch.stepNumber}`
+        )
+        continue
+      }
+
       const toolResult = await runToolExecution(
         toolkitId,
         toolId,
         functionName,
-        inputValidation.repairedToolInput ?? toolInput,
+        validatedToolInput,
         functionConfig,
-        inputValidation.parsedValue
+        inputValidation.parsedValue,
+        currentStepLabel
       )
 
       if (toolResult.missingSettingsMessage) {
@@ -905,11 +1149,19 @@ async function executeFunctionWithJSONMode(
   toolkitId: string,
   toolId: string,
   functionName: string,
+  stepLabel: string,
   functionConfig: FunctionConfig,
   executionHistory: ExecutionRecord[]
 ): Promise<ExecutionStepResult> {
   const qualifiedName = `${toolkitId}.${toolId}.${functionName}`
+  const currentStepLabel = stepLabel || qualifiedName
+  const currentStepNumber = executionHistory.length + 1
+  const previousInputsSection = buildPreviouslyUsedInputsSection(
+    executionHistory,
+    qualifiedName
+  )
   const paramsSchema = JSON.stringify(functionConfig.parameters)
+  const toolkitContextSection = buildToolkitContextSection(caller, toolkitId)
   const historySection = formatExecutionHistory(executionHistory)
   const executeSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     EXECUTE_SYSTEM_PROMPT
@@ -960,7 +1212,7 @@ async function executeFunctionWithJSONMode(
     const retryNote = lastError
       ? `\n\nPrevious attempt failed: ${lastError}. Please fix the tool_input.`
       : ''
-    const prompt = `Function: ${qualifiedName}\nDescription: ${functionConfig.description}\nParameters: ${paramsSchema}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}\n\nProvide the tool_input for this function.`
+    const prompt = `Function: ${qualifiedName}\nDescription: ${functionConfig.description}\nCurrent Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\nParameters: ${paramsSchema}\n\n${toolkitContextSection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}\n\nProvide the tool_input for this function.`
 
     const completionResult = await caller.callLLM(
       prompt,
@@ -968,6 +1220,23 @@ async function executeFunctionWithJSONMode(
       executeSchema,
       caller.history
     )
+    if (!completionResult) {
+      const providerFailureObservation =
+        'Provider did not return a response (timeout or network issue).'
+      LogHelper.title(DUTY_NAME)
+      LogHelper.warning(
+        `Execution aborted for "${qualifiedName}": ${providerFailureObservation}`
+      )
+      return {
+        type: 'executed',
+        execution: {
+          function: qualifiedName,
+          status: 'error',
+          observation: providerFailureObservation
+        }
+      }
+    }
+
     const parsed = parseOutput(completionResult?.output)
 
     if (!parsed) {
@@ -1005,13 +1274,35 @@ async function executeFunctionWithJSONMode(
         continue
       }
 
+      const validatedToolInput =
+        inputValidation.repairedToolInput ?? toolInput
+      const duplicateInputMatch = findDuplicateToolInputMatch(
+        executionHistory,
+        qualifiedName,
+        currentStepLabel,
+        validatedToolInput
+      )
+      if (duplicateInputMatch) {
+        retries += 1
+        const previousStepLabel = duplicateInputMatch.stepLabel
+          ? `"${duplicateInputMatch.stepLabel}"`
+          : '(no label)'
+        lastError = `tool_input duplicates Step ${duplicateInputMatch.stepNumber} ${previousStepLabel}; provide different arguments for the current step`
+        LogHelper.title(DUTY_NAME)
+        LogHelper.debug(
+          `Rejected duplicate tool_input for "${qualifiedName}" at step ${currentStepNumber}: matches step ${duplicateInputMatch.stepNumber}`
+        )
+        continue
+      }
+
       const toolResult = await runToolExecution(
         toolkitId,
         toolId,
         functionName,
-        inputValidation.repairedToolInput ?? toolInput,
+        validatedToolInput,
         functionConfig,
-        inputValidation.parsedValue
+        inputValidation.parsedValue,
+        currentStepLabel
       )
 
       if (toolResult.missingSettingsMessage) {
@@ -1056,9 +1347,14 @@ export async function runToolExecution(
   functionName: string,
   toolInput: string,
   _functionConfig: FunctionConfig,
-  parsedInput?: Record<string, unknown>
+  parsedInput?: Record<string, unknown>,
+  stepLabel?: string
 ): Promise<ToolExecutionResult> {
   const qualifiedName = `${toolkitId}.${toolId}.${functionName}`
+  const requestedToolInput = toolInput
+  const requestedParsedInput = parsedInput
+    ? { ...parsedInput }
+    : undefined
 
   const toolExecutionInput: {
     toolId: string
@@ -1130,7 +1426,9 @@ export async function runToolExecution(
       execution: {
         function: qualifiedName,
         status: 'success',
-        observation: finalAnswer
+        observation: finalAnswer,
+        requestedToolInput,
+        ...(stepLabel ? { stepLabel } : {})
       },
       finalAnswer
     }
@@ -1156,7 +1454,9 @@ export async function runToolExecution(
       execution: {
         function: qualifiedName,
         status: 'error',
-        observation: `Missing settings: ${missingSettings.join(', ')}`
+        observation: `Missing settings: ${missingSettings.join(', ')}`,
+        requestedToolInput,
+        ...(stepLabel ? { stepLabel } : {})
       },
       missingSettingsMessage: `Missing tool settings: ${missingSettings.join(
         ', '
@@ -1167,7 +1467,11 @@ export async function runToolExecution(
   const observation = JSON.stringify({
     status: toolExecutionResult.status,
     message: toolExecutionResult.message,
-    data: toolExecutionResult.data
+    data: toolExecutionResult.data,
+    requested_input: requestedToolInput,
+    ...(requestedParsedInput
+      ? { requested_parsed_input: requestedParsedInput }
+      : {})
   })
 
   return {
@@ -1175,7 +1479,9 @@ export async function runToolExecution(
     execution: {
       function: qualifiedName,
       status: toolExecutionResult.status,
-      observation
+      observation,
+      requestedToolInput,
+      ...(stepLabel ? { stepLabel } : {})
     }
   }
 }

@@ -14,6 +14,7 @@ import {
   LLM_PROVIDER,
   PERSONA,
   TOOLKIT_REGISTRY,
+  CONTEXT_MANAGER,
   CONVERSATION_LOGGER,
   BRAIN
 } from '@/core'
@@ -30,6 +31,7 @@ import type { MessageLog } from '@/types'
 import {
   PLAN_SYSTEM_PROMPT,
   REACT_TEMPERATURE,
+  REACT_INFERENCE_TIMEOUT_MS,
   REACT_LOCAL_PROVIDER_HISTORY_LOGS,
   REACT_REMOTE_PROVIDER_HISTORY_LOGS,
   MAX_EXECUTIONS,
@@ -80,6 +82,10 @@ export class ReActLLMDuty extends LLMDuty {
   ): Promise<void> {
     if (!TOOLKIT_REGISTRY.isLoaded) {
       await TOOLKIT_REGISTRY.load()
+    }
+
+    if (!CONTEXT_MANAGER.isLoaded || params.force) {
+      await CONTEXT_MANAGER.load()
     }
 
     if (LLM_PROVIDER_NAME === LLMProviders.Local) {
@@ -195,7 +201,7 @@ export class ReActLLMDuty extends LLMDuty {
 
         LogHelper.title(this.name)
         LogHelper.debug(
-          `Execution ${executionCount}/${MAX_EXECUTIONS}: ${currentStep.function} | ${pendingSteps.length} step(s) remaining`
+          `Execution ${executionCount}/${MAX_EXECUTIONS}: ${currentStep.function} | label="${currentStep.label}" | ${pendingSteps.length} step(s) remaining`
         )
 
         const stepResult = await runExecutionStep(
@@ -344,7 +350,10 @@ export class ReActLLMDuty extends LLMDuty {
       callLLMWithTools: this.callLLMWithTools.bind(this),
       supportsNativeTools: this.supportsNativeTools,
       input: this.input,
-      history
+      history,
+      getContextForToolkit: CONTEXT_MANAGER.getContextForToolkit.bind(
+        CONTEXT_MANAGER
+      )
     }
   }
 
@@ -363,6 +372,7 @@ export class ReActLLMDuty extends LLMDuty {
       systemPrompt,
       data: schema,
       temperature: REACT_TEMPERATURE,
+      timeout: REACT_INFERENCE_TIMEOUT_MS,
       ...(history ? { history } : {})
     }
 
@@ -420,6 +430,7 @@ export class ReActLLMDuty extends LLMDuty {
       dutyType: LLMDuties.ReAct,
       systemPrompt,
       temperature: REACT_TEMPERATURE,
+      timeout: REACT_INFERENCE_TIMEOUT_MS,
       tools,
       toolChoice,
       ...(history ? { history } : {})

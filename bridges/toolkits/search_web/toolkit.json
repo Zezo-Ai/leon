@@ -2,5 +2,6 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Search & Web",
   "description": "Tools to search the web and social media platforms.",
+  "context_files": [],
   "tools": ["grok"]
 }

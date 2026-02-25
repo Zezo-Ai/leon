@@ -275,21 +275,42 @@ export default class LLMProvider {
 
     const isJSONMode = completionParams.data !== null
 
+    const abortController = new AbortController()
+    const completionParamsWithAbort = {
+      ...completionParams,
+      signal: abortController.signal
+    }
+
     const rawResultPromise = this.llmProvider.runChatCompletion(
       promptOrChatHistory,
-      completionParams
+      completionParamsWithAbort
     )
 
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout')), completionParams.timeout)
-    )
+    let timeoutHandle: NodeJS.Timeout | null = null
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        abortController.abort()
+        reject(
+          new Error(
+            `Timeout (${completionParams.timeout}ms) for "${completionParams.dutyType}" duty`
+          )
+        )
+      }, completionParams.timeout)
+    })
 
     let rawResult
     let rawResultString
 
     try {
       rawResult = await Promise.race([rawResultPromise, timeoutPromise])
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle)
+      }
     } catch (e) {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle)
+      }
+
       LogHelper.title('LLM Provider')
       LogHelper.error(`Error to complete prompt: ${e}`)
 

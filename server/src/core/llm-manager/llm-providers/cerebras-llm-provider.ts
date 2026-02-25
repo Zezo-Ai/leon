@@ -138,6 +138,12 @@ export default class CerebrasLLMProvider {
           url: '/chat/completions',
           method: 'POST',
           data: chatCompletionParams,
+          ...(typeof completionParams.timeout === 'number'
+            ? { timeout: completionParams.timeout }
+            : {}),
+          ...(completionParams.signal
+            ? { signal: completionParams.signal }
+            : {}),
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`

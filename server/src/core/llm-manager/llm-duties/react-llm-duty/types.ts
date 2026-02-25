@@ -24,6 +24,8 @@ export interface ExecutionRecord {
   function: string
   status: string
   observation: string
+  stepLabel?: string
+  requestedToolInput?: string
 }
 
 export type PlanStepStatus = 'pending' | 'in_progress' | 'completed'
@@ -91,4 +93,5 @@ export interface LLMCaller {
   readonly supportsNativeTools: boolean
   readonly input: string | object | null
   readonly history: MessageLog[]
+  getContextForToolkit(toolkitId: string): string
 }

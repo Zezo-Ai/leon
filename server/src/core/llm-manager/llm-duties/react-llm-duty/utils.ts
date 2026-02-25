@@ -21,7 +21,11 @@ export function formatExecutionHistory(history: ExecutionRecord[]): string {
   return `Previous Executions:\n${history
     .map(
       (exec, i) =>
-        `Step ${i + 1}: ${exec.function} [${exec.status}]\n  Observation: ${exec.observation}`
+        `Step ${i + 1}: ${exec.function} [${exec.status}]${
+          exec.stepLabel ? ` | Label: "${exec.stepLabel}"` : ''
+        }\n  Requested Input: ${
+          exec.requestedToolInput || 'not available'
+        }\n  Observation: ${exec.observation}`
     )
     .join('\n')}`
 }

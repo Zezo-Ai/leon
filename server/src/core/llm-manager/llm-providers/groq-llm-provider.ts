@@ -140,6 +140,12 @@ export default class GroqLLMProvider {
           url: '/chat/completions',
           method: 'POST',
           data: chatCompletionParams,
+          ...(typeof completionParams.timeout === 'number'
+            ? { timeout: completionParams.timeout }
+            : {}),
+          ...(completionParams.signal
+            ? { signal: completionParams.signal }
+            : {}),
           transformResponse: (data) => {
             return data
           },

@@ -2,5 +2,6 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Business & Finance",
   "description": "Tools for business and finance.",
+  "context_files": [],
   "tools": []
 }

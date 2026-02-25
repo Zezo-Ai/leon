@@ -2,5 +2,6 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Weather",
   "description": "Tools for weather lookup and forecasts.",
+  "context_files": [],
   "tools": ["openmeteo"]
 }

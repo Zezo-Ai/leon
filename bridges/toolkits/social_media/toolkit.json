@@ -2,5 +2,6 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Social Media",
   "description": "Tools for interacting with social media platforms.",
+  "context_files": [],
   "tools": []
 }

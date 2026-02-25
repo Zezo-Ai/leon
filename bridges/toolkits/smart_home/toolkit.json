@@ -2,5 +2,6 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Smart Home",
   "description": "Tools for smart home devices and automation.",
+  "context_files": [],
   "tools": []
 }

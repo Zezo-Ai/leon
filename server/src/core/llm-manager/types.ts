@@ -90,6 +90,7 @@ export interface CompletionParams {
   grammar?: string
   temperature?: number | undefined
   timeout?: number
+  signal?: AbortSignal
   maxRetries?: number
   session?: LlamaChatSession | LlamaChat | null
   functions?: ChatSessionModelFunctions | undefined

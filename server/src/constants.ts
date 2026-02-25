@@ -33,12 +33,13 @@ export const IS_TESTING_ENV = LEON_NODE_ENV === TESTING_ENV
 export const BIN_PATH = path.join(process.cwd(), 'bin')
 export const LOGS_PATH = path.join(process.cwd(), 'logs')
 export const SKILLS_PATH = path.join(process.cwd(), 'skills')
-export const GLOBAL_DATA_PATH = path.join(process.cwd(), 'core', 'data')
+export const GLOBAL_CORE_PATH = path.join(process.cwd(), 'core')
+export const GLOBAL_DATA_PATH = path.join(GLOBAL_CORE_PATH, 'data')
+export const CONTEXT_PATH = path.join(GLOBAL_CORE_PATH, 'context')
 export const MODELS_PATH = path.join(GLOBAL_DATA_PATH, 'models')
 export const AUDIO_MODELS_PATH = path.join(MODELS_PATH, 'audio')
 export const VOICE_CONFIG_PATH = path.join(
-  process.cwd(),
-  'core',
+  GLOBAL_CORE_PATH,
   'config',
   'voice'
 )
