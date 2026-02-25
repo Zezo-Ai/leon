@@ -116,7 +116,7 @@ export default class CerebrasLLMProvider {
           messages: messagesHistory,
           model: this.model,
           temperature: 0.5,
-          stream: false
+          stream: completionParams.shouldStream === true
         }
 
         if (completionParams.tools && completionParams.tools.length > 0) {
@@ -140,6 +140,9 @@ export default class CerebrasLLMProvider {
           data: chatCompletionParams,
           ...(typeof completionParams.timeout === 'number'
             ? { timeout: completionParams.timeout }
+            : {}),
+          ...(completionParams.shouldStream === true
+            ? { responseType: 'stream' as const }
             : {}),
           ...(completionParams.signal
             ? { signal: completionParams.signal }

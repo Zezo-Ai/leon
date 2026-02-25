@@ -96,7 +96,8 @@ export interface CompletionParams {
   functions?: ChatSessionModelFunctions | undefined
   data?: Record<string, unknown> | null
   history?: MessageLog[]
-  onToken?: (tokens: Token[]) => void
+  onToken?: (tokens: Token[] | string) => void
+  shouldStream?: boolean
   /**
    * OpenAI-compatible tools for remote providers that support native
    * tool/function calling. When set, the provider sends these as `tools`

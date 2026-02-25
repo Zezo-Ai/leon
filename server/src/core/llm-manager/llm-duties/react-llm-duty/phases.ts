@@ -383,7 +383,7 @@ export async function runPlanningPhase(
         function: {
           name: 'create_plan',
           description:
-            'Create an execution plan with ordered steps to solve the user request. If no tools are needed (conversational message), return empty steps with the answer in summary.',
+            'Create an execution plan with ordered steps to solve the user request when tool usage is required. For purely conversational messages, do not call this tool and answer directly in plain text.',
           parameters: {
             type: 'object',
             properties: {
@@ -423,7 +423,8 @@ export async function runPlanningPhase(
       planSystemPrompt,
       planTools,
       'auto',
-      history
+      history,
+      true
     )
 
     LogHelper.title(DUTY_NAME)
@@ -517,6 +518,20 @@ export async function runPlanningPhase(
       }
     } else {
       LogHelper.debug('Planning: no tool call returned, falling back to JSON mode')
+    }
+
+    if (
+      textFallback &&
+      !sawUnexpectedToolCall &&
+      shouldTreatPlanningTextAsFinalAnswer(textFallback)
+    ) {
+      LogHelper.debug(
+        'Planning: using direct conversational text answer from tool-calling attempt'
+      )
+      return {
+        type: 'final',
+        answer: stripInlineToolMarkup(textFallback) || textFallback
+      }
     }
 
     // Final fallback: JSON mode planning
@@ -1830,50 +1845,63 @@ export async function runFinalAnswerPhase(
     let candidateAnswer: string | null = null
     const attemptStart = Date.now()
 
-    // Use native tool calling for remote providers to get a proper answer
+    // Use streaming text generation for remote providers when synthesizing
+    // user-facing final answers. Fallback to tool calling if needed.
     if (caller.supportsNativeTools) {
-      const answerTool: OpenAITool = {
-        type: 'function',
-        function: {
-          name: 'provide_answer',
-          description:
-            'Provide the final answer to the user. Include all relevant details from the tool execution results. Use plain text only, no markdown.',
-          parameters: {
-            type: 'object',
-            properties: {
-              answer: {
-                type: 'string',
-                description:
-                  'A clear, complete, and helpful plain text answer (no markdown) to the user request based on the tool results. Wrap any file paths with [FILE_PATH]/path[/FILE_PATH].'
-              }
-            },
-            required: ['answer']
-          }
-        }
-      }
-
-      const result = await caller.callLLMWithTools(
+      const textResult = await caller.callLLMText(
         prompt,
         systemPrompt,
-        [answerTool],
-        { type: 'function', function: { name: 'provide_answer' } },
-        caller.history
+        caller.history,
+        true
       )
 
-      if (result?.toolCall) {
-        try {
-          const parsed = JSON.parse(result.toolCall.arguments)
-          if (typeof parsed.answer === 'string' && parsed.answer.trim()) {
-            candidateAnswer = parsed.answer.trim()
-          }
-        } catch {
-          // Fall through
-        }
+      if (textResult?.output?.trim()) {
+        candidateAnswer = textResult.output.trim()
       }
 
-      // If the model responded with text instead
-      if (!candidateAnswer && result?.textContent?.trim()) {
-        candidateAnswer = result.textContent.trim()
+      if (!candidateAnswer) {
+        const answerTool: OpenAITool = {
+          type: 'function',
+          function: {
+            name: 'provide_answer',
+            description:
+              'Provide the final answer to the user. Include all relevant details from the tool execution results. Use plain text only, no markdown.',
+            parameters: {
+              type: 'object',
+              properties: {
+                answer: {
+                  type: 'string',
+                  description:
+                    'A clear, complete, and helpful plain text answer (no markdown) to the user request based on the tool results. Wrap any file paths with [FILE_PATH]/path[/FILE_PATH].'
+                }
+              },
+              required: ['answer']
+            }
+          }
+        }
+
+        const result = await caller.callLLMWithTools(
+          prompt,
+          systemPrompt,
+          [answerTool],
+          { type: 'function', function: { name: 'provide_answer' } },
+          caller.history
+        )
+
+        if (result?.toolCall) {
+          try {
+            const parsed = JSON.parse(result.toolCall.arguments)
+            if (typeof parsed.answer === 'string' && parsed.answer.trim()) {
+              candidateAnswer = parsed.answer.trim()
+            }
+          } catch {
+            // Fall through
+          }
+        }
+
+        if (!candidateAnswer && result?.textContent?.trim()) {
+          candidateAnswer = result.textContent.trim()
+        }
       }
     } else {
       // Local provider: use JSON mode

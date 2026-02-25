@@ -9,6 +9,7 @@ import {
   type LLMDutyResult
 } from '@/core/llm-manager/llm-duty'
 import { LogHelper } from '@/helpers/log-helper'
+import { StringHelper } from '@/helpers/string-helper'
 import {
   LLM_MANAGER,
   LLM_PROVIDER,
@@ -16,7 +17,8 @@ import {
   TOOLKIT_REGISTRY,
   CONTEXT_MANAGER,
   CONVERSATION_LOGGER,
-  BRAIN
+  BRAIN,
+  SOCKET_SERVER
 } from '@/core'
 import {
   LLMDuties,
@@ -67,6 +69,7 @@ export class ReActLLMDuty extends LLMDuty {
   protected input: LLMDutyParams['input'] = null
   private totalInputTokens = 0
   private totalOutputTokens = 0
+  private hasStreamedTokenEmission = false
 
   constructor(params: ReactLLMDutyParams) {
     super()
@@ -132,6 +135,7 @@ export class ReActLLMDuty extends LLMDuty {
 
     this.totalInputTokens = 0
     this.totalOutputTokens = 0
+    this.hasStreamedTokenEmission = false
 
     try {
       const history =
@@ -413,6 +417,7 @@ export class ReActLLMDuty extends LLMDuty {
   private createLLMCaller(history: MessageLog[]): LLMCaller {
     return {
       callLLM: this.callLLM.bind(this),
+      callLLMText: this.callLLMText.bind(this),
       callLLMWithTools: this.callLLMWithTools.bind(this),
       supportsNativeTools: this.supportsNativeTools,
       input: this.input,
@@ -465,6 +470,87 @@ export class ReActLLMDuty extends LLMDuty {
     return result
   }
 
+  private async callLLMText(
+    prompt: string,
+    systemPrompt: string,
+    history?: MessageLog[],
+    shouldStream = false
+  ): Promise<{
+    output: string
+    usedInputTokens?: number
+    usedOutputTokens?: number
+  } | null> {
+    const generationId = shouldStream
+      ? StringHelper.random(6, { onlyLetters: true })
+      : null
+
+    const completionParams = {
+      dutyType: LLMDuties.ReAct,
+      systemPrompt,
+      temperature: REACT_TEMPERATURE,
+      timeout: REACT_INFERENCE_TIMEOUT_MS,
+      maxRetries: REACT_TIMEOUT_MAX_RETRIES,
+      shouldStream,
+      ...(shouldStream
+        ? {
+            onToken: (chunk: unknown): void => {
+              const token =
+                typeof chunk === 'string'
+                  ? chunk
+                  : LLM_PROVIDER.cleanUpResult(
+                      LLM_MANAGER.model.detokenize(
+                        chunk as Parameters<
+                          typeof LLM_MANAGER.model.detokenize
+                        >[0]
+                      )
+                    )
+
+              if (!token || !generationId) {
+                return
+              }
+
+              this.hasStreamedTokenEmission = true
+              SOCKET_SERVER.socket?.emit('llm-token', {
+                token,
+                generationId
+              })
+            }
+          }
+        : {}),
+      ...(history ? { history } : {})
+    }
+
+    let result
+    if (LLM_PROVIDER_NAME === LLMProviders.Local) {
+      result = await LLM_PROVIDER.prompt(prompt, {
+        ...completionParams,
+        session: ReActLLMDuty.session
+      })
+    } else {
+      result = await LLM_PROVIDER.prompt(prompt, completionParams)
+    }
+
+    if (!result) {
+      return null
+    }
+
+    this.totalInputTokens += result.usedInputTokens ?? 0
+    this.totalOutputTokens += result.usedOutputTokens ?? 0
+    LogHelper.title(this.name)
+    LogHelper.debug(
+      `Tokens — input: ${result.usedInputTokens ?? 0} | output: ${result.usedOutputTokens ?? 0} | total: ${this.totalInputTokens}+${this.totalOutputTokens}=${this.totalInputTokens + this.totalOutputTokens}`
+    )
+
+    return {
+      output:
+        typeof result.output === 'string'
+          ? result.output
+          : JSON.stringify(result.output),
+      usedInputTokens: result.usedInputTokens,
+      usedOutputTokens: result.usedOutputTokens
+    }
+  }
+
   /**
    * Calls the LLM using native tool calling (OpenAI-compatible `tools` API).
    * Returns parsed tool call if successful, or null if the model responded
@@ -475,7 +561,8 @@ export class ReActLLMDuty extends LLMDuty {
     systemPrompt: string,
     tools: OpenAITool[],
     toolChoice: OpenAIToolChoice,
-    history?: MessageLog[]
+    history?: MessageLog[],
+    shouldStreamToUser = false
   ): Promise<{
     toolCall?: { functionName: string, arguments: string }
     unexpectedToolCall?: { functionName: string, arguments: string }
@@ -488,6 +575,9 @@ export class ReActLLMDuty extends LLMDuty {
       typeof toolChoice === 'string'
         ? toolChoice
         : `forced:${toolChoice.function.name}`
+    const generationId = shouldStreamToUser
+      ? StringHelper.random(6, { onlyLetters: true })
+      : null
 
     LogHelper.title(this.name)
     LogHelper.debug(
@@ -541,6 +631,33 @@ export class ReActLLMDuty extends LLMDuty {
         temperature: REACT_TEMPERATURE,
         timeout: REACT_INFERENCE_TIMEOUT_MS,
         maxRetries: REACT_TIMEOUT_MAX_RETRIES,
+        shouldStream: shouldStreamToUser,
+        ...(shouldStreamToUser
+          ? {
+              onToken: (chunk: unknown): void => {
+                const token =
+                  typeof chunk === 'string'
+                    ? chunk
+                    : LLM_PROVIDER.cleanUpResult(
+                        LLM_MANAGER.model.detokenize(
+                          chunk as Parameters<
+                            typeof LLM_MANAGER.model.detokenize
+                          >[0]
+                        )
+                      )
+
+                if (!token || !generationId) {
+                  return
+                }
+
+                this.hasStreamedTokenEmission = true
+                SOCKET_SERVER.socket?.emit('llm-token', {
+                  token,
+                  generationId
+                })
+              }
+            }
+          : {}),
         tools,
         toolChoice,
         ...(history ? { history } : {})
@@ -720,6 +837,10 @@ export class ReActLLMDuty extends LLMDuty {
   }
 
   private makeDutyResult(output: string): LLMDutyResult {
+    if (!this.hasStreamedTokenEmission && output?.trim()) {
+      this.emitSyntheticTokenStream(output)
+    }
+
     LogHelper.title(this.name)
     LogHelper.success('Duty executed')
     LogHelper.success(`Output — ${output}`)
@@ -734,5 +855,19 @@ export class ReActLLMDuty extends LLMDuty {
       output,
       data: {}
     } as unknown as LLMDutyResult
+  }
+
+  private emitSyntheticTokenStream(output: string): void {
+    const generationId = StringHelper.random(6, { onlyLetters: true })
+    const chunks = output.match(/(\s+|[^\s]+)/g) || [output]
+
+    this.hasStreamedTokenEmission = chunks.length > 0
+
+    for (const token of chunks) {
+      SOCKET_SERVER.socket?.emit('llm-token', {
+        token,
+        generationId
+      })
+    }
   }
 }

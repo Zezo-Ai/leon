@@ -118,7 +118,7 @@ export default class GroqLLMProvider {
           messages: messagesHistory,
           model: this.model,
           temperature: completionParams.temperature || 0,
-          stream: false
+          stream: completionParams.shouldStream === true
         }
 
         if (completionParams.tools && completionParams.tools.length > 0) {
@@ -143,12 +143,19 @@ export default class GroqLLMProvider {
           ...(typeof completionParams.timeout === 'number'
             ? { timeout: completionParams.timeout }
             : {}),
+          ...(completionParams.shouldStream === true
+            ? { responseType: 'stream' as const }
+            : {}),
           ...(completionParams.signal
             ? { signal: completionParams.signal }
             : {}),
-          transformResponse: (data) => {
-            return data
-          },
+          ...(completionParams.shouldStream !== true
+            ? {
+                transformResponse: (data: unknown): unknown => {
+                  return data
+                }
+              }
+            : {}),
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`

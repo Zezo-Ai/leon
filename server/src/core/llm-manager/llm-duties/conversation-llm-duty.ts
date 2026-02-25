@@ -171,7 +171,9 @@ export class ConversationLLMDuty extends LLMDuty {
           onToken: (chunk) => {
             if (!params.isWarmingUp) {
               const detokenizedChunk = LLM_PROVIDER.cleanUpResult(
-                LLM_MANAGER.model.detokenize(chunk)
+                LLM_MANAGER.model.detokenize(
+                  chunk as Parameters<typeof LLM_MANAGER.model.detokenize>[0]
+                )
               )
 
               SOCKET_SERVER.socket?.emit('llm-token', {

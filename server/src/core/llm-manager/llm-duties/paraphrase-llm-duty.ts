@@ -141,7 +141,9 @@ The sun is a star, it is the closest star to Earth.`
           onToken: (chunk) => {
             if (!params.isWarmingUp && !params.shouldEmitOnToken) {
               const detokenizedChunk = LLM_PROVIDER.cleanUpResult(
-                LLM_MANAGER.model.detokenize(chunk)
+                LLM_MANAGER.model.detokenize(
+                  chunk as Parameters<typeof LLM_MANAGER.model.detokenize>[0]
+                )
               )
 
               SOCKET_SERVER.socket?.emit('llm-token', {

@@ -116,7 +116,7 @@ export default class OpenRouterLLMProvider {
           messages: messagesHistory,
           model: this.model,
           temperature: 0.7,
-          stream: false
+          stream: completionParams.shouldStream === true
         }
 
         const providerPreferences: NonNullable<
@@ -153,6 +153,9 @@ export default class OpenRouterLLMProvider {
           data: chatCompletionParams,
           ...(typeof completionParams.timeout === 'number'
             ? { timeout: completionParams.timeout }
+            : {}),
+          ...(completionParams.shouldStream === true
+            ? { responseType: 'stream' as const }
             : {}),
           ...(completionParams.signal
             ? { signal: completionParams.signal }

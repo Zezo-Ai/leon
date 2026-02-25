@@ -117,7 +117,7 @@ export default class HuggingFaceLLMProvider {
           messages: messagesHistory,
           model: this.model,
           temperature: 0.7,
-          stream: false
+          stream: completionParams.shouldStream === true
         }
 
         if (completionParams.tools && completionParams.tools.length > 0) {
@@ -141,6 +141,9 @@ export default class HuggingFaceLLMProvider {
           data: chatCompletionParams,
           ...(typeof completionParams.timeout === 'number'
             ? { timeout: completionParams.timeout }
+            : {}),
+          ...(completionParams.shouldStream === true
+            ? { responseType: 'stream' as const }
             : {}),
           ...(completionParams.signal
             ? { signal: completionParams.signal }
