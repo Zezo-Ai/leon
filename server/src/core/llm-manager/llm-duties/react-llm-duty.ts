@@ -9,13 +9,16 @@ import {
   type LLMDutyResult
 } from '@/core/llm-manager/llm-duty'
 import { LogHelper } from '@/helpers/log-helper'
+import { StringHelper } from '@/helpers/string-helper'
 import {
   LLM_MANAGER,
   LLM_PROVIDER,
   PERSONA,
   TOOLKIT_REGISTRY,
+  CONTEXT_MANAGER,
   CONVERSATION_LOGGER,
-  BRAIN
+  BRAIN,
+  SOCKET_SERVER
 } from '@/core'
 import {
   LLMDuties,
@@ -30,6 +33,11 @@ import type { MessageLog } from '@/types'
 import {
   PLAN_SYSTEM_PROMPT,
   REACT_TEMPERATURE,
+  REACT_INFERENCE_TIMEOUT_MS,
+  REACT_TIMEOUT_MAX_RETRIES,
+  CHARS_PER_TOKEN,
+  TOOL_CALL_WAIT_NOTICE_DELAY_MS,
+  TOOL_CALL_DIAGNOSIS_DELAY_MS,
   REACT_LOCAL_PROVIDER_HISTORY_LOGS,
   REACT_REMOTE_PROVIDER_HISTORY_LOGS,
   MAX_EXECUTIONS,
@@ -46,6 +54,7 @@ import { widgetId, emitPlanWidget } from './react-llm-duty/plan-widget'
 import {
   buildCatalog,
   runPlanningPhase,
+  runRecoveryPlanningPhase,
   runExecutionStep,
   runFinalAnswerPhase
 } from './react-llm-duty/phases'
@@ -60,6 +69,7 @@ export class ReActLLMDuty extends LLMDuty {
   protected input: LLMDutyParams['input'] = null
   private totalInputTokens = 0
   private totalOutputTokens = 0
+  private hasStreamedTokenEmission = false
 
   constructor(params: ReactLLMDutyParams) {
     super()
@@ -80,6 +90,10 @@ export class ReActLLMDuty extends LLMDuty {
   ): Promise<void> {
     if (!TOOLKIT_REGISTRY.isLoaded) {
       await TOOLKIT_REGISTRY.load()
+    }
+
+    if (!CONTEXT_MANAGER.isLoaded || params.force) {
+      await CONTEXT_MANAGER.load()
     }
 
     if (LLM_PROVIDER_NAME === LLMProviders.Local) {
@@ -121,6 +135,7 @@ export class ReActLLMDuty extends LLMDuty {
 
     this.totalInputTokens = 0
     this.totalOutputTokens = 0
+    this.hasStreamedTokenEmission = false
 
     try {
       const history =
@@ -148,7 +163,7 @@ export class ReActLLMDuty extends LLMDuty {
 
       if (planResult.type === 'final') {
         LogHelper.title(this.name)
-        LogHelper.debug(`Planning returned final answer directly: "${planResult.answer.slice(0, 200)}"`)
+        LogHelper.debug(`Planning returned final answer directly: "${planResult.answer}"`)
         return this.makeDutyResult(planResult.answer)
       }
 
@@ -195,7 +210,7 @@ export class ReActLLMDuty extends LLMDuty {
 
         LogHelper.title(this.name)
         LogHelper.debug(
-          `Execution ${executionCount}/${MAX_EXECUTIONS}: ${currentStep.function} | ${pendingSteps.length} step(s) remaining`
+          `Execution ${executionCount}/${MAX_EXECUTIONS}: ${currentStep.function} | label="${currentStep.label}" | ${pendingSteps.length} step(s) remaining`
         )
 
         const stepResult = await runExecutionStep(
@@ -207,7 +222,7 @@ export class ReActLLMDuty extends LLMDuty {
 
         if (stepResult.type === 'final') {
           LogHelper.title(this.name)
-          LogHelper.debug(`Execution returned final answer: "${(stepResult.answer).slice(0, 200)}"`)
+          LogHelper.debug(`Execution returned final answer: "${(stepResult.answer)}"`)
 
           // Mark all remaining steps as completed in the widget
           for (const ts of trackedSteps) {
@@ -274,7 +289,7 @@ export class ReActLLMDuty extends LLMDuty {
         // Check for short-circuit final answer from tool result
         if (stepResult.finalAnswer) {
           LogHelper.title(this.name)
-          LogHelper.debug(`Tool returned final_answer, short-circuiting: "${stepResult.finalAnswer.slice(0, 200)}"`)
+          LogHelper.debug(`Tool returned final_answer, short-circuiting: "${stepResult.finalAnswer}"`)
 
           // Mark all remaining as completed
           for (const ts of trackedSteps) {
@@ -290,6 +305,67 @@ export class ReActLLMDuty extends LLMDuty {
           LogHelper.title(this.name)
           LogHelper.debug(`Missing settings detected: "${stepResult.missingSettingsMessage}"`)
           return this.makeDutyResult(stepResult.missingSettingsMessage)
+        }
+
+        if (stepResult.execution.status === 'error') {
+          if (replanCount >= MAX_REPLANS) {
+            LogHelper.title(this.name)
+            LogHelper.warning(
+              'Recovery replanning skipped: max re-plans reached'
+            )
+            continue
+          }
+
+          const recoveryPlanResult = await runRecoveryPlanningPhase(
+            caller,
+            catalog,
+            history,
+            executionHistory,
+            currentStep,
+            pendingSteps
+          )
+
+          if (recoveryPlanResult?.type === 'final') {
+            LogHelper.title(this.name)
+            LogHelper.debug(
+              `Recovery planning returned final answer: "${recoveryPlanResult.answer}"`
+            )
+            return this.makeDutyResult(recoveryPlanResult.answer)
+          }
+
+          if (
+            recoveryPlanResult?.type === 'plan' &&
+            recoveryPlanResult.steps.length > 0
+          ) {
+            replanCount += 1
+            pendingSteps = [...recoveryPlanResult.steps]
+
+            LogHelper.title(this.name)
+            LogHelper.debug(
+              `Recovery re-plan ${replanCount}/${MAX_REPLANS}: ${pendingSteps.map((s) => s.function).join(' -> ')}`
+            )
+            if (recoveryPlanResult.summary) {
+              LogHelper.debug(
+                `Recovery plan summary: "${recoveryPlanResult.summary}"`
+              )
+              await this.emitProgress(recoveryPlanResult.summary)
+            }
+
+            const completedSteps = trackedSteps.filter(
+              (s) => s.status === 'completed'
+            )
+            const newSteps: TrackedPlanStep[] = pendingSteps.map((s) => ({
+              label: s.label,
+              status: 'pending' as PlanStepStatus
+            }))
+            if (newSteps.length > 0) {
+              newSteps[0]!.status = 'in_progress'
+            }
+            trackedSteps = [...completedSteps, ...newSteps]
+            currentStepIndex = completedSteps.length
+
+            emitPlanWidget(trackedSteps, null, planWidgetIdValue, true)
+          }
         }
       }
 
@@ -341,10 +417,14 @@ export class ReActLLMDuty extends LLMDuty {
   private createLLMCaller(history: MessageLog[]): LLMCaller {
     return {
       callLLM: this.callLLM.bind(this),
+      callLLMText: this.callLLMText.bind(this),
       callLLMWithTools: this.callLLMWithTools.bind(this),
       supportsNativeTools: this.supportsNativeTools,
       input: this.input,
-      history
+      history,
+      getContextForToolkit: CONTEXT_MANAGER.getContextForToolkit.bind(
+        CONTEXT_MANAGER
+      )
     }
   }
 
@@ -363,6 +443,8 @@ export class ReActLLMDuty extends LLMDuty {
       systemPrompt,
       data: schema,
       temperature: REACT_TEMPERATURE,
+      timeout: REACT_INFERENCE_TIMEOUT_MS,
+      maxRetries: REACT_TIMEOUT_MAX_RETRIES,
       ...(history ? { history } : {})
     }
 
@@ -388,6 +470,87 @@ export class ReActLLMDuty extends LLMDuty {
     return result
   }
 
+  private async callLLMText(
+    prompt: string,
+    systemPrompt: string,
+    history?: MessageLog[],
+    shouldStream = false
+  ): Promise<{
+    output: string
+    usedInputTokens?: number
+    usedOutputTokens?: number
+  } | null> {
+    const generationId = shouldStream
+      ? StringHelper.random(6, { onlyLetters: true })
+      : null
+
+    const completionParams = {
+      dutyType: LLMDuties.ReAct,
+      systemPrompt,
+      temperature: REACT_TEMPERATURE,
+      timeout: REACT_INFERENCE_TIMEOUT_MS,
+      maxRetries: REACT_TIMEOUT_MAX_RETRIES,
+      shouldStream,
+      ...(shouldStream
+        ? {
+            onToken: (chunk: unknown): void => {
+              const token =
+                typeof chunk === 'string'
+                  ? chunk
+                  : LLM_PROVIDER.cleanUpResult(
+                      LLM_MANAGER.model.detokenize(
+                        chunk as Parameters<
+                          typeof LLM_MANAGER.model.detokenize
+                        >[0]
+                      )
+                    )
+
+              if (!token || !generationId) {
+                return
+              }
+
+              this.hasStreamedTokenEmission = true
+              SOCKET_SERVER.socket?.emit('llm-token', {
+                token,
+                generationId
+              })
+            }
+          }
+        : {}),
+      ...(history ? { history } : {})
+    }
+
+    let result
+    if (LLM_PROVIDER_NAME === LLMProviders.Local) {
+      result = await LLM_PROVIDER.prompt(prompt, {
+        ...completionParams,
+        session: ReActLLMDuty.session
+      })
+    } else {
+      result = await LLM_PROVIDER.prompt(prompt, completionParams)
+    }
+
+    if (!result) {
+      return null
+    }
+
+    this.totalInputTokens += result.usedInputTokens ?? 0
+    this.totalOutputTokens += result.usedOutputTokens ?? 0
+    LogHelper.title(this.name)
+    LogHelper.debug(
+      `Tokens — input: ${result.usedInputTokens ?? 0} | output: ${result.usedOutputTokens ?? 0} | total: ${this.totalInputTokens}+${this.totalOutputTokens}=${this.totalInputTokens + this.totalOutputTokens}`
+    )
+
+    return {
+      output:
+        typeof result.output === 'string'
+          ? result.output
+          : JSON.stringify(result.output),
+      usedInputTokens: result.usedInputTokens,
+      usedOutputTokens: result.usedOutputTokens
+    }
+  }
+
   /**
    * Calls the LLM using native tool calling (OpenAI-compatible `tools` API).
    * Returns parsed tool call if successful, or null if the model responded
@@ -398,9 +561,11 @@ export class ReActLLMDuty extends LLMDuty {
     systemPrompt: string,
     tools: OpenAITool[],
     toolChoice: OpenAIToolChoice,
-    history?: MessageLog[]
+    history?: MessageLog[],
+    shouldStreamToUser = false
   ): Promise<{
     toolCall?: { functionName: string, arguments: string }
+    unexpectedToolCall?: { functionName: string, arguments: string }
     textContent?: string
     usedInputTokens?: number
     usedOutputTokens?: number
@@ -410,20 +575,102 @@ export class ReActLLMDuty extends LLMDuty {
       typeof toolChoice === 'string'
         ? toolChoice
         : `forced:${toolChoice.function.name}`
+    const generationId = shouldStreamToUser
+      ? StringHelper.random(6, { onlyLetters: true })
+      : null
 
     LogHelper.title(this.name)
     LogHelper.debug(
       `callLLMWithTools: tools=[${toolNames}] | choice=${choiceLabel}`
     )
 
-    const completionResult = await LLM_PROVIDER.prompt(prompt, {
-      dutyType: LLMDuties.ReAct,
+    let completionResult: Awaited<ReturnType<typeof LLM_PROVIDER.prompt>>
+    let completed = false
+    let waitNoticeTimer: NodeJS.Timeout | null = null
+    let diagnosisTimer: NodeJS.Timeout | null = null
+
+    const delayReason = this.buildLongToolCallReason(
+      prompt,
       systemPrompt,
-      temperature: REACT_TEMPERATURE,
       tools,
-      toolChoice,
-      ...(history ? { history } : {})
-    })
+      history
+    )
+
+    waitNoticeTimer = setTimeout(() => {
+      if (completed) {
+        return
+      }
+      LogHelper.title(this.name)
+      LogHelper.warning(
+        `callLLMWithTools: pending > ${TOOL_CALL_WAIT_NOTICE_DELAY_MS}ms`
+      )
+      void this.emitProgress(
+        BRAIN.wernicke('react.tool_call.waiting', '', {
+          '{{ reason }}': delayReason
+        })
+      )
+    }, TOOL_CALL_WAIT_NOTICE_DELAY_MS)
+
+    diagnosisTimer = setTimeout(() => {
+      if (completed) {
+        return
+      }
+      void this.runLongToolCallDiagnosis(
+        prompt,
+        systemPrompt,
+        tools,
+        toolChoice,
+        history
+      )
+    }, TOOL_CALL_DIAGNOSIS_DELAY_MS)
+
+    try {
+      completionResult = await LLM_PROVIDER.prompt(prompt, {
+        dutyType: LLMDuties.ReAct,
+        systemPrompt,
+        temperature: REACT_TEMPERATURE,
+        timeout: REACT_INFERENCE_TIMEOUT_MS,
+        maxRetries: REACT_TIMEOUT_MAX_RETRIES,
+        shouldStream: shouldStreamToUser,
+        ...(shouldStreamToUser
+          ? {
+              onToken: (chunk: unknown): void => {
+                const token =
+                  typeof chunk === 'string'
+                    ? chunk
+                    : LLM_PROVIDER.cleanUpResult(
+                        LLM_MANAGER.model.detokenize(
+                          chunk as Parameters<
+                            typeof LLM_MANAGER.model.detokenize
+                          >[0]
+                        )
+                      )
+
+                if (!token || !generationId) {
+                  return
+                }
+
+                this.hasStreamedTokenEmission = true
+                SOCKET_SERVER.socket?.emit('llm-token', {
+                  token,
+                  generationId
+                })
+              }
+            }
+          : {}),
+        tools,
+        toolChoice,
+        ...(history ? { history } : {})
+      })
+    } finally {
+      completed = true
+      if (waitNoticeTimer) {
+        clearTimeout(waitNoticeTimer)
+      }
+      if (diagnosisTimer) {
+        clearTimeout(diagnosisTimer)
+      }
+    }
 
     if (!completionResult) {
       LogHelper.debug('callLLMWithTools: no completion result returned')
@@ -455,6 +702,10 @@ export class ReActLLMDuty extends LLMDuty {
             ? completionResult.output
             : ''
         return {
+          unexpectedToolCall: {
+            functionName: firstCall.function.name,
+            arguments: firstCall.function.arguments
+          },
           textContent: textContentFallback,
           usedInputTokens: completionResult.usedInputTokens,
           usedOutputTokens: completionResult.usedOutputTokens
@@ -462,7 +713,7 @@ export class ReActLLMDuty extends LLMDuty {
       }
       LogHelper.title(this.name)
       LogHelper.debug(
-        `callLLMWithTools: tool call received — ${firstCall.function.name}(${firstCall.function.arguments.slice(0, 200)})`
+        `callLLMWithTools: tool call received — ${firstCall.function.name}(${firstCall.function.arguments})`
       )
       return {
         toolCall: {
@@ -481,7 +732,7 @@ export class ReActLLMDuty extends LLMDuty {
         : ''
     LogHelper.title(this.name)
     LogHelper.debug(
-      `callLLMWithTools: no tool call, text response: "${textContent.slice(0, 200)}"`
+      `callLLMWithTools: no tool call, text response: "${textContent}"`
     )
     return {
       textContent,
@@ -494,6 +745,90 @@ export class ReActLLMDuty extends LLMDuty {
   // Helpers
   // ---------------------------------------------------------------------------
 
+  private estimateTokensFromText(text: string): number {
+    if (!text) {
+      return 0
+    }
+
+    return Math.ceil(text.length / CHARS_PER_TOKEN)
+  }
+
+  private estimateHistoryTokens(history?: MessageLog[]): number {
+    if (!history || history.length === 0) {
+      return 0
+    }
+
+    const historyChars = history.reduce((total, log) => {
+      return total + (log?.message?.length || 0)
+    }, 0)
+
+    return Math.ceil(historyChars / CHARS_PER_TOKEN)
+  }
+
+  private buildLongToolCallReason(
+    prompt: string,
+    systemPrompt: string,
+    tools: OpenAITool[],
+    history?: MessageLog[]
+  ): string {
+    const estimatedPromptTokens =
+      this.estimateTokensFromText(prompt) +
+      this.estimateTokensFromText(systemPrompt) +
+      this.estimateTokensFromText(JSON.stringify(tools)) +
+      this.estimateHistoryTokens(history)
+
+    if (estimatedPromptTokens > 4_500) {
+      return BRAIN.wernicke('react.tool_call.reason.large_prompt', '', {
+        '{{ estimated_tokens }}': String(estimatedPromptTokens)
+      })
+    }
+
+    if (tools.length > 1) {
+      return BRAIN.wernicke('react.tool_call.reason.multi_tools', '', {
+        '{{ tool_count }}': String(tools.length)
+      })
+    }
+
+    return BRAIN.wernicke('react.tool_call.reason.provider_latency')
+  }
+
+  private async runLongToolCallDiagnosis(
+    prompt: string,
+    systemPrompt: string,
+    tools: OpenAITool[],
+    toolChoice: OpenAIToolChoice,
+    history?: MessageLog[]
+  ): Promise<void> {
+    const promptTokens =
+      this.estimateTokensFromText(prompt) +
+      this.estimateTokensFromText(systemPrompt)
+    const toolSchemaTokens = this.estimateTokensFromText(JSON.stringify(tools))
+    const historyTokens = this.estimateHistoryTokens(history)
+    const totalEstimatedTokens =
+      promptTokens + toolSchemaTokens + historyTokens
+    const forcedChoice =
+      typeof toolChoice === 'string'
+        ? toolChoice
+        : `forced:${toolChoice.function.name}`
+
+    const diagnosisMessage = BRAIN.wernicke('react.tool_call.diagnosis', '', {
+      '{{ provider }}': LLM_PROVIDER_NAME,
+      '{{ tool_choice }}': forcedChoice,
+      '{{ tool_count }}': String(tools.length),
+      '{{ total_tokens }}': String(totalEstimatedTokens),
+      '{{ prompt_tokens }}': String(promptTokens),
+      '{{ tool_tokens }}': String(toolSchemaTokens),
+      '{{ history_tokens }}': String(historyTokens)
+    })
+
+    LogHelper.title(this.name)
+    LogHelper.warning(
+      `Long tool-call diagnosis (> ${TOOL_CALL_DIAGNOSIS_DELAY_MS}ms): ${diagnosisMessage}`
+    )
+
+    await this.emitProgress(diagnosisMessage)
+  }
+
   private async emitProgress(message: string): Promise<void> {
     if (!message) {
       return
@@ -502,6 +837,10 @@ export class ReActLLMDuty extends LLMDuty {
   }
 
   private makeDutyResult(output: string): LLMDutyResult {
+    if (!this.hasStreamedTokenEmission && output?.trim()) {
+      this.emitSyntheticTokenStream(output)
+    }
+
     LogHelper.title(this.name)
     LogHelper.success('Duty executed')
     LogHelper.success(`Output — ${output}`)
@@ -516,5 +855,19 @@ export class ReActLLMDuty extends LLMDuty {
       output,
       data: {}
     } as unknown as LLMDutyResult
+  }
+
+  private emitSyntheticTokenStream(output: string): void {
+    const generationId = StringHelper.random(6, { onlyLetters: true })
+    const chunks = output.match(/(\s+|[^\s]+)/g) || [output]
+
+    this.hasStreamedTokenEmission = chunks.length > 0
+
+    for (const token of chunks) {
+      SOCKET_SERVER.socket?.emit('llm-token', {
+        token,
+        generationId
+      })
+    }
   }
 }

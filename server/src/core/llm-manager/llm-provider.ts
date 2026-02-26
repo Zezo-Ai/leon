@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { Readable } from 'node:stream'
 
 import axios, { type AxiosResponse } from 'axios'
 
@@ -61,6 +62,7 @@ const LLM_PROVIDERS_MAP = {
 const DEFAULT_MAX_EXECUTION_TIMOUT =
   LLM_PROVIDER === LLMProviders.Local ? 32_000 : 120_000
 const DEFAULT_MAX_EXECUTION_RETRIES = 2
+const TIMEOUT_RETRY_INCREMENT_MS = 30_000
 const DEFAULT_TEMPERATURE = 0 // Disabled
 const DEFAULT_MAX_TOKENS = 8_192
 const DEFAULT_THOUGHT_TOKENS_BUDGET = Infinity
@@ -220,6 +222,193 @@ export default class LLMProvider {
     return result
   }
 
+  private isReadableStream(value: unknown): value is Readable {
+    return (
+      value instanceof Readable ||
+      (!!value &&
+        typeof value === 'object' &&
+        typeof (value as { on?: unknown }).on === 'function' &&
+        typeof (value as { [Symbol.asyncIterator]?: unknown })[
+          Symbol.asyncIterator
+        ] === 'function')
+    )
+  }
+
+  private async normalizeStreamingCompletionResult(
+    rawResult: AxiosResponse,
+    completionParams: CompletionParams
+  ): Promise<NormalizedCompletionResult> {
+    const responseStream = rawResult.data
+    if (!this.isReadableStream(responseStream)) {
+      return {
+        rawResult: '',
+        usedInputTokens: 0,
+        usedOutputTokens: 0
+      }
+    }
+
+    let textOutput = ''
+    let usedInputTokens = 0
+    let usedOutputTokens = 0
+    let buffer = ''
+
+    const toolCallsByIndex: Record<number, OpenAIToolCall> = {}
+
+    const applyStreamingChunk = (payloadLine: string): void => {
+      const trimmedLine = payloadLine.trim()
+      if (!trimmedLine || !trimmedLine.startsWith('data:')) {
+        return
+      }
+
+      const dataChunk = trimmedLine.slice(5).trim()
+      if (!dataChunk || dataChunk === '[DONE]') {
+        return
+      }
+
+      let parsedChunk: Record<string, unknown>
+      try {
+        parsedChunk = JSON.parse(dataChunk) as Record<string, unknown>
+      } catch {
+        return
+      }
+
+      const usage = parsedChunk['usage']
+      if (usage && typeof usage === 'object') {
+        const promptTokens = (usage as Record<string, unknown>)[
+          'prompt_tokens'
+        ]
+        const completionTokens = (usage as Record<string, unknown>)[
+          'completion_tokens'
+        ]
+
+        if (typeof promptTokens === 'number' && Number.isFinite(promptTokens)) {
+          usedInputTokens = promptTokens
+        }
+        if (
+          typeof completionTokens === 'number' &&
+          Number.isFinite(completionTokens)
+        ) {
+          usedOutputTokens = completionTokens
+        }
+      }
+
+      const choices = parsedChunk['choices']
+      if (!Array.isArray(choices) || choices.length === 0) {
+        return
+      }
+      const firstChoice = choices[0]
+      if (!firstChoice || typeof firstChoice !== 'object') {
+        return
+      }
+
+      const choiceObject = firstChoice as Record<string, unknown>
+      const delta = choiceObject['delta']
+      if (!delta || typeof delta !== 'object') {
+        return
+      }
+
+      const deltaObject = delta as Record<string, unknown>
+      const contentDelta = deltaObject['content']
+      if (typeof contentDelta === 'string' && contentDelta.length > 0) {
+        textOutput += contentDelta
+        completionParams.onToken?.(contentDelta)
+      }
+
+      const toolCalls = deltaObject['tool_calls']
+      if (!Array.isArray(toolCalls)) {
+        return
+      }
+
+      for (const partialToolCall of toolCalls) {
+        if (!partialToolCall || typeof partialToolCall !== 'object') {
+          continue
+        }
+
+        const toolCallData = partialToolCall as Record<string, unknown>
+        const index =
+          typeof toolCallData['index'] === 'number' &&
+          Number.isInteger(toolCallData['index'])
+            ? (toolCallData['index'] as number)
+            : 0
+        const id =
+          typeof toolCallData['id'] === 'string' ? toolCallData['id'] : ''
+        const type =
+          typeof toolCallData['type'] === 'string'
+            ? toolCallData['type']
+            : 'function'
+        const fn =
+          toolCallData['function'] && typeof toolCallData['function'] === 'object'
+            ? (toolCallData['function'] as Record<string, unknown>)
+            : {}
+        const functionName =
+          typeof fn['name'] === 'string' ? (fn['name'] as string) : ''
+        const functionArguments =
+          typeof fn['arguments'] === 'string' ? (fn['arguments'] as string) : ''
+
+        if (!toolCallsByIndex[index]) {
+          toolCallsByIndex[index] = {
+            id: id || `tool_call_${index}`,
+            type: type === 'function' ? 'function' : 'function',
+            function: {
+              name: functionName,
+              arguments: functionArguments
+            }
+          }
+          continue
+        }
+
+        const current = toolCallsByIndex[index]!
+        if (id) {
+          current.id = id
+        }
+        if (functionName) {
+          current.function.name = functionName
+        }
+        if (functionArguments) {
+          current.function.arguments += functionArguments
+        }
+      }
+    }
+
+    for await (const chunk of responseStream) {
+      const chunkString =
+        typeof chunk === 'string' ? chunk : (chunk as Buffer).toString('utf8')
+      buffer += chunkString.replace(/\r\n/g, '\n')
+
+      let separatorIndex = buffer.indexOf('\n\n')
+      while (separatorIndex !== -1) {
+        const eventBlock = buffer.slice(0, separatorIndex)
+        buffer = buffer.slice(separatorIndex + 2)
+
+        const blockLines = eventBlock.split('\n')
+        for (const line of blockLines) {
+          applyStreamingChunk(line)
+        }
+
+        separatorIndex = buffer.indexOf('\n\n')
+      }
+    }
+
+    if (buffer.trim()) {
+      const blockLines = buffer.split('\n')
+      for (const line of blockLines) {
+        applyStreamingChunk(line)
+      }
+    }
+
+    const toolCalls = Object.keys(toolCallsByIndex)
+      .map((index) => Number(index))
+      .sort((a, b) => a - b)
+      .map((index) => toolCallsByIndex[index]!)
+
+    return {
+      rawResult: textOutput,
+      usedInputTokens,
+      usedOutputTokens,
+      ...(toolCalls.length > 0 ? { toolCalls } : {})
+    }
+  }
+
   public cleanUpResult(str: string): string {
     // If starts and end with a double quote, remove them
     if (str.startsWith('"') && str.endsWith('"')) {
@@ -272,26 +461,71 @@ export default class LLMProvider {
      * TODO: support onToken (stream) for Groq provider too
      */
     completionParams.onToken = completionParams.onToken || ((): void => {})
+    completionParams.shouldStream = completionParams.shouldStream ?? false
 
     const isJSONMode = completionParams.data !== null
+    const shouldStreamOutput =
+      completionParams.shouldStream === true && !isJSONMode
+
+    const abortController = new AbortController()
+    const completionParamsWithAbort = {
+      ...completionParams,
+      shouldStream: shouldStreamOutput,
+      signal: abortController.signal
+    }
 
     const rawResultPromise = this.llmProvider.runChatCompletion(
       promptOrChatHistory,
-      completionParams
+      completionParamsWithAbort
     )
 
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout')), completionParams.timeout)
-    )
+    let timeoutHandle: NodeJS.Timeout | null = null
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        abortController.abort()
+        reject(
+          new Error(
+            `Timeout (${completionParams.timeout}ms) for "${completionParams.dutyType}" duty`
+          )
+        )
+      }, completionParams.timeout)
+    })
 
     let rawResult
     let rawResultString
 
     try {
       rawResult = await Promise.race([rawResultPromise, timeoutPromise])
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle)
+      }
     } catch (e) {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle)
+      }
+
       LogHelper.title('LLM Provider')
       LogHelper.error(`Error to complete prompt: ${e}`)
+      LogHelper.timeEnd(measureExecutionTimeLabel)
+
+      const isTimeoutError =
+        (e instanceof Error && e.message.startsWith('Timeout (')) ||
+        (axios.isAxiosError(e) && e.code === 'ECONNABORTED')
+      const remainingRetries = completionParams.maxRetries ?? 0
+
+      if (isTimeoutError && remainingRetries > 0) {
+        const nextTimeout = (completionParams.timeout ?? 0) + TIMEOUT_RETRY_INCREMENT_MS
+        LogHelper.title('LLM Provider')
+        LogHelper.warning(
+          `Prompt timed out. Retrying with timeout=${nextTimeout}ms (${remainingRetries} retry left)`
+        )
+
+        return this.prompt(promptOrChatHistory, {
+          ...completionParams,
+          timeout: nextTimeout,
+          maxRetries: remainingRetries - 1
+        })
+      }
 
       if (axios.isAxiosError(e)) {
         const apiError = e.response?.data
@@ -342,7 +576,22 @@ export default class LLMProvider {
     /**
      * Normalize the completion result according to the provider
      */
-    if (LLM_PROVIDER === LLMProviders.Local) {
+    const isRemoteProvider = LLM_PROVIDER !== LLMProviders.Local
+    const shouldUseRemoteStreaming =
+      isRemoteProvider &&
+      shouldStreamOutput
+
+    if (shouldUseRemoteStreaming) {
+      const normalized = await this.normalizeStreamingCompletionResult(
+        rawResult as AxiosResponse,
+        completionParams
+      )
+
+      rawResult = normalized.rawResult
+      usedInputTokens = normalized.usedInputTokens
+      usedOutputTokens = normalized.usedOutputTokens
+      toolCalls = normalized.toolCalls
+    } else if (LLM_PROVIDER === LLMProviders.Local) {
       if (completionParams.session) {
         const {
           rawResult: result,

@@ -2,6 +2,7 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Music & Audio",
   "description": "Tools for music and audio processing.",
+  "context_files": ["GPU_COMPUTE.md"],
   "tools": [
     "faster_whisper",
     "qwen3_asr",

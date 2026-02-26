@@ -2,5 +2,6 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Structured Knowledge",
   "description": "Tools for structured knowledge and facts.",
+  "context_files": [],
   "tools": []
 }

@@ -42,6 +42,7 @@ interface ToolkitDefinition {
   id: string
   name: string
   description: string
+  contextFiles?: string[]
   tools?: Record<string, ToolkitToolDefinition>
 }
 
@@ -184,6 +185,11 @@ export default class ToolkitRegistry {
     return tool.functions || null
   }
 
+  public getToolkitContextFiles(toolkitId: string): string[] {
+    const toolkit = this._toolkits.find((item) => item.id === toolkitId)
+    return toolkit?.contextFiles || []
+  }
+
   public async load(): Promise<void> {
     if (this._isLoaded) {
       return
@@ -217,12 +223,27 @@ export default class ToolkitRegistry {
           const toolkitConfig = JSON.parse(toolkitConfigRaw) as {
             name: string
             description: string
+            context_files?: string[]
             tools?: string[]
           }
 
           if (!toolkitConfig.tools || toolkitConfig.tools.length === 0) {
             continue
           }
+
+          const contextFiles = Array.isArray(toolkitConfig.context_files)
+            ? [
+                ...new Set(
+                  toolkitConfig.context_files
+                    .map((contextFile) =>
+                      this.normalizeContextFilename(contextFile)
+                    )
+                    .filter((contextFile): contextFile is string =>
+                      Boolean(contextFile)
+                    )
+                )
+              ]
+            : []
 
           const toolkitTools: Record<string, ToolkitToolDefinition> = {}
           for (const toolId of toolkitConfig.tools) {
@@ -257,6 +278,7 @@ export default class ToolkitRegistry {
             id: toolkitId,
             name: toolkitConfig.name,
             description: toolkitConfig.description,
+            contextFiles,
             tools: toolkitTools
           })
         } catch (e) {
@@ -276,5 +298,25 @@ export default class ToolkitRegistry {
       LogHelper.title('Toolkit Registry')
       LogHelper.error(`Failed to load toolkits: ${e}`)
     }
+  }
+
+  private normalizeContextFilename(filename: string): string | null {
+    if (typeof filename !== 'string') {
+      return null
+    }
+
+    const trimmedFilename = filename.trim()
+    if (!trimmedFilename) {
+      return null
+    }
+
+    const normalizedBasename = path
+      .basename(trimmedFilename, '.md')
+      .toUpperCase()
+    if (!normalizedBasename) {
+      return null
+    }
+
+    return `${normalizedBasename}.md`
   }
 }

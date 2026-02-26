@@ -2,5 +2,6 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Food & Drink",
   "description": "Tools for food and drink queries.",
+  "context_files": [],
   "tools": []
 }

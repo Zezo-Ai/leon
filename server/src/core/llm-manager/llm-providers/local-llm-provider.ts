@@ -36,7 +36,11 @@ export default class LocalLLMProvider {
           functions: completionParams.functions,
           maxTokens: completionParams.maxTokens as number,
           temperature: completionParams.temperature as number,
-          onToken: completionParams.onToken as (tokens: unknown) => void,
+          ...(completionParams.shouldStream === true
+            ? {
+                onToken: completionParams.onToken as (tokens: unknown) => void
+              }
+            : {}),
           budgets: {
             thoughtTokens: completionParams.thoughtTokensBudget
           }

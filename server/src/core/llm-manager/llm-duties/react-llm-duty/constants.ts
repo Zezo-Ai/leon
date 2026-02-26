@@ -23,7 +23,7 @@ You have access to a catalog of available tools and functions. Your job is to:
 3. Provide a short natural language summary of your plan for the user
 
 Only use functions/tools that are listed in the catalog.
-If no function/tool is relevant (e.g. the user is chatting or asking a general question), return an empty steps array and put your answer in the summary field.
+If no function/tool is relevant (e.g. the user is chatting or asking a general question), answer directly in plain text without calling any tool.
 
 Prefer dedicated tools over the operating_system_control toolkit.
 You must always consider other tools first before using the operating_system_control toolkit. Use the operating_system_control toolkit and bash tool only as a last resort when no suitable tool exists.
@@ -36,7 +36,7 @@ For example, if the user asks to "find a file and process it", include ALL steps
 "steps" is an ordered array of functions to call. Each step has:
   - "function": the fully qualified name (toolkit_id.tool_id.function_name). If the catalog only lists tools, use toolkit_id.tool_id.
   - "label": a very short user-facing description of what this step does. Must start with a verb (e.g. "Search for video files", "Download the page", "List matching items"). Keep it under 8 words.
-"summary" is a short natural language description of the plan for the user. If no tools are needed, put your conversational answer here with an empty steps array.
+"summary" is a short natural language description of the plan for the user.
 
 No other keys, no null values.`
 
@@ -79,11 +79,37 @@ Return ONLY one of the following JSON shapes:
 
 No other keys, no null values.`
 
+export const RECOVERY_PLAN_SYSTEM_PROMPT = `You are revising a failed execution plan for an autonomous agent.
+
+A previous plan step failed. Your job is to propose the next best actionable steps to still fulfill the original user request.
+
+If recovery is possible:
+- Return steps that continue from now (do not repeat already successful work unless needed).
+- Add discovery/verification steps when required to resolve missing or invalid inputs.
+- Keep steps ordered and concrete.
+
+If recovery is not possible without user input:
+- Return an empty steps array and put a clear clarification request in summary.
+
+Use only functions/tools listed in the catalog.
+
+${FORMATTING_RULES}
+
+Return only:
+- steps: ordered step list (can be empty)
+- summary: short explanation of the revised plan or clarification request`
+
 export const MAX_EXECUTIONS = 20
 export const MAX_REPLANS = 3
 export const MAX_RETRIES_PER_FUNCTION = 2
 export const MAX_TOOL_FAILURE_RETRIES = 2
 export const REACT_TEMPERATURE = 0.2
+export const REACT_INFERENCE_TIMEOUT_MS = 120_000
+export const REACT_TIMEOUT_MAX_RETRIES = 1
+export const FINAL_ANSWER_RETRY_DURATION_MS = 45_000
+export const FINAL_ANSWER_MAX_RETRIES = 2
+export const TOOL_CALL_WAIT_NOTICE_DELAY_MS = 30_000
+export const TOOL_CALL_DIAGNOSIS_DELAY_MS = 90_000
 
 export const REACT_LOCAL_PROVIDER_HISTORY_LOGS = 8
 export const REACT_REMOTE_PROVIDER_HISTORY_LOGS = 16

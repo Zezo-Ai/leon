@@ -2,5 +2,6 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Coding & Development",
   "description": "Tools for code generation, development, and automation.",
+  "context_files": ["HOST_SYSTEM.md", "LEON_RUNTIME.md", "HOME.md"],
   "tools": ["opencode"]
 }

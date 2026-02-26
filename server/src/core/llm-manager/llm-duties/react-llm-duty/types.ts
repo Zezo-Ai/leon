@@ -24,6 +24,8 @@ export interface ExecutionRecord {
   function: string
   status: string
   observation: string
+  stepLabel?: string
+  requestedToolInput?: string
 }
 
 export type PlanStepStatus = 'pending' | 'in_progress' | 'completed'
@@ -75,14 +77,27 @@ export interface LLMCaller {
     usedOutputTokens?: number
   } | null>
 
+  callLLMText(
+    prompt: string,
+    systemPrompt: string,
+    history?: MessageLog[],
+    shouldStream?: boolean
+  ): Promise<{
+    output: string
+    usedInputTokens?: number
+    usedOutputTokens?: number
+  } | null>
+
   callLLMWithTools(
     prompt: string,
     systemPrompt: string,
     tools: OpenAITool[],
     toolChoice: OpenAIToolChoice,
-    history?: MessageLog[]
+    history?: MessageLog[],
+    shouldStreamToUser?: boolean
   ): Promise<{
     toolCall?: { functionName: string, arguments: string }
+    unexpectedToolCall?: { functionName: string, arguments: string }
     textContent?: string
     usedInputTokens?: number
     usedOutputTokens?: number
@@ -91,4 +106,5 @@ export interface LLMCaller {
   readonly supportsNativeTools: boolean
   readonly input: string | object | null
   readonly history: MessageLog[]
+  getContextForToolkit(toolkitId: string): string
 }

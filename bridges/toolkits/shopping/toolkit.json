@@ -2,5 +2,6 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Shopping",
   "description": "Tools for shopping and product research.",
+  "context_files": [],
   "tools": []
 }

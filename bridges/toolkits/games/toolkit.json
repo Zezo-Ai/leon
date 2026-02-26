@@ -2,5 +2,6 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Games",
   "description": "Tools for games and entertainment.",
+  "context_files": [],
   "tools": []
 }

@@ -2,5 +2,6 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Media Generation",
   "description": "Tools for media generation and creative workflows.",
+  "context_files": [],
   "tools": []
 }
