@@ -16,20 +16,16 @@ import type {
 } from '@/core/llm-manager/types'
 import { LogHelper } from '@/helpers/log-helper'
 
-/**
- * @see https://router.huggingface.co/v1/chat/completions
- */
-type HuggingFaceCompletionParams = Omit<CompletionParams, ''>
+type MoonshotAICompletionParams = Omit<CompletionParams, ''>
 
-export default class HuggingFaceLLMProvider {
-  protected readonly name = 'HuggingFace LLM Provider'
-  protected readonly apiKey = process.env['LEON_HUGGINGFACE_API_KEY']
+export default class MoonshotAILLMProvider {
+  protected readonly name = 'MoonshotAI LLM Provider'
+  protected readonly apiKey = process.env['LEON_MOONSHOTAI_API_KEY']
   protected readonly model =
-    process.env['LEON_HUGGINGFACE_MODEL'] ||
-    'meta-llama/Meta-Llama-3.1-8B-Instruct'
+    process.env['LEON_MOONSHOTAI_MODEL'] || 'moonshot-v1-8k'
   private readonly client = new OpenAI({
     apiKey: this.apiKey,
-    baseURL: 'https://router.huggingface.co/v1',
+    baseURL: 'https://api.moonshot.ai/v1',
     timeout: 120_000,
     maxRetries: 0
   })
@@ -53,7 +49,7 @@ export default class HuggingFaceLLMProvider {
 
   private toMessages(
     prompt: PromptOrChatHistory,
-    completionParams: HuggingFaceCompletionParams
+    completionParams: MoonshotAICompletionParams
   ): ChatCompletionMessageParam[] {
     let systemPrompt = completionParams.systemPrompt
     if (completionParams.data !== null) {
@@ -117,25 +113,27 @@ export default class HuggingFaceLLMProvider {
 
   public runChatCompletion(
     prompt: PromptOrChatHistory,
-    completionParams: HuggingFaceCompletionParams
+    completionParams: MoonshotAICompletionParams
   ): Promise<AxiosResponse> {
     return new Promise(async (resolve, reject) => {
       try {
         this.checkAPIKey()
 
         const messages = this.toMessages(prompt, completionParams)
+        const hasTools =
+          Array.isArray(completionParams.tools) &&
+          completionParams.tools.length > 0
+        const shouldDisableThinking = completionParams.disableThinking === true
         const thinkingControlFields: Record<string, unknown> =
-          completionParams.disableThinking === true
+          shouldDisableThinking
             ? {
                 thinking: { type: 'disabled' }
               }
             : {}
 
-        if (completionParams.disableThinking === true) {
+        if (shouldDisableThinking) {
           LogHelper.title(this.name)
-          LogHelper.debug(
-            'Retrying with thinking disabled due to tool_choice compatibility'
-          )
+          LogHelper.debug('Thinking disabled for this request')
         }
 
         const baseParams = {
@@ -147,9 +145,9 @@ export default class HuggingFaceLLMProvider {
             : {})
         }
 
-        if (completionParams.tools && completionParams.tools.length > 0) {
+        if (hasTools) {
           Object.assign(baseParams, {
-            tools: this.toChatTools(completionParams.tools)
+            tools: this.toChatTools(completionParams.tools as OpenAITool[])
           })
           if (completionParams.toolChoice !== undefined) {
             Object.assign(baseParams, {

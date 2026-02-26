@@ -21,10 +21,10 @@ interface GroqChatCompletionParams {
   model: string
   messages: GroqMessage[]
   max_tokens?: number
-  temperature?: number
   top_p?: number
   stream?: boolean
   stop?: string | null
+  thinking?: unknown
   grammar?: unknown
   response_format?: {
     type: 'json_object'
@@ -117,15 +117,24 @@ export default class GroqLLMProvider {
         let chatCompletionParams: GroqChatCompletionParams = {
           messages: messagesHistory,
           model: this.model,
-          temperature: completionParams.temperature || 0,
+          ...(completionParams.disableThinking === true
+            ? {
+                thinking: { type: 'disabled' }
+              }
+            : {}),
           stream: completionParams.shouldStream === true
         }
 
         if (completionParams.tools && completionParams.tools.length > 0) {
           chatCompletionParams = {
             ...chatCompletionParams,
-            tools: completionParams.tools,
-            tool_choice: completionParams.toolChoice || 'auto'
+            tools: completionParams.tools
+          }
+          if (completionParams.toolChoice !== undefined) {
+            chatCompletionParams = {
+              ...chatCompletionParams,
+              tool_choice: completionParams.toolChoice
+            }
           }
         } else if (isJSONMode) {
           chatCompletionParams = {

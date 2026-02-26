@@ -30,6 +30,9 @@ export enum LLMProviders {
   Local = 'local',
   Groq = 'groq',
   OpenRouter = 'openrouter',
+  OpenAI = 'openai',
+  Anthropic = 'anthropic',
+  MoonshotAI = 'moonshotai',
   Cerebras = 'cerebras',
   HuggingFace = 'huggingface'
 }
@@ -98,6 +101,16 @@ export interface CompletionParams {
   history?: MessageLog[]
   onToken?: (tokens: Token[] | string) => void
   shouldStream?: boolean
+  /**
+   * Optional provider hint to disable thinking/reasoning for a request.
+   * This is never auto-enabled by the core retry path.
+   */
+  disableThinking?: boolean
+  /**
+   * Optional compatibility flag to relax a forced tool_choice into `auto`
+   * for providers that reject specified tool_choice values.
+   */
+  relaxForcedToolChoice?: boolean
   /**
    * OpenAI-compatible tools for remote providers that support native
    * tool/function calling. When set, the provider sends these as `tools`

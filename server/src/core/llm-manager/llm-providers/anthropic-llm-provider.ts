@@ -16,22 +16,22 @@ import type {
 } from '@/core/llm-manager/types'
 import { LogHelper } from '@/helpers/log-helper'
 
-/**
- * @see https://router.huggingface.co/v1/chat/completions
- */
-type HuggingFaceCompletionParams = Omit<CompletionParams, ''>
+type AnthropicCompletionParams = Omit<CompletionParams, ''>
 
-export default class HuggingFaceLLMProvider {
-  protected readonly name = 'HuggingFace LLM Provider'
-  protected readonly apiKey = process.env['LEON_HUGGINGFACE_API_KEY']
+export default class AnthropicLLMProvider {
+  protected readonly name = 'Anthropic LLM Provider'
+  protected readonly apiKey = process.env['LEON_ANTHROPIC_API_KEY']
   protected readonly model =
-    process.env['LEON_HUGGINGFACE_MODEL'] ||
-    'meta-llama/Meta-Llama-3.1-8B-Instruct'
+    process.env['LEON_ANTHROPIC_MODEL'] || 'claude-3-5-sonnet-latest'
   private readonly client = new OpenAI({
-    apiKey: this.apiKey,
-    baseURL: 'https://router.huggingface.co/v1',
+    apiKey: this.apiKey || 'anthropic',
+    baseURL: 'https://api.anthropic.com/v1',
     timeout: 120_000,
-    maxRetries: 0
+    maxRetries: 0,
+    defaultHeaders: {
+      'x-api-key': this.apiKey || '',
+      'anthropic-version': '2023-06-01'
+    }
   })
 
   constructor() {
@@ -53,7 +53,7 @@ export default class HuggingFaceLLMProvider {
 
   private toMessages(
     prompt: PromptOrChatHistory,
-    completionParams: HuggingFaceCompletionParams
+    completionParams: AnthropicCompletionParams
   ): ChatCompletionMessageParam[] {
     let systemPrompt = completionParams.systemPrompt
     if (completionParams.data !== null) {
@@ -117,7 +117,7 @@ export default class HuggingFaceLLMProvider {
 
   public runChatCompletion(
     prompt: PromptOrChatHistory,
-    completionParams: HuggingFaceCompletionParams
+    completionParams: AnthropicCompletionParams
   ): Promise<AxiosResponse> {
     return new Promise(async (resolve, reject) => {
       try {
@@ -142,9 +142,7 @@ export default class HuggingFaceLLMProvider {
           messages,
           model: this.model,
           ...thinkingControlFields,
-          ...(typeof completionParams.maxTokens === 'number'
-            ? { max_tokens: completionParams.maxTokens }
-            : {})
+          max_tokens: completionParams.maxTokens || 8_192
         }
 
         if (completionParams.tools && completionParams.tools.length > 0) {

@@ -1,4 +1,5 @@
-import axios, { type AxiosError, type AxiosResponse } from 'axios'
+import type { AxiosResponse } from 'axios'
+import { OpenRouter } from '@openrouter/sdk'
 
 import type {
   CompletionParams,
@@ -11,25 +12,13 @@ import { LogHelper } from '@/helpers/log-helper'
 /**
  * @see https://openrouter.ai/docs
  */
-interface OpenRouterMessage {
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  name?: string
-}
-interface OpenRouterChatCompletionParams {
-  model: string
-  messages: OpenRouterMessage[]
-  max_tokens?: number
-  temperature?: number
-  top_p?: number
-  stream?: boolean
-  stop?: string | null
-  provider?: {
-    order?: string[]
-  }
-  tools?: OpenAITool[]
-  tool_choice?: OpenAIToolChoice
-}
+type OpenRouterSendRequest = Parameters<OpenRouter['chat']['send']>[0]
+type OpenRouterChatGenerationParams = OpenRouterSendRequest['chatGenerationParams']
+type OpenRouterMessage = OpenRouterChatGenerationParams['messages'][number]
+type OpenRouterTool = NonNullable<OpenRouterChatGenerationParams['tools']>[number]
+type OpenRouterToolChoice = NonNullable<
+  OpenRouterChatGenerationParams['toolChoice']
+>
 type OpenRouterCompletionParams = Omit<CompletionParams, ''>
 
 export default class OpenRouterLLMProvider {
@@ -37,9 +26,19 @@ export default class OpenRouterLLMProvider {
   protected readonly apiKey = process.env['LEON_OPENROUTER_API_KEY']
   protected readonly model =
     process.env['LEON_OPENROUTER_MODEL'] || 'openrouter/auto'
-  private readonly axios = axios.create({
-    baseURL: 'https://openrouter.ai/api/v1',
-    timeout: 120_000
+  private readonly client = new OpenRouter({
+    apiKey: this.apiKey,
+    timeoutMs: 120_000,
+    retryConfig: {
+      strategy: 'backoff',
+      retryConnectionErrors: true,
+      backoff: {
+        initialInterval: 400,
+        maxInterval: 2_500,
+        exponent: 2,
+        maxElapsedTime: 8_000
+      }
+    }
   })
 
   constructor() {
@@ -59,6 +58,115 @@ export default class OpenRouterLLMProvider {
     }
   }
 
+  private formatErrorForLog(error: unknown): string {
+    if (!error || typeof error !== 'object') {
+      return String(error)
+    }
+
+    const errorObject = error as Record<string, unknown>
+    const details: Record<string, unknown> = {
+      name:
+        typeof errorObject['name'] === 'string'
+          ? (errorObject['name'] as string)
+          : 'Error',
+      message:
+        typeof errorObject['message'] === 'string'
+          ? (errorObject['message'] as string)
+          : String(error)
+    }
+
+    if (typeof errorObject['statusCode'] === 'number') {
+      details['statusCode'] = errorObject['statusCode']
+    }
+    if (errorObject['body'] !== undefined) {
+      details['body'] = errorObject['body']
+    }
+    if (errorObject['error'] !== undefined) {
+      details['error'] = errorObject['error']
+    }
+    if (errorObject['cause'] !== undefined) {
+      details['cause'] = String(errorObject['cause'])
+    }
+
+    try {
+      return JSON.stringify(details)
+    } catch {
+      return String(error)
+    }
+  }
+
+  private toTools(tools: OpenAITool[]): OpenRouterTool[] {
+    return tools.map((tool) => ({
+      type: 'function',
+      function: {
+        name: tool.function.name,
+        ...(tool.function.description
+          ? { description: tool.function.description }
+          : {}),
+        parameters: tool.function.parameters as Record<string, unknown>,
+        strict: false
+      }
+    }))
+  }
+
+  private toToolChoice(toolChoice: OpenAIToolChoice): OpenRouterToolChoice {
+    if (typeof toolChoice === 'string') {
+      return toolChoice
+    }
+
+    return {
+      type: 'function',
+      function: {
+        name: toolChoice.function.name
+      }
+    }
+  }
+
+  private toMessages(
+    prompt: PromptOrChatHistory,
+    completionParams: OpenRouterCompletionParams
+  ): OpenRouterMessage[] {
+    let { systemPrompt } = completionParams
+    if (completionParams.data !== null) {
+      systemPrompt = `${
+        completionParams.systemPrompt
+      }. Use a JSON format by following this schema: ${JSON.stringify(
+        completionParams.data
+      )}`
+    }
+
+    const messages: OpenRouterMessage[] = [
+      {
+        role: 'system',
+        content: systemPrompt
+      }
+    ]
+
+    if (completionParams.history) {
+      for (const message of completionParams.history) {
+        messages.push({
+          role: message.who === 'leon' ? 'assistant' : 'user',
+          content: message.message
+        } as OpenRouterMessage)
+      }
+    }
+
+    const lastMessage = messages[messages.length - 1]
+    if (
+      messages.length === 0 ||
+      !lastMessage ||
+      typeof lastMessage.content !== 'string' ||
+      lastMessage.content !== prompt
+    ) {
+      messages.push({
+        role: 'user',
+        content: prompt as string
+      } as OpenRouterMessage)
+    }
+
+    return messages
+  }
+
   public runChatCompletion(
     prompt: PromptOrChatHistory,
     completionParams: OpenRouterCompletionParams
@@ -67,115 +175,60 @@ export default class OpenRouterLLMProvider {
       try {
         this.checkAPIKey()
 
-        const isJSONMode = completionParams.data !== null
-
-        let { systemPrompt } = completionParams
-        if (isJSONMode) {
-          systemPrompt = `${
-            completionParams.systemPrompt
-          }. Use a JSON format by following this schema: ${JSON.stringify(
-            completionParams.data
-          )}`
-        }
-
-        let messagesHistory: OpenRouterMessage[] = []
-        if (completionParams.history) {
-          messagesHistory = completionParams.history.map((message) => {
-            if (message.who === 'leon') {
-              return {
-                role: 'assistant',
-                content: message.message
-              }
-            }
-
-            return {
-              role: 'user',
-              content: message.message
-            }
-          })
-        }
-
-        messagesHistory = [
-          {
-            role: 'system',
-            content: systemPrompt
-          },
-          ...messagesHistory
-        ]
-
-        // Make sure to add the new prompt (message) to the history
-        const lastMessage = messagesHistory[messagesHistory.length - 1]
-        if (messagesHistory.length === 0 || lastMessage?.content !== prompt) {
-          messagesHistory.push({
-            role: 'user',
-            content: prompt as string
-          })
-        }
-
-        let chatCompletionParams: OpenRouterChatCompletionParams = {
-          messages: messagesHistory,
+        const messages = this.toMessages(prompt, completionParams)
+        const shouldUseStreaming =
+          completionParams.shouldStream === true &&
+          (!completionParams.tools || completionParams.tools.length === 0)
+        const chatGenerationParams: OpenRouterChatGenerationParams = {
+          messages,
           model: this.model,
-          temperature: 0.7,
-          stream: completionParams.shouldStream === true
+          ...(typeof completionParams.maxTokens === 'number'
+            ? { maxTokens: completionParams.maxTokens }
+            : {}),
+          stream: shouldUseStreaming
         }
-
-        const providerPreferences: NonNullable<
-          OpenRouterChatCompletionParams['provider']
-        > = {}
 
         if (completionParams.tools && completionParams.tools.length > 0) {
-          chatCompletionParams = {
-            ...chatCompletionParams,
-            tools: completionParams.tools,
-            tool_choice: completionParams.toolChoice || 'auto'
+          chatGenerationParams.tools = this.toTools(completionParams.tools)
+          if (completionParams.toolChoice !== undefined) {
+            chatGenerationParams.toolChoice = this.toToolChoice(
+              completionParams.toolChoice
+            )
+          }
+          chatGenerationParams.provider = {
+            ...(chatGenerationParams.provider || {}),
+            requireParameters: true
           }
         }
 
         if (!completionParams.tools || completionParams.tools.length === 0) {
-          providerPreferences.order = ['cerebras']
-        }
-
-        if (Object.keys(providerPreferences).length > 0) {
-          chatCompletionParams = {
-            ...chatCompletionParams,
-            provider: providerPreferences
+          chatGenerationParams.provider = {
+            order: ['cerebras']
           }
         }
 
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.apiKey}`
-        }
-
-        const requestConfig = {
-          url: '/chat/completions',
-          method: 'POST',
-          data: chatCompletionParams,
+        const requestOptions = {
           ...(typeof completionParams.timeout === 'number'
-            ? { timeout: completionParams.timeout }
-            : {}),
-          ...(completionParams.shouldStream === true
-            ? { responseType: 'stream' as const }
+            ? { timeoutMs: completionParams.timeout }
             : {}),
           ...(completionParams.signal
             ? { signal: completionParams.signal }
-            : {}),
-          headers
-        } as const
-
-        const response = await this.axios.request(requestConfig)
-        return resolve(response)
-      } catch (e) {
-        const err = e as Error | AxiosError
-        let errorMessage = `Failed to run completion: ${err}`
-
-        if (axios.isAxiosError(err)) {
-          errorMessage = `Failed to run completion (AxiosError): ${err.response?.data}`
+            : {})
         }
+
+        const response = await this.client.chat.send(
+          { chatGenerationParams },
+          requestOptions
+        )
+        return resolve({
+          data: response
+        } as AxiosResponse)
+      } catch (e) {
+        const errorMessage = `Failed to run completion: ${this.formatErrorForLog(e)}`
 
         LogHelper.title(this.name)
         LogHelper.error(errorMessage)
-        return reject(new Error(errorMessage))
+        return reject(e instanceof Error ? e : new Error(errorMessage))
       }
     })
   }

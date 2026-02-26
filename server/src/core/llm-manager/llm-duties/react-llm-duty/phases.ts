@@ -38,9 +38,10 @@ import type {
 import {
   isToolLevel,
   formatExecutionHistory,
-  parseStepsFromArgs,
   extractPlanFromParsed,
   parseOutput,
+  parseToolCallArguments,
+  extractPlanResultFromCreatePlanArgs,
   validateToolInput,
   extractFinalAnswerFromToolResult,
   formatFilePath
@@ -48,9 +49,44 @@ import {
 
 const DUTY_NAME = 'ReAct LLM Duty'
 
+const PLAN_STEP_PROPERTIES_SCHEMA = {
+  function: { type: 'string' },
+  label: { type: 'string' }
+}
+
+const PLAN_STEP_SCHEMA = {
+  type: 'object',
+  properties: PLAN_STEP_PROPERTIES_SCHEMA,
+  required: ['function', 'label'],
+  additionalProperties: false
+}
+
+const PLAN_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: ['plan', 'final'] },
+    steps: {
+      type: 'array',
+      items: PLAN_STEP_SCHEMA
+    },
+    summary: { type: 'string' },
+    answer: { type: 'string' }
+  },
+  required: ['type'],
+  additionalProperties: false
+}
+
 interface DuplicateInputMatch {
   stepNumber: number
   stepLabel: string | null
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  return value as Record<string, unknown>
 }
 
 function normalizeStepLabel(label: string | null | undefined): string {
@@ -104,6 +140,42 @@ function extractRequestedToolInputFromObservation(
   }
 
   return null
+}
+
+function extractFailureMessageFromObservation(
+  observation: string
+): string {
+  if (!observation) {
+    return 'Tool execution failed.'
+  }
+
+  try {
+    const parsedObservation = JSON.parse(observation) as Record<string, unknown>
+    const toolOutputFailure = asRecord(parsedObservation['tool_output_failure'])
+    if (
+      toolOutputFailure &&
+      typeof toolOutputFailure['error'] === 'string' &&
+      toolOutputFailure['error'].trim()
+    ) {
+      return toolOutputFailure['error'].trim()
+    }
+
+    if (
+      typeof parsedObservation['message'] === 'string' &&
+      parsedObservation['message'].trim()
+    ) {
+      return parsedObservation['message'].trim()
+    }
+  } catch {
+    // Ignore malformed observation payload.
+  }
+
+  const trimmedObservation = observation.trim()
+  if (!trimmedObservation) {
+    return 'Tool execution failed.'
+  }
+
+  return trimmedObservation.slice(0, 400)
 }
 
 function getExecutionRequestedToolInput(execution: ExecutionRecord): string | null {
@@ -249,6 +321,183 @@ function shouldTreatPlanningTextAsFinalAnswer(text: string): boolean {
   return true
 }
 
+function humanizeIdentifier(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+function normalizeStepLabelFromFunction(functionName: string): string {
+  const lastPart = functionName.split('.').pop() || functionName
+  const readable = humanizeIdentifier(lastPart)
+  if (!readable) {
+    return 'Run tool step'
+  }
+
+  return `Run ${readable}`
+}
+
+function getFunctionDescription(functionName: string): string {
+  const parts = functionName.split('.')
+  if (parts.length !== 3) {
+    return ''
+  }
+
+  const [toolkitId, toolId, fnName] = parts
+  if (!toolkitId || !toolId || !fnName) {
+    return ''
+  }
+
+  const functions = TOOLKIT_REGISTRY.getToolFunctions(toolkitId, toolId)
+  const fnConfig = functions?.[fnName]
+  return typeof fnConfig?.description === 'string' ? fnConfig.description.trim() : ''
+}
+
+function descriptionToStepLabel(description: string): string {
+  const cleaned = description
+    .replace(/^[\s"'`]+|[\s"'`]+$/g, '')
+    .replace(/[.]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!cleaned) {
+    return ''
+  }
+
+  const words = cleaned.split(' ')
+  const limited = words.slice(0, 8).join(' ')
+  return limited.charAt(0).toUpperCase() + limited.slice(1)
+}
+
+function commandTokenFromArgs(rawArguments: string): string {
+  const parsedArgs = parseToolCallArguments(rawArguments)
+  if (!parsedArgs) {
+    return ''
+  }
+
+  const rawCommand =
+    typeof parsedArgs['command'] === 'string'
+      ? (parsedArgs['command'] as string).trim()
+      : ''
+  if (!rawCommand) {
+    return ''
+  }
+
+  const firstToken = rawCommand.split(/\s+/)[0] || ''
+  if (!firstToken) {
+    return ''
+  }
+
+  const basename = firstToken.includes('/')
+    ? firstToken.split('/').pop() || ''
+    : firstToken
+  return basename.replace(/[^a-zA-Z0-9._-]/g, '')
+}
+
+function buildRecoveredStepLabel(
+  functionName: string,
+  rawArguments: string
+): string {
+  const commandToken = commandTokenFromArgs(rawArguments)
+  if (commandToken) {
+    return `Run ${commandToken} command`
+  }
+
+  const functionDescription = getFunctionDescription(functionName)
+  if (functionDescription) {
+    const descriptionLabel = descriptionToStepLabel(functionDescription)
+    if (descriptionLabel) {
+      return descriptionLabel
+    }
+  }
+
+  return normalizeStepLabelFromFunction(functionName)
+}
+
+function resolveFunctionNameForPlan(functionName: string): string | null {
+  const trimmed = functionName.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const parts = trimmed.split('.')
+  if (parts.length === 3) {
+    const [toolkitId, toolId, fnName] = parts
+    if (!toolkitId || !toolId || !fnName) {
+      return null
+    }
+
+    const functions = TOOLKIT_REGISTRY.getToolFunctions(toolkitId, toolId)
+    if (functions && fnName in functions) {
+      return trimmed
+    }
+
+    return null
+  }
+
+  if (parts.length === 2) {
+    const resolvedTool = TOOLKIT_REGISTRY.resolveToolById(trimmed)
+    return resolvedTool ? trimmed : null
+  }
+
+  if (parts.length !== 1) {
+    return null
+  }
+
+  const fnName = parts[0]
+  if (!fnName) {
+    return null
+  }
+
+  const matches: string[] = []
+  const tools = TOOLKIT_REGISTRY.getFlattenedTools()
+  for (const tool of tools) {
+    const functions = TOOLKIT_REGISTRY.getToolFunctions(tool.toolkitId, tool.toolId)
+    if (!functions || !(fnName in functions)) {
+      continue
+    }
+
+    matches.push(`${tool.toolkitId}.${tool.toolId}.${fnName}`)
+    if (matches.length > 1) {
+      return null
+    }
+  }
+
+  return matches[0] || null
+}
+
+function createPlanFromUnexpectedToolCall(
+  unexpectedToolCall: { functionName: string, arguments: string },
+  textFallback: string
+): PlanResult | null {
+  const resolvedFunction = resolveFunctionNameForPlan(
+    unexpectedToolCall.functionName
+  )
+  if (!resolvedFunction) {
+    return null
+  }
+
+  const sanitizedSummary = stripInlineToolMarkup(textFallback).replace(/\s+/g, ' ').trim()
+  const label = buildRecoveredStepLabel(
+    resolvedFunction,
+    unexpectedToolCall.arguments
+  )
+  const summary = sanitizedSummary || `I will ${label.charAt(0).toLowerCase()}${label.slice(1)}.`
+
+  return {
+    type: 'plan',
+    summary,
+    steps: [
+      {
+        function: resolvedFunction,
+        label
+      }
+    ]
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Catalog building
 // ---------------------------------------------------------------------------
@@ -340,40 +589,7 @@ export async function runPlanningPhase(
     : ''
   const prompt = `${catalog.text}${catalogNote}${contextManifestSection}\n\nUser Request: "${caller.input}"`
 
-  const planSchema = {
-    oneOf: [
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['plan'] },
-          steps: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                function: { type: 'string' },
-                label: { type: 'string' }
-              },
-              required: ['function', 'label'],
-              additionalProperties: false
-            }
-          },
-          summary: { type: 'string' }
-        },
-        required: ['type', 'steps', 'summary'],
-        additionalProperties: false
-      },
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['final'] },
-          answer: { type: 'string' }
-        },
-        required: ['type', 'answer'],
-        additionalProperties: false
-      }
-    ]
-  }
+  const planSchema = PLAN_RESPONSE_SCHEMA
 
   // --- Remote providers: use native tool calling to force structured output ---
   if (caller.supportsNativeTools) {
@@ -383,14 +599,20 @@ export async function runPlanningPhase(
         function: {
           name: 'create_plan',
           description:
-            'Create an execution plan with ordered steps to solve the user request when tool usage is required. For purely conversational messages, do not call this tool and answer directly in plain text.',
+            'Create either an execution plan or a direct conversational answer. Use type="plan" when tools are needed, or type="final" for purely conversational messages. For type="final", answer must be directly user-facing (not meta reasoning about what you will do).',
           parameters: {
             type: 'object',
             properties: {
+              type: {
+                type: 'string',
+                enum: ['plan', 'final'],
+                description:
+                  'Use "plan" when tools are needed, "final" for direct conversational answer.'
+              },
               steps: {
                 type: 'array',
                 items: {
-                  type: 'object',
+                  ...PLAN_STEP_SCHEMA,
                   properties: {
                     function: {
                       type: 'string',
@@ -402,17 +624,24 @@ export async function runPlanningPhase(
                       description:
                         'Short user-facing task description starting with a verb, under 8 words'
                     }
-                  },
-                  required: ['function', 'label']
-                }
+                  }
+                },
+                description:
+                  'Required when type="plan". Keep empty or omit for type="final".'
               },
               summary: {
                 type: 'string',
                 description:
-                  'Short natural language summary of the plan, or the conversational answer if steps is empty'
+                  'Required when type="plan". Short user-facing plan summary.'
+              },
+              answer: {
+                type: 'string',
+                description:
+                  'Required when type="final". Direct user-facing final answer.'
               }
             },
-            required: ['steps', 'summary']
+            required: ['type'],
+            additionalProperties: false
           }
         }
       }
@@ -422,9 +651,8 @@ export async function runPlanningPhase(
       prompt,
       planSystemPrompt,
       planTools,
-      'auto',
-      history,
-      true
+      { type: 'function', function: { name: 'create_plan' } },
+      history
     )
 
     LogHelper.title(DUTY_NAME)
@@ -432,97 +660,77 @@ export async function runPlanningPhase(
       `Planning tool result: ${JSON.stringify(toolResult)}`
     )
 
-    let textFallback = toolResult?.textContent?.trim() || ''
-    let sawUnexpectedToolCall = false
+    if (!toolResult) {
+      const providerError = caller.consumeProviderErrorMessage()
+      if (providerError) {
+        LogHelper.debug(
+          `Planning aborted due to provider error: "${providerError}"`
+        )
+        return { type: 'final', answer: providerError }
+      }
+    }
+
+    const textFallback = toolResult?.textContent?.trim() || ''
 
     if (toolResult?.toolCall) {
-      if (toolResult.toolCall.functionName !== 'create_plan') {
+      if (toolResult.toolCall.functionName === 'create_plan') {
+        const parsedArgs = parseToolCallArguments(
+          toolResult.toolCall.arguments
+        )
+        if (parsedArgs) {
+          const interpreted = extractPlanResultFromCreatePlanArgs(parsedArgs, {
+            allowLegacySummaryAsFinal: true
+          })
+          if (interpreted) {
+            return interpreted
+          }
+
+          LogHelper.debug(
+            'Planning: create_plan payload did not satisfy plan contract; falling back to JSON mode'
+          )
+        } else {
+          LogHelper.debug('Planning: failed to parse create_plan arguments')
+        }
+      } else {
+        const directPlan = createPlanFromUnexpectedToolCall(
+          {
+            functionName: toolResult.toolCall.functionName,
+            arguments: toolResult.toolCall.arguments
+          },
+          textFallback
+        )
+        if (directPlan) {
+          LogHelper.debug(
+            `Planning: recovered direct tool call "${toolResult.toolCall.functionName}" into a single-step plan`
+          )
+          return directPlan
+        }
+
         LogHelper.debug(
           `Planning: unexpected tool call "${toolResult.toolCall.functionName}" (expected "create_plan"), falling back to JSON mode`
         )
-      } else {
-        try {
-          const parsedArgs = JSON.parse(toolResult.toolCall.arguments)
-          if (Array.isArray(parsedArgs.steps)) {
-            const steps = parseStepsFromArgs(parsedArgs.steps)
-            if (steps.length > 0) {
-              const summary =
-                typeof parsedArgs.summary === 'string'
-                  ? (parsedArgs.summary as string)
-                  : ''
-              return { type: 'plan', steps, summary }
-            }
-          }
-
-          // Model returned create_plan with empty steps — treat the summary
-          // as a direct answer (conversational response)
-          if (parsedArgs.summary) {
-            return {
-              type: 'final',
-              answer: (parsedArgs.summary as string).trim()
-            }
-          }
-        } catch {
-          LogHelper.debug('Planning: failed to parse create_plan arguments')
-        }
       }
     } else if (toolResult?.unexpectedToolCall) {
-      sawUnexpectedToolCall = true
-      LogHelper.debug(
-        `Planning: model attempted direct tool call "${toolResult.unexpectedToolCall.functionName}", retrying with forced create_plan`
+      const directPlan = createPlanFromUnexpectedToolCall(
+        toolResult.unexpectedToolCall,
+        textFallback
       )
-
-      const forcedPlanResult = await caller.callLLMWithTools(
-        `${prompt}\n\nIMPORTANT: Do not call execution tools directly. You must only call "create_plan".`,
-        planSystemPrompt,
-        planTools,
-        { type: 'function', function: { name: 'create_plan' } },
-        history
-      )
-
-      LogHelper.debug(
-        `Planning forced result: ${JSON.stringify(forcedPlanResult)}`
-      )
-
-      if (forcedPlanResult?.textContent?.trim()) {
-        textFallback = forcedPlanResult.textContent.trim()
+      if (directPlan) {
+        LogHelper.debug(
+          `Planning: recovered unexpected tool call "${toolResult.unexpectedToolCall.functionName}" into a single-step plan`
+        )
+        return directPlan
       }
 
-      if (forcedPlanResult?.toolCall?.functionName === 'create_plan') {
-        try {
-          const parsedArgs = JSON.parse(forcedPlanResult.toolCall.arguments)
-          if (Array.isArray(parsedArgs.steps)) {
-            const steps = parseStepsFromArgs(parsedArgs.steps)
-            if (steps.length > 0) {
-              const summary =
-                typeof parsedArgs.summary === 'string'
-                  ? (parsedArgs.summary as string)
-                  : ''
-              return { type: 'plan', steps, summary }
-            }
-          }
-
-          if (parsedArgs.summary) {
-            return {
-              type: 'final',
-              answer: (parsedArgs.summary as string).trim()
-            }
-          }
-        } catch {
-          LogHelper.debug(
-            'Planning: failed to parse forced create_plan arguments'
-          )
-        }
-      } else if (forcedPlanResult?.unexpectedToolCall) {
-        sawUnexpectedToolCall = true
-      }
+      LogHelper.debug(
+        `Planning: unexpected tool call "${toolResult.unexpectedToolCall.functionName}" while forcing "create_plan", falling back to JSON mode`
+      )
     } else {
       LogHelper.debug('Planning: no tool call returned, falling back to JSON mode')
     }
 
     if (
       textFallback &&
-      !sawUnexpectedToolCall &&
       shouldTreatPlanningTextAsFinalAnswer(textFallback)
     ) {
       LogHelper.debug(
@@ -541,14 +749,33 @@ export async function runPlanningPhase(
       planSchema,
       history
     )
+    if (!jsonModeResult) {
+      const providerError = caller.consumeProviderErrorMessage()
+      if (providerError) {
+        LogHelper.debug(
+          `Planning JSON fallback aborted due to provider error: "${providerError}"`
+        )
+        return { type: 'final', answer: providerError }
+      }
+    }
     const parsed = parseOutput(jsonModeResult?.output)
-    const planResult = extractPlanFromParsed(parsed)
+    const planResult =
+      (parsed
+        ? extractPlanResultFromCreatePlanArgs(parsed, {
+            allowLegacySummaryAsFinal: true
+          })
+        : null) || extractPlanFromParsed(parsed)
     if (planResult) {
       return planResult
     }
 
     const textFallbackParsed = parseOutput(textFallback)
-    const textFallbackPlan = extractPlanFromParsed(textFallbackParsed)
+    const textFallbackPlan =
+      (textFallbackParsed
+        ? extractPlanResultFromCreatePlanArgs(textFallbackParsed, {
+            allowLegacySummaryAsFinal: true
+          })
+        : null) || extractPlanFromParsed(textFallbackParsed)
     if (textFallbackPlan) {
       LogHelper.debug('Planning: recovered structured output from text fallback')
       return textFallbackPlan
@@ -556,7 +783,6 @@ export async function runPlanningPhase(
 
     if (
       textFallback &&
-      !sawUnexpectedToolCall &&
       shouldTreatPlanningTextAsFinalAnswer(textFallback)
     ) {
       LogHelper.debug(
@@ -573,7 +799,20 @@ export async function runPlanningPhase(
         ? jsonModeResult.output.trim()
         : ''
     if (raw) {
-      return { type: 'final', answer: stripInlineToolMarkup(raw) || raw }
+      const parsedRaw = parseOutput(raw)
+      const parsedRawPlan =
+        (parsedRaw
+          ? extractPlanResultFromCreatePlanArgs(parsedRaw, {
+              allowLegacySummaryAsFinal: true
+            })
+          : null) || extractPlanFromParsed(parsedRaw)
+      if (parsedRawPlan) {
+        return parsedRawPlan
+      }
+
+      if (shouldTreatPlanningTextAsFinalAnswer(raw)) {
+        return { type: 'final', answer: stripInlineToolMarkup(raw) || raw }
+      }
     }
 
     if (textFallback) {
@@ -596,6 +835,12 @@ export async function runPlanningPhase(
     planSchema,
     history
   )
+  if (!completionResult) {
+    const providerError = caller.consumeProviderErrorMessage()
+    if (providerError) {
+      return { type: 'final', answer: providerError }
+    }
+  }
 
   LogHelper.title(DUTY_NAME)
   LogHelper.debug(`Planning prompt: "${prompt}..."`)
@@ -604,7 +849,12 @@ export async function runPlanningPhase(
   )
 
   const parsed = parseOutput(completionResult?.output)
-  const planResult = extractPlanFromParsed(parsed)
+  const planResult =
+    (parsed
+      ? extractPlanResultFromCreatePlanArgs(parsed, {
+          allowLegacySummaryAsFinal: true
+        })
+      : null) || extractPlanFromParsed(parsed)
   if (planResult) {
     return planResult
   }
@@ -614,7 +864,27 @@ export async function runPlanningPhase(
     typeof completionResult?.output === 'string'
       ? completionResult.output.trim()
       : ''
-  return { type: 'final', answer: raw || 'I could not determine what to do.' }
+  if (raw) {
+    const parsedRaw = parseOutput(raw)
+    const parsedRawPlan =
+      (parsedRaw
+        ? extractPlanResultFromCreatePlanArgs(parsedRaw, {
+            allowLegacySummaryAsFinal: true
+          })
+        : null) || extractPlanFromParsed(parsedRaw)
+    if (parsedRawPlan) {
+      return parsedRawPlan
+    }
+
+    if (shouldTreatPlanningTextAsFinalAnswer(raw)) {
+      return { type: 'final', answer: raw }
+    }
+  }
+
+  return {
+    type: 'final',
+    answer: 'I could not produce a structured plan. Please rephrase your request.'
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -667,40 +937,7 @@ User Request: "${caller.input}"
 
 Create a revised plan from this point to complete the user request.`
 
-  const planSchema = {
-    oneOf: [
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['plan'] },
-          steps: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                function: { type: 'string' },
-                label: { type: 'string' }
-              },
-              required: ['function', 'label'],
-              additionalProperties: false
-            }
-          },
-          summary: { type: 'string' }
-        },
-        required: ['type', 'steps', 'summary'],
-        additionalProperties: false
-      },
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['final'] },
-          answer: { type: 'string' }
-        },
-        required: ['type', 'answer'],
-        additionalProperties: false
-      }
-    ]
-  }
+  const planSchema = PLAN_RESPONSE_SCHEMA
 
   LogHelper.title(DUTY_NAME)
   LogHelper.debug(
@@ -714,14 +951,18 @@ Create a revised plan from this point to complete the user request.`
         function: {
           name: 'create_plan',
           description:
-            'Create a revised execution plan. Return empty steps with summary if user clarification is needed.',
+            'Create a revised execution plan or direct clarification answer. Use type="plan" with steps+summary, or type="final" with answer when user clarification is needed.',
           parameters: {
             type: 'object',
             properties: {
+              type: {
+                type: 'string',
+                enum: ['plan', 'final']
+              },
               steps: {
                 type: 'array',
                 items: {
-                  type: 'object',
+                  ...PLAN_STEP_SCHEMA,
                   properties: {
                     function: {
                       type: 'string',
@@ -740,10 +981,16 @@ Create a revised plan from this point to complete the user request.`
               summary: {
                 type: 'string',
                 description:
-                  'Short natural language summary of the revised plan, or clarification request if steps is empty'
+                  'Short natural language summary of the revised plan.'
+              },
+              answer: {
+                type: 'string',
+                description:
+                  'Direct user-facing clarification message when type="final".'
               }
             },
-            required: ['steps', 'summary']
+            required: ['type'],
+            additionalProperties: false
           }
         }
       }
@@ -757,42 +1004,71 @@ Create a revised plan from this point to complete the user request.`
       history
     )
 
+    if (!toolResult) {
+      const providerError = caller.consumeProviderErrorMessage()
+      if (providerError) {
+        return { type: 'final', answer: providerError }
+      }
+    }
+
     LogHelper.title(DUTY_NAME)
     LogHelper.debug(
       `Recovery planning tool result: ${JSON.stringify(toolResult)}`
     )
 
     if (toolResult?.toolCall?.functionName === 'create_plan') {
-      try {
-        const parsedArgs = JSON.parse(toolResult.toolCall.arguments)
-        if (Array.isArray(parsedArgs.steps)) {
-          const steps = parseStepsFromArgs(parsedArgs.steps)
-          if (steps.length > 0) {
-            return {
-              type: 'plan',
-              steps,
-              summary:
-                typeof parsedArgs.summary === 'string'
-                  ? (parsedArgs.summary as string)
-                  : ''
-            }
-          }
+      const parsedArgs = parseToolCallArguments(
+        toolResult.toolCall.arguments
+      )
+      if (parsedArgs) {
+        const interpreted = extractPlanResultFromCreatePlanArgs(parsedArgs, {
+          allowLegacySummaryAsFinal: true
+        })
+        if (interpreted) {
+          return interpreted
         }
 
-        if (typeof parsedArgs.summary === 'string' && parsedArgs.summary.trim()) {
-          return {
-            type: 'final',
-            answer: parsedArgs.summary.trim() as string
-          }
-        }
-      } catch {
+        LogHelper.debug(
+          'Recovery planning: create_plan payload did not satisfy plan contract; falling back to JSON mode'
+        )
+      } else {
         LogHelper.debug('Recovery planning: failed to parse create_plan arguments')
+      }
+    } else if (toolResult?.toolCall) {
+      const directPlan = createPlanFromUnexpectedToolCall(
+        {
+          functionName: toolResult.toolCall.functionName,
+          arguments: toolResult.toolCall.arguments
+        },
+        toolResult.textContent?.trim() || ''
+      )
+      if (directPlan) {
+        LogHelper.debug(
+          `Recovery planning: recovered direct tool call "${toolResult.toolCall.functionName}" into a single-step plan`
+        )
+        return directPlan
+      }
+    } else if (toolResult?.unexpectedToolCall) {
+      const directPlan = createPlanFromUnexpectedToolCall(
+        toolResult.unexpectedToolCall,
+        toolResult.textContent?.trim() || ''
+      )
+      if (directPlan) {
+        LogHelper.debug(
+          `Recovery planning: recovered unexpected tool call "${toolResult.unexpectedToolCall.functionName}" into a single-step plan`
+        )
+        return directPlan
       }
     }
 
     const textFallback = toolResult?.textContent?.trim() || ''
     const parsedTextFallback = parseOutput(textFallback)
-    const extractedPlan = extractPlanFromParsed(parsedTextFallback)
+    const extractedPlan =
+      (parsedTextFallback
+        ? extractPlanResultFromCreatePlanArgs(parsedTextFallback, {
+            allowLegacySummaryAsFinal: true
+          })
+        : null) || extractPlanFromParsed(parsedTextFallback)
     if (extractedPlan) {
       return extractedPlan
     }
@@ -811,8 +1087,19 @@ Create a revised plan from this point to complete the user request.`
     planSchema,
     history
   )
+  if (!jsonModeResult) {
+    const providerError = caller.consumeProviderErrorMessage()
+    if (providerError) {
+      return { type: 'final', answer: providerError }
+    }
+  }
   const parsed = parseOutput(jsonModeResult?.output)
-  const planResult = extractPlanFromParsed(parsed)
+  const planResult =
+    (parsed
+      ? extractPlanResultFromCreatePlanArgs(parsed, {
+          allowLegacySummaryAsFinal: true
+        })
+      : null) || extractPlanFromParsed(parsed)
   if (planResult) {
     return planResult
   }
@@ -1063,6 +1350,18 @@ async function resolveToolFunctionWithNativeTools(
   )
 
   if (!result) {
+    const providerError = caller.consumeProviderErrorMessage()
+    if (providerError) {
+      return {
+        type: 'executed',
+        execution: {
+          function: qualifiedName,
+          status: 'error',
+          observation: providerError
+        }
+      }
+    }
+
     return {
       type: 'executed',
       execution: {
@@ -1343,10 +1642,12 @@ async function executeFunctionWithNativeTools(
   let retries = 0
   let lastError = ''
   let toolFailureRetries = 0
+  let lastFailedToolInput: string | null = null
+  const attemptedInputsInCurrentStep = new Set<string>()
 
   while (retries <= MAX_RETRIES_PER_FUNCTION) {
     const retryNote = lastError
-      ? `\n\nPrevious attempt failed: ${lastError}. Please fix the arguments.`
+      ? `\n\nPrevious attempt failed: ${lastError}.${lastFailedToolInput ? `\nPrevious failed tool_input: ${lastFailedToolInput}\nDo not reuse the same tool_input. Change the arguments to address the failure.` : ' Please fix the arguments.'}`
       : ''
     const prompt = `Current Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\n\n${toolkitContextSection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}`
 
@@ -1359,6 +1660,22 @@ async function executeFunctionWithNativeTools(
     )
 
     if (!result) {
+      const providerError = caller.consumeProviderErrorMessage()
+      if (providerError) {
+        LogHelper.title(DUTY_NAME)
+        LogHelper.warning(
+          `Execution aborted for "${qualifiedName}": ${providerError}`
+        )
+        return {
+          type: 'executed',
+          execution: {
+            function: qualifiedName,
+            status: 'error',
+            observation: providerError
+          }
+        }
+      }
+
       const providerFailureObservation =
         'Provider did not return a response (timeout or network issue).'
       LogHelper.title(DUTY_NAME)
@@ -1410,6 +1727,25 @@ async function executeFunctionWithNativeTools(
         )
         continue
       }
+      const normalizedCurrentAttempt = normalizeToolInputForComparison(
+        validatedToolInput
+      )
+      if (
+        normalizedCurrentAttempt &&
+        attemptedInputsInCurrentStep.has(normalizedCurrentAttempt)
+      ) {
+        retries += 1
+        lastError =
+          'tool_input duplicates a previous attempt for the current step'
+        LogHelper.title(DUTY_NAME)
+        LogHelper.debug(
+          `Rejected duplicate retry tool_input for "${qualifiedName}" at step ${currentStepNumber}`
+        )
+        continue
+      }
+      if (normalizedCurrentAttempt) {
+        attemptedInputsInCurrentStep.add(normalizedCurrentAttempt)
+      }
 
       const toolResult = await runToolExecution(
         toolkitId,
@@ -1432,7 +1768,10 @@ async function executeFunctionWithNativeTools(
       if (toolResult.execution.status === 'error') {
         if (toolFailureRetries < 2) {
           toolFailureRetries += 1
-          lastError = `Tool execution failed: ${toolResult.execution.observation}`
+          lastError = extractFailureMessageFromObservation(
+            toolResult.execution.observation
+          )
+          lastFailedToolInput = validatedToolInput
           continue
         }
       }
@@ -1539,10 +1878,12 @@ async function executeFunctionWithJSONMode(
   let retries = 0
   let lastError = ''
   let toolFailureRetries = 0
+  let lastFailedToolInput: string | null = null
+  const attemptedInputsInCurrentStep = new Set<string>()
 
   while (retries <= MAX_RETRIES_PER_FUNCTION) {
     const retryNote = lastError
-      ? `\n\nPrevious attempt failed: ${lastError}. Please fix the tool_input.`
+      ? `\n\nPrevious attempt failed: ${lastError}.${lastFailedToolInput ? `\nPrevious failed tool_input: ${lastFailedToolInput}\nDo not reuse the same tool_input. Change the arguments to address the failure.` : ' Please fix the tool_input.'}`
       : ''
     const prompt = `Function: ${qualifiedName}\nDescription: ${functionConfig.description}\nCurrent Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\nParameters: ${paramsSchema}\n\n${toolkitContextSection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}\n\nProvide the tool_input for this function.`
 
@@ -1626,6 +1967,25 @@ async function executeFunctionWithJSONMode(
         )
         continue
       }
+      const normalizedCurrentAttempt = normalizeToolInputForComparison(
+        validatedToolInput
+      )
+      if (
+        normalizedCurrentAttempt &&
+        attemptedInputsInCurrentStep.has(normalizedCurrentAttempt)
+      ) {
+        retries += 1
+        lastError =
+          'tool_input duplicates a previous attempt for the current step'
+        LogHelper.title(DUTY_NAME)
+        LogHelper.debug(
+          `Rejected duplicate retry tool_input for "${qualifiedName}" at step ${currentStepNumber}`
+        )
+        continue
+      }
+      if (normalizedCurrentAttempt) {
+        attemptedInputsInCurrentStep.add(normalizedCurrentAttempt)
+      }
 
       const toolResult = await runToolExecution(
         toolkitId,
@@ -1648,7 +2008,10 @@ async function executeFunctionWithJSONMode(
       if (toolResult.execution.status === 'error') {
         if (toolFailureRetries < MAX_TOOL_FAILURE_RETRIES) {
           toolFailureRetries += 1
-          lastError = `Tool execution failed: ${toolResult.execution.observation}`
+          lastError = extractFailureMessageFromObservation(
+            toolResult.execution.observation
+          )
+          lastFailedToolInput = validatedToolInput
           continue
         }
       }
@@ -1740,10 +2103,36 @@ export async function runToolExecution(
 
   const toolExecutionResult =
     await TOOL_EXECUTOR.executeTool(toolExecutionInput)
+  const toolOutput = toolExecutionResult.data?.output || {}
+  const nestedResult = asRecord(toolOutput['result'])
+  const toolOutputSuccess = toolOutput['success']
+  const nestedResultSuccess = nestedResult?.['success']
+  const toolOutputError =
+    typeof toolOutput['error'] === 'string'
+      ? toolOutput['error']
+      : null
+  const nestedResultError =
+    typeof nestedResult?.['error'] === 'string'
+      ? nestedResult['error']
+      : null
+  const hasDomainFailure =
+    toolExecutionResult.status === 'success' &&
+    (toolOutputSuccess === false || nestedResultSuccess === false)
+  const effectiveStatus = hasDomainFailure
+    ? 'error'
+    : toolExecutionResult.status
+  const effectiveMessage =
+    (hasDomainFailure && (nestedResultError || toolOutputError)) ||
+    toolExecutionResult.message
 
   LogHelper.title(DUTY_NAME)
+  if (hasDomainFailure) {
+    LogHelper.warning(
+      'Tool result normalized to [error]: tool output reported success=false'
+    )
+  }
   LogHelper.debug(
-    `Tool result: ${qualifiedName} [${toolExecutionResult.status}] — ${toolExecutionResult.message}`
+    `Tool result: ${qualifiedName} [${effectiveStatus}] — ${effectiveMessage}`
   )
   LogHelper.debug(
     `Tool output: ${JSON.stringify(toolExecutionResult.data?.output)}`
@@ -1751,7 +2140,9 @@ export async function runToolExecution(
 
   // Check for final_answer in tool result
   const finalAnswer =
-    extractFinalAnswerFromToolResult(toolExecutionResult)
+    effectiveStatus === 'success'
+      ? extractFinalAnswerFromToolResult(toolExecutionResult)
+      : null
   if (finalAnswer) {
     return {
       type: 'executed',
@@ -1768,16 +2159,22 @@ export async function runToolExecution(
 
   // Check for missing settings
   const missingSettings =
-    toolExecutionResult.status === 'error'
-      ? (toolExecutionResult.data.output?.['missing_settings'] as
+    effectiveStatus === 'error'
+      ? ((toolOutput['missing_settings'] as
           | string[]
-          | undefined)
+          | undefined) ??
+        (nestedResult?.['missing_settings'] as
+          | string[]
+          | undefined))
       : undefined
   const settingsPath =
-    toolExecutionResult.status === 'error'
-      ? (toolExecutionResult.data.output?.['settings_path'] as
+    effectiveStatus === 'error'
+      ? ((toolOutput['settings_path'] as
           | string
-          | undefined)
+          | undefined) ??
+        (nestedResult?.['settings_path'] as
+          | string
+          | undefined))
       : undefined
   if (missingSettings && missingSettings.length > 0 && settingsPath) {
     const formattedPath = formatFilePath(settingsPath)
@@ -1797,9 +2194,20 @@ export async function runToolExecution(
   }
 
   const observation = JSON.stringify({
-    status: toolExecutionResult.status,
-    message: toolExecutionResult.message,
+    status: effectiveStatus,
+    ...(effectiveStatus !== toolExecutionResult.status
+      ? { raw_status: toolExecutionResult.status }
+      : {}),
+    message: effectiveMessage,
     data: toolExecutionResult.data,
+    ...(hasDomainFailure
+      ? {
+          tool_output_failure: {
+            success: nestedResultSuccess ?? toolOutputSuccess,
+            error: nestedResultError || toolOutputError || effectiveMessage
+          }
+        }
+      : {}),
     requested_input: requestedToolInput,
     ...(requestedParsedInput
       ? { requested_parsed_input: requestedParsedInput }
@@ -1810,7 +2218,7 @@ export async function runToolExecution(
     type: 'executed',
     execution: {
       function: qualifiedName,
-      status: toolExecutionResult.status,
+      status: effectiveStatus,
       observation,
       requestedToolInput,
       ...(stepLabel ? { stepLabel } : {})
@@ -1889,13 +2297,14 @@ export async function runFinalAnswerPhase(
         )
 
         if (result?.toolCall) {
-          try {
-            const parsed = JSON.parse(result.toolCall.arguments)
-            if (typeof parsed.answer === 'string' && parsed.answer.trim()) {
-              candidateAnswer = parsed.answer.trim()
+          const parsed = parseToolCallArguments(
+            result.toolCall.arguments
+          )
+          if (parsed && typeof parsed['answer'] === 'string') {
+            const answer = parsed['answer'].trim()
+            if (answer) {
+              candidateAnswer = answer
             }
-          } catch {
-            // Fall through
           }
         }
 

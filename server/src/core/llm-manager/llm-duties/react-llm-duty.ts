@@ -381,6 +381,11 @@ export class ReActLLMDuty extends LLMDuty {
 
       if (executionHistory.length === 0) {
         LogHelper.debug('No executions completed, returning fallback')
+        const providerError = LLM_PROVIDER.consumeLastProviderErrorMessage()
+        if (providerError) {
+          return this.makeDutyResult(providerError)
+        }
+
         return this.makeDutyResult(
           'I was unable to find the right tools to help with your request.'
         )
@@ -424,7 +429,9 @@ export class ReActLLMDuty extends LLMDuty {
       history,
       getContextForToolkit: CONTEXT_MANAGER.getContextForToolkit.bind(
         CONTEXT_MANAGER
-      )
+      ),
+      consumeProviderErrorMessage:
+        LLM_PROVIDER.consumeLastProviderErrorMessage.bind(LLM_PROVIDER)
     }
   }
 
@@ -545,7 +552,7 @@ export class ReActLLMDuty extends LLMDuty {
       output:
         typeof result.output === 'string'
           ? result.output
-          : JSON.stringify(result.output),
+          : this.safeJSONStringify(result.output),
       usedInputTokens: result.usedInputTokens,
       usedOutputTokens: result.usedOutputTokens
     }
@@ -570,11 +577,18 @@ export class ReActLLMDuty extends LLMDuty {
     usedInputTokens?: number
     usedOutputTokens?: number
   } | null> {
+    const effectiveToolChoice: OpenAIToolChoice | undefined =
+      tools.length <= 1
+        ? undefined
+        : typeof toolChoice === 'string'
+          ? toolChoice
+          : 'auto'
+
     const toolNames = tools.map((t) => t.function.name).join(', ')
     const choiceLabel =
-      typeof toolChoice === 'string'
-        ? toolChoice
-        : `forced:${toolChoice.function.name}`
+      effectiveToolChoice === undefined
+        ? 'omitted'
+        : effectiveToolChoice
     const generationId = shouldStreamToUser
       ? StringHelper.random(6, { onlyLetters: true })
       : null
@@ -659,7 +673,9 @@ export class ReActLLMDuty extends LLMDuty {
             }
           : {}),
         tools,
-        toolChoice,
+        ...(effectiveToolChoice !== undefined
+          ? { toolChoice: effectiveToolChoice }
+          : {}),
         ...(history ? { history } : {})
       })
     } finally {
@@ -744,6 +760,14 @@ export class ReActLLMDuty extends LLMDuty {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  private safeJSONStringify(value: unknown): string {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
 
   private estimateTokensFromText(text: string): number {
     if (!text) {
@@ -833,7 +857,15 @@ export class ReActLLMDuty extends LLMDuty {
     if (!message) {
       return
     }
-    await BRAIN.talk(message)
+
+    try {
+      await BRAIN.talk(message)
+    } catch (error) {
+      LogHelper.title(this.name)
+      LogHelper.warning(
+        `Failed to emit intermediate progress message: ${String(error)}`
+      )
+    }
   }
 
   private makeDutyResult(output: string): LLMDutyResult {

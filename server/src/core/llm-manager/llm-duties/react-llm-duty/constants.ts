@@ -90,6 +90,7 @@ If recovery is possible:
 
 If recovery is not possible without user input:
 - Return an empty steps array and put a clear clarification request in summary.
+- The summary must be directly user-facing (ask the user the missing detail). Do not explain internal reasoning (avoid "I need to..." or "I cannot...").
 
 Use only functions/tools listed in the catalog.
 
@@ -106,7 +107,7 @@ export const MAX_TOOL_FAILURE_RETRIES = 2
 export const REACT_TEMPERATURE = 0.2
 export const REACT_INFERENCE_TIMEOUT_MS = 120_000
 export const REACT_TIMEOUT_MAX_RETRIES = 1
-export const FINAL_ANSWER_RETRY_DURATION_MS = 45_000
+export const FINAL_ANSWER_RETRY_DURATION_MS = 60_000
 export const FINAL_ANSWER_MAX_RETRIES = 2
 export const TOOL_CALL_WAIT_NOTICE_DELAY_MS = 30_000
 export const TOOL_CALL_DIAGNOSIS_DELAY_MS = 90_000

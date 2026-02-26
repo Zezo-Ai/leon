@@ -107,4 +107,5 @@ export interface LLMCaller {
   readonly input: string | object | null
   readonly history: MessageLog[]
   getContextForToolkit(toolkitId: string): string
+  consumeProviderErrorMessage(): string | null
 }
