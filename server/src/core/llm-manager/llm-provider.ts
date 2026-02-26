@@ -17,6 +17,7 @@ import { FileHelper } from '@/helpers/file-helper'
 import LocalLLMProvider from '@/core/llm-manager/llm-providers/local-llm-provider'
 import GroqLLMProvider from '@/core/llm-manager/llm-providers/groq-llm-provider'
 import OpenRouterLLMProvider from '@/core/llm-manager/llm-providers/openrouter-llm-provider'
+import ZAILLMProvider from '@/core/llm-manager/llm-providers/z-ai-llm-provider'
 import OpenAILLMProvider from '@/core/llm-manager/llm-providers/openai-llm-provider'
 import AnthropicLLMProvider from '@/core/llm-manager/llm-providers/anthropic-llm-provider'
 import MoonshotAILLMProvider from '@/core/llm-manager/llm-providers/moonshotai-llm-provider'
@@ -53,6 +54,7 @@ type Provider =
   | LocalLLMProvider
   | GroqLLMProvider
   | OpenRouterLLMProvider
+  | ZAILLMProvider
   | OpenAILLMProvider
   | AnthropicLLMProvider
   | MoonshotAILLMProvider
@@ -64,6 +66,7 @@ const LLM_PROVIDERS_MAP = {
   [LLMProviders.Local]: 'local-llm-provider',
   [LLMProviders.Groq]: 'groq-llm-provider',
   [LLMProviders.OpenRouter]: 'openrouter-llm-provider',
+  [LLMProviders.ZAI]: 'z-ai-llm-provider',
   [LLMProviders.OpenAI]: 'openai-llm-provider',
   [LLMProviders.Anthropic]: 'anthropic-llm-provider',
   [LLMProviders.MoonshotAI]: 'moonshotai-llm-provider',
@@ -351,6 +354,26 @@ export default class LLMProvider {
       }
     }
 
+    // Z.AI currently supports tool_choice="auto". Omit unsupported values
+    // (named/required/none) to preserve compatibility.
+    if (LLM_PROVIDER === LLMProviders.ZAI) {
+      if (typeof toolChoice !== 'string') {
+        LogHelper.title('LLM Provider')
+        LogHelper.debug(
+          'Z.AI compatibility: omitted named tool_choice; using provider default.'
+        )
+        return undefined
+      }
+
+      if (toolChoice !== 'auto') {
+        LogHelper.title('LLM Provider')
+        LogHelper.debug(
+          `Z.AI compatibility: omitted unsupported tool_choice="${toolChoice}".`
+        )
+        return undefined
+      }
+    }
+
     return toolChoice
   }
 
@@ -573,6 +596,7 @@ export default class LLMProvider {
     }
 
     addChunk(message['reasoning'])
+    addChunk(message['reasoning_content'])
 
     const reasoningDetails = Array.isArray(message['reasoningDetails'])
       ? (message['reasoningDetails'] as unknown[])
@@ -1596,6 +1620,7 @@ export default class LLMProvider {
       [
         LLMProviders.Groq,
         LLMProviders.OpenRouter,
+        LLMProviders.ZAI,
         LLMProviders.Anthropic,
         LLMProviders.MoonshotAI,
         LLMProviders.Cerebras,

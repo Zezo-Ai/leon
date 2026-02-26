@@ -30,6 +30,7 @@ export enum LLMProviders {
   Local = 'local',
   Groq = 'groq',
   OpenRouter = 'openrouter',
+  ZAI = 'zai',
   OpenAI = 'openai',
   Anthropic = 'anthropic',
   MoonshotAI = 'moonshotai',
