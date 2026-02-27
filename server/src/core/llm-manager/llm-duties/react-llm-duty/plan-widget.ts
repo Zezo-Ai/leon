@@ -13,8 +13,7 @@ export const widgetId = (prefix: string): string =>
  * This produces the exact JSON shape the client renderer expects.
  */
 export function buildPlanComponentTree(
-  steps: TrackedPlanStep[],
-  justCompletedIndex: number | null
+  steps: TrackedPlanStep[]
 ): Record<string, unknown> {
   const listItems = steps.map((step, i) => {
     let child: Record<string, unknown>
@@ -48,7 +47,6 @@ export function buildPlanComponentTree(
     } else {
       // Checkbox
       const isCompleted = step.status === 'completed'
-      const isJustCompleted = justCompletedIndex === i
       child = {
         component: 'Checkbox',
         id: widgetId('checkbox'),
@@ -56,7 +54,7 @@ export function buildPlanComponentTree(
           name: `step-${i}`,
           label: step.label,
           checked: isCompleted,
-          disabled: isCompleted && !isJustCompleted
+          disabled: isCompleted
         },
         events: []
       }
