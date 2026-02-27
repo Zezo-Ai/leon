@@ -8,6 +8,7 @@ import type {
   CompletionParams,
   PromptOrChatHistory
 } from '@/core/llm-manager/types'
+import { LLM_NAME_WITH_VERSION } from '@/constants'
 import { LogHelper } from '@/helpers/log-helper'
 import { LLM_MANAGER } from '@/core'
 
@@ -15,10 +16,15 @@ type LocalCompletionParams = Omit<CompletionParams, ''>
 
 export default class LocalLLMProvider {
   protected readonly name = 'Local LLM Provider'
+  protected readonly model = LLM_NAME_WITH_VERSION
 
   constructor() {
     LogHelper.title(this.name)
     LogHelper.success('New instance')
+  }
+
+  public get modelName(): string {
+    return this.model
   }
 
   public runChatCompletion(

@@ -38,6 +38,7 @@ import {
   CHARS_PER_TOKEN,
   TOOL_CALL_WAIT_NOTICE_DELAY_MS,
   TOOL_CALL_DIAGNOSIS_DELAY_MS,
+  PLANNING_WAIT_NOTICE_DELAY_MS,
   REACT_LOCAL_PROVIDER_HISTORY_LOGS,
   REACT_REMOTE_PROVIDER_HISTORY_LOGS,
   MAX_EXECUTIONS,
@@ -159,9 +160,44 @@ export class ReActLLMDuty extends LLMDuty {
       LogHelper.debug('Phase 1: Planning...')
 
       const caller = this.createLLMCaller(history)
-      const planResult = await runPlanningPhase(caller, catalog, history)
+      const planWidgetIdValue = widgetId('plan')
+      let hasPlanningWidget = false
+      let planningCompleted = false
+      let planningWaitTimer: NodeJS.Timeout | null = null
+
+      planningWaitTimer = setTimeout(() => {
+        if (planningCompleted) {
+          return
+        }
+
+        emitPlanWidget(
+          [{ label: 'Thinking...', status: 'in_progress' }],
+          null,
+          planWidgetIdValue,
+          false
+        )
+        hasPlanningWidget = true
+      }, PLANNING_WAIT_NOTICE_DELAY_MS)
+
+      let planResult
+      try {
+        planResult = await runPlanningPhase(caller, catalog, history)
+      } finally {
+        planningCompleted = true
+        if (planningWaitTimer) {
+          clearTimeout(planningWaitTimer)
+        }
+      }
 
       if (planResult.type === 'final') {
+        if (hasPlanningWidget) {
+          emitPlanWidget(
+            [{ label: 'Thinking...', status: 'completed' }],
+            0,
+            planWidgetIdValue,
+            true
+          )
+        }
         LogHelper.title(this.name)
         LogHelper.debug(`Planning returned final answer directly: "${planResult.answer}"`)
         return this.makeDutyResult(planResult.answer)
@@ -181,7 +217,6 @@ export class ReActLLMDuty extends LLMDuty {
       let executionCount = 0
 
       // --- Plan widget state ---
-      const planWidgetIdValue = widgetId('plan')
       let trackedSteps: TrackedPlanStep[] = pendingSteps.map((s) => ({
         label: s.label,
         status: 'pending' as PlanStepStatus
@@ -196,7 +231,12 @@ export class ReActLLMDuty extends LLMDuty {
       if (planResult.summary) {
         await this.emitProgress(planResult.summary)
       }
-      emitPlanWidget(trackedSteps, null, planWidgetIdValue, false)
+      emitPlanWidget(
+        trackedSteps,
+        null,
+        planWidgetIdValue,
+        hasPlanningWidget
+      )
 
       // --- Phase 2: Execution loop ---
       LogHelper.title(this.name)
@@ -381,6 +421,11 @@ export class ReActLLMDuty extends LLMDuty {
 
       if (executionHistory.length === 0) {
         LogHelper.debug('No executions completed, returning fallback')
+        const providerError = LLM_PROVIDER.consumeLastProviderErrorMessage()
+        if (providerError) {
+          return this.makeDutyResult(providerError)
+        }
+
         return this.makeDutyResult(
           'I was unable to find the right tools to help with your request.'
         )
@@ -424,7 +469,9 @@ export class ReActLLMDuty extends LLMDuty {
       history,
       getContextForToolkit: CONTEXT_MANAGER.getContextForToolkit.bind(
         CONTEXT_MANAGER
-      )
+      ),
+      consumeProviderErrorMessage:
+        LLM_PROVIDER.consumeLastProviderErrorMessage.bind(LLM_PROVIDER)
     }
   }
 
@@ -545,7 +592,7 @@ export class ReActLLMDuty extends LLMDuty {
       output:
         typeof result.output === 'string'
           ? result.output
-          : JSON.stringify(result.output),
+          : this.safeJSONStringify(result.output),
       usedInputTokens: result.usedInputTokens,
       usedOutputTokens: result.usedOutputTokens
     }
@@ -570,11 +617,18 @@ export class ReActLLMDuty extends LLMDuty {
     usedInputTokens?: number
     usedOutputTokens?: number
   } | null> {
+    const effectiveToolChoice: OpenAIToolChoice | undefined =
+      tools.length <= 1
+        ? undefined
+        : typeof toolChoice === 'string'
+          ? toolChoice
+          : 'auto'
+
     const toolNames = tools.map((t) => t.function.name).join(', ')
     const choiceLabel =
-      typeof toolChoice === 'string'
-        ? toolChoice
-        : `forced:${toolChoice.function.name}`
+      effectiveToolChoice === undefined
+        ? 'omitted'
+        : effectiveToolChoice
     const generationId = shouldStreamToUser
       ? StringHelper.random(6, { onlyLetters: true })
       : null
@@ -659,7 +713,9 @@ export class ReActLLMDuty extends LLMDuty {
             }
           : {}),
         tools,
-        toolChoice,
+        ...(effectiveToolChoice !== undefined
+          ? { toolChoice: effectiveToolChoice }
+          : {}),
         ...(history ? { history } : {})
       })
     } finally {
@@ -744,6 +800,14 @@ export class ReActLLMDuty extends LLMDuty {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  private safeJSONStringify(value: unknown): string {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
 
   private estimateTokensFromText(text: string): number {
     if (!text) {
@@ -833,7 +897,15 @@ export class ReActLLMDuty extends LLMDuty {
     if (!message) {
       return
     }
-    await BRAIN.talk(message)
+
+    try {
+      await BRAIN.talk(message)
+    } catch (error) {
+      LogHelper.title(this.name)
+      LogHelper.warning(
+        `Failed to emit intermediate progress message: ${String(error)}`
+      )
+    }
   }
 
   private makeDutyResult(output: string): LLMDutyResult {

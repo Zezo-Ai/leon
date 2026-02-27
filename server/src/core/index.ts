@@ -20,7 +20,7 @@ import LLMManager from '@/core/llm-manager/llm-manager'
 import LLMProvider from '@/core/llm-manager/llm-provider'
 import Persona from '@/core/llm-manager/persona'
 import ToolkitRegistry from '@/core/toolkit-registry'
-import ContextManager from '@/core/context-manager'
+import ContextManager from '@/core/context-manager/context-manager'
 import ToolExecutor from '@/core/tool-executor'
 import { ConversationLogger } from '@/conversation-logger'
 

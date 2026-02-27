@@ -9,7 +9,9 @@ test/coverage/
 **/tmp/*
 **/src/.venv/*
 logs/*
-core/context/
+core/context/*[.md, .json]
+!core/context/LEON.md
+!core/context/ARCHITECTURE.md
 core/config/**/*.json
 bin/coqui/*
 bin/flite/*
@@ -30,6 +32,7 @@ bridges/python/src/Pipfile.lock
 bridges/toolkits/**/bins
 bridges/toolkits/**/settings/*
 tcp_server/src/Pipfile.lock
+!core/context/*/.gitkeep
 !tcp_server/**/.gitkeep
 !bridges/toolkits/**/.gitkeep
 !bridges/python/**/.gitkeep

@@ -20,10 +20,10 @@ interface CerebrasChatCompletionParams {
   model: string
   messages: CerebrasMessage[]
   max_completion_tokens?: number
-  temperature?: number
   top_p?: number
   stream?: boolean
   stop?: string | null
+  thinking?: unknown
   response_format?: {
     type: 'json_object'
   }
@@ -36,7 +36,9 @@ export default class CerebrasLLMProvider {
   protected readonly name = 'Cerebras LLM Provider'
   protected readonly apiKey = process.env['LEON_CEREBRAS_API_KEY']
   protected readonly model =
-    process.env['LEON_CEREBRAS_MODEL'] || 'gpt-oss-120b'
+    process.env['LEON_CEREBRAS_AGENT_LLM'] ||
+    process.env['LEON_CEREBRAS_MODEL'] ||
+    'gpt-oss-120b'
   private readonly axios = axios.create({
     baseURL: 'https://api.cerebras.ai/v1',
     timeout: 120_000
@@ -47,6 +49,10 @@ export default class CerebrasLLMProvider {
     LogHelper.success('New instance')
 
     this.checkAPIKey()
+  }
+
+  public get modelName(): string {
+    return this.model
   }
 
   private checkAPIKey(): void {
@@ -115,15 +121,24 @@ export default class CerebrasLLMProvider {
         let chatCompletionParams: CerebrasChatCompletionParams = {
           messages: messagesHistory,
           model: this.model,
-          temperature: 0.5,
+          ...(completionParams.disableThinking === true
+            ? {
+                thinking: { type: 'disabled' }
+              }
+            : {}),
           stream: completionParams.shouldStream === true
         }
 
         if (completionParams.tools && completionParams.tools.length > 0) {
           chatCompletionParams = {
             ...chatCompletionParams,
-            tools: completionParams.tools,
-            tool_choice: completionParams.toolChoice || 'auto'
+            tools: completionParams.tools
+          }
+          if (completionParams.toolChoice !== undefined) {
+            chatCompletionParams = {
+              ...chatCompletionParams,
+              tool_choice: completionParams.toolChoice
+            }
           }
         } else if (isJSONMode) {
           chatCompletionParams = {

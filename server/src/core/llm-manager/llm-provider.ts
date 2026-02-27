@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { Readable } from 'node:stream'
+import { inspect } from 'node:util'
 
 import axios, { type AxiosResponse } from 'axios'
 
@@ -10,12 +11,16 @@ import {
   type PromptOrChatHistory,
   LLMProviders
 } from '@/core/llm-manager/types'
-import { LLM_PROVIDER, SERVER_CORE_PATH } from '@/constants'
+import { LLM_NAME_WITH_VERSION, LLM_PROVIDER, SERVER_CORE_PATH } from '@/constants'
 import { LogHelper } from '@/helpers/log-helper'
 import { FileHelper } from '@/helpers/file-helper'
 import LocalLLMProvider from '@/core/llm-manager/llm-providers/local-llm-provider'
 import GroqLLMProvider from '@/core/llm-manager/llm-providers/groq-llm-provider'
 import OpenRouterLLMProvider from '@/core/llm-manager/llm-providers/openrouter-llm-provider'
+import ZAILLMProvider from '@/core/llm-manager/llm-providers/z-ai-llm-provider'
+import OpenAILLMProvider from '@/core/llm-manager/llm-providers/openai-llm-provider'
+import AnthropicLLMProvider from '@/core/llm-manager/llm-providers/anthropic-llm-provider'
+import MoonshotAILLMProvider from '@/core/llm-manager/llm-providers/moonshotai-llm-provider'
 import CerebrasLLMProvider from '@/core/llm-manager/llm-providers/cerebras-llm-provider'
 import HuggingFaceLLMProvider from '@/core/llm-manager/llm-providers/huggingface-llm-provider'
 import { BRAIN, LLM_MANAGER } from '@/core'
@@ -43,11 +48,16 @@ interface NormalizedCompletionResult {
   usedInputTokens: number
   usedOutputTokens: number
   toolCalls?: OpenAIToolCall[]
+  reasoning?: string
 }
 type Provider =
   | LocalLLMProvider
   | GroqLLMProvider
   | OpenRouterLLMProvider
+  | ZAILLMProvider
+  | OpenAILLMProvider
+  | AnthropicLLMProvider
+  | MoonshotAILLMProvider
   | CerebrasLLMProvider
   | HuggingFaceLLMProvider
   | undefined
@@ -56,6 +66,10 @@ const LLM_PROVIDERS_MAP = {
   [LLMProviders.Local]: 'local-llm-provider',
   [LLMProviders.Groq]: 'groq-llm-provider',
   [LLMProviders.OpenRouter]: 'openrouter-llm-provider',
+  [LLMProviders.ZAI]: 'z-ai-llm-provider',
+  [LLMProviders.OpenAI]: 'openai-llm-provider',
+  [LLMProviders.Anthropic]: 'anthropic-llm-provider',
+  [LLMProviders.MoonshotAI]: 'moonshotai-llm-provider',
   [LLMProviders.Cerebras]: 'cerebras-llm-provider',
   [LLMProviders.HuggingFace]: 'huggingface-llm-provider'
 }
@@ -63,6 +77,9 @@ const DEFAULT_MAX_EXECUTION_TIMOUT =
   LLM_PROVIDER === LLMProviders.Local ? 32_000 : 120_000
 const DEFAULT_MAX_EXECUTION_RETRIES = 2
 const TIMEOUT_RETRY_INCREMENT_MS = 30_000
+const RETRYABLE_ERROR_RETRY_DELAY_MS = 1_250
+const EMPTY_COMPLETION_RETRY_DELAY_MS = 750
+const MAX_LOG_SERIALIZED_LENGTH = 4_000
 const DEFAULT_TEMPERATURE = 0 // Disabled
 const DEFAULT_MAX_TOKENS = 8_192
 const DEFAULT_THOUGHT_TOKENS_BUDGET = Infinity
@@ -71,6 +88,7 @@ export default class LLMProvider {
   private static instance: LLMProvider
 
   private llmProvider: Provider = undefined
+  private lastProviderErrorMessage: string | null = null
 
   constructor() {
     if (!LLMProvider.instance) {
@@ -83,6 +101,24 @@ export default class LLMProvider {
 
   public get isLLMProviderReady(): boolean {
     return !!this.llmProvider
+  }
+
+  public get agentLLMName(): string {
+    if (!this.llmProvider) {
+      return 'unknown'
+    }
+
+    return this.llmProvider.modelName || 'unknown'
+  }
+
+  public get localLLMName(): string {
+    return LLM_NAME_WITH_VERSION
+  }
+
+  public consumeLastProviderErrorMessage(): string | null {
+    const message = this.lastProviderErrorMessage
+    this.lastProviderErrorMessage = null
+    return message
   }
 
   /**
@@ -146,77 +182,697 @@ export default class LLMProvider {
     }
   }
 
-  private normalizeCompletionResultForGroqProvider(
-    rawResult: AxiosResponse
-  ): NormalizedCompletionResult {
-    const parsedCompletionResult = JSON.parse(rawResult.data)
-    const message = parsedCompletionResult.choices[0].message
-
-    const result: NormalizedCompletionResult = {
-      rawResult: message.content || '',
-      usedInputTokens: parsedCompletionResult.usage.prompt_tokens,
-      usedOutputTokens: parsedCompletionResult.usage.completion_tokens
+  private parseProviderResponseData(rawData: unknown): Record<string, unknown> {
+    if (rawData && typeof rawData === 'object' && !Array.isArray(rawData)) {
+      return rawData as Record<string, unknown>
     }
 
-    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
-      result.toolCalls = message.tool_calls as OpenAIToolCall[]
+    if (typeof rawData === 'string') {
+      try {
+        const parsed = JSON.parse(rawData)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>
+        }
+      } catch {
+        // Fall through
+      }
+    }
+
+    return {}
+  }
+
+  private safeSerialize(value: unknown): string {
+    if (typeof value === 'string') {
+      return value
+    }
+
+    if (value === null || value === undefined) {
+      return ''
+    }
+
+    try {
+      return JSON.stringify(value)
+    } catch {
+      try {
+        return inspect(value, {
+          depth: 3,
+          breakLength: 120,
+          maxArrayLength: 30
+        })
+      } catch {
+        return String(value)
+      }
+    }
+  }
+
+  private truncateForLog(input: string): string {
+    if (input.length <= MAX_LOG_SERIALIZED_LENGTH) {
+      return input
+    }
+
+    return `${input.slice(0, MAX_LOG_SERIALIZED_LENGTH)}... [truncated]`
+  }
+
+  private isObjectLikeToolSchema(schema: Record<string, unknown>): boolean {
+    if (schema['type'] === 'object') {
+      return true
+    }
+
+    if (
+      schema['properties'] &&
+      typeof schema['properties'] === 'object' &&
+      !Array.isArray(schema['properties'])
+    ) {
+      return true
+    }
+
+    if (Array.isArray(schema['required'])) {
+      return true
+    }
+
+    const compositeKeywords: Array<'oneOf' | 'anyOf' | 'allOf'> = [
+      'oneOf',
+      'anyOf',
+      'allOf'
+    ]
+
+    for (const keyword of compositeKeywords) {
+      const variants = schema[keyword]
+      if (!Array.isArray(variants) || variants.length === 0) {
+        continue
+      }
+
+      const allVariantsObjectLike = variants.every((variant) => {
+        if (!variant || typeof variant !== 'object' || Array.isArray(variant)) {
+          return false
+        }
+
+        const variantSchema = variant as Record<string, unknown>
+        if (variantSchema['type'] === 'object') {
+          return true
+        }
+
+        return Boolean(
+          variantSchema['properties'] &&
+            typeof variantSchema['properties'] === 'object' &&
+            !Array.isArray(variantSchema['properties'])
+        )
+      })
+
+      if (allVariantsObjectLike) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  private normalizeToolSchemasForCompatibility(
+    tools: CompletionParams['tools']
+  ): CompletionParams['tools'] {
+    if (!Array.isArray(tools) || tools.length === 0) {
+      return tools
+    }
+
+    let hasAdjustedSchema = false
+
+    const normalizedTools = tools.map((tool) => {
+      if (!tool?.function?.parameters) {
+        return tool
+      }
+
+      const parameters = tool.function.parameters
+      const hasExplicitType = typeof parameters['type'] === 'string'
+
+      if (hasExplicitType || !this.isObjectLikeToolSchema(parameters)) {
+        return tool
+      }
+
+      hasAdjustedSchema = true
+
+      return {
+        ...tool,
+        function: {
+          ...tool.function,
+          parameters: {
+            type: 'object',
+            ...parameters
+          }
+        }
+      }
+    })
+
+    if (hasAdjustedSchema) {
+      LogHelper.title('LLM Provider')
+      LogHelper.debug(
+        'Normalized tool parameter schema for provider compatibility (added root type="object").'
+      )
+    }
+
+    return normalizedTools
+  }
+
+  private normalizeToolChoiceForCompatibility(
+    toolChoice: CompletionParams['toolChoice'],
+    tools: CompletionParams['tools']
+  ): CompletionParams['toolChoice'] {
+    if (toolChoice === undefined) {
+      return toolChoice
+    }
+
+    if (!Array.isArray(tools) || tools.length === 0) {
+      return toolChoice
+    }
+
+    // OpenRouter routes across many upstream providers. Forced/named tool_choice
+    // values are not consistently supported across routed endpoints and can fail
+    // with 404 "No endpoints found...". Omit tool_choice and keep the tool list
+    // constrained for maximum routing compatibility.
+    if (LLM_PROVIDER === LLMProviders.OpenRouter) {
+      if (toolChoice === 'required') {
+        LogHelper.title('LLM Provider')
+        LogHelper.debug(
+          'OpenRouter compatibility: omitted tool_choice="required" (tool list remains constrained).'
+        )
+        return undefined
+      }
+
+      if (typeof toolChoice !== 'string') {
+        LogHelper.title('LLM Provider')
+        LogHelper.debug(
+          'OpenRouter compatibility: omitted named tool_choice (tool list remains constrained).'
+        )
+        return undefined
+      }
+    }
+
+    // Z.AI currently supports tool_choice="auto". Omit unsupported values
+    // (named/required/none) to preserve compatibility.
+    if (LLM_PROVIDER === LLMProviders.ZAI) {
+      if (typeof toolChoice !== 'string') {
+        LogHelper.title('LLM Provider')
+        LogHelper.debug(
+          'Z.AI compatibility: omitted named tool_choice; using provider default.'
+        )
+        return undefined
+      }
+
+      if (toolChoice !== 'auto') {
+        LogHelper.title('LLM Provider')
+        LogHelper.debug(
+          `Z.AI compatibility: omitted unsupported tool_choice="${toolChoice}".`
+        )
+        return undefined
+      }
+    }
+
+    return toolChoice
+  }
+
+  private withOmittedToolChoice(
+    completionParams: CompletionParams
+  ): CompletionParams {
+    const nextParams: CompletionParams = {
+      ...completionParams
+    }
+
+    if ('toolChoice' in nextParams) {
+      delete nextParams.toolChoice
+    }
+
+    return nextParams
+  }
+
+  private isRetryablePromptError(error: unknown): boolean {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status
+      if (typeof status === 'number') {
+        return status >= 500 || status === 408 || status === 429
+      }
+
+      const code = (error.code || '').toUpperCase()
+      if (
+        code === 'ECONNABORTED' ||
+        code === 'ECONNRESET' ||
+        code === 'ETIMEDOUT' ||
+        code === 'EAI_AGAIN' ||
+        code === 'ENOTFOUND' ||
+        code === 'ERR_NETWORK'
+      ) {
+        return true
+      }
+
+      return !error.response
+    }
+
+    const errorObject =
+      error && typeof error === 'object'
+        ? (error as { message?: unknown, name?: unknown, status?: unknown })
+        : null
+    const status =
+      errorObject && typeof errorObject.status === 'number'
+        ? errorObject.status
+        : null
+    if (status !== null) {
+      return status >= 500 || status === 408 || status === 429
+    }
+
+    const name = String(errorObject?.name ?? '').toLowerCase()
+    const message = String(errorObject?.message ?? error ?? '').toLowerCase()
+    const combined = `${name} ${message}`
+
+    return (
+      combined.includes('connectionerror') ||
+      combined.includes('fetch failed') ||
+      combined.includes('network error') ||
+      combined.includes('socket hang up') ||
+      combined.includes('econnreset') ||
+      combined.includes('etimedout') ||
+      combined.includes('timed out') ||
+      combined.includes('timeout') ||
+      combined.includes('request timeout') ||
+      combined.includes('deadline exceeded') ||
+      combined.includes('eai_again') ||
+      combined.includes('enotfound') ||
+      combined.includes('provider overloaded')
+    )
+  }
+
+  private isTimeoutLikeError(error: unknown): boolean {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status
+      if (status === 408 || status === 504) {
+        return true
+      }
+
+      const code = (error.code || '').toUpperCase()
+      if (code === 'ECONNABORTED' || code === 'ETIMEDOUT') {
+        return true
+      }
+    }
+
+    const errorObject =
+      error && typeof error === 'object'
+        ? (error as { message?: unknown, name?: unknown, cause?: unknown })
+        : null
+
+    const combined = `${String(errorObject?.name ?? '')} ${String(
+      errorObject?.message ?? error ?? ''
+    )} ${String(errorObject?.cause ?? '')}`.toLowerCase()
+
+    return (
+      combined.includes('timeout (') ||
+      combined.includes('timed out') ||
+      combined.includes('timeout') ||
+      combined.includes('request timeout') ||
+      combined.includes('deadline exceeded')
+    )
+  }
+
+  private waitForRetry(delayMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, delayMs)
+    })
+  }
+
+  private async safeTalk(message: string): Promise<void> {
+    if (!message) {
+      return
+    }
+
+    try {
+      await BRAIN.talk(message, true)
+    } catch (error) {
+      LogHelper.title('LLM Provider')
+      LogHelper.warning(
+        `Failed to emit provider error message to user: ${String(error)}`
+      )
+    }
+  }
+
+  private isThinkingToolChoiceConflictError(error: unknown): boolean {
+    const message = String(error ?? '').toLowerCase()
+    return (
+      message.includes('tool_choice') &&
+      message.includes('thinking') &&
+      (message.includes('incompatible') || message.includes('not supported'))
+    )
+  }
+
+  private isUnsupportedToolChoiceError(error: unknown): boolean {
+    const message = String(error ?? '').toLowerCase()
+
+    if (!message.includes('tool_choice')) {
+      return false
+    }
+
+    return (
+      message.includes('no endpoints found') ||
+      message.includes('support the provided') ||
+      message.includes('unsupported value') ||
+      message.includes('invalid value') ||
+      message.includes('not supported')
+    )
+  }
+
+  private buildProviderErrorDetails(error: unknown): string {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status
+      const data = error.response?.data
+      return this.truncateForLog(
+        this.safeSerialize({
+          name: error.name,
+          message: error.message,
+          ...(typeof status === 'number' ? { status } : {}),
+          ...(data !== undefined ? { data } : {})
+        })
+      )
+    }
+
+    const errorObject =
+      error && typeof error === 'object'
+        ? (error as Record<string, unknown>)
+        : null
+
+    if (!errorObject) {
+      return this.truncateForLog(String(error))
+    }
+
+    const details: Record<string, unknown> = {
+      name:
+        typeof errorObject['name'] === 'string'
+          ? (errorObject['name'] as string)
+          : 'Error',
+      message:
+        typeof errorObject['message'] === 'string'
+          ? (errorObject['message'] as string)
+          : String(error)
+    }
+
+    if (typeof errorObject['status'] === 'number') {
+      details['status'] = errorObject['status'] as number
+    }
+    if (typeof errorObject['statusCode'] === 'number') {
+      details['statusCode'] = errorObject['statusCode'] as number
+    }
+    if (errorObject['body'] !== undefined) {
+      details['body'] = errorObject['body']
+    }
+    if (errorObject['error'] !== undefined) {
+      details['error'] = errorObject['error']
+    }
+    if (errorObject['cause'] !== undefined) {
+      details['cause'] = errorObject['cause']
+    }
+
+    return this.truncateForLog(this.safeSerialize(details))
+  }
+
+  private extractOpenAICompatibleReasoning(
+    message: Record<string, unknown>
+  ): string {
+    const chunks: string[] = []
+    const addChunk = (value: unknown): void => {
+      if (typeof value !== 'string') {
+        return
+      }
+
+      const trimmed = value.trim()
+      if (!trimmed) {
+        return
+      }
+
+      if (!chunks.includes(trimmed)) {
+        chunks.push(trimmed)
+      }
+    }
+
+    addChunk(message['reasoning'])
+    addChunk(message['reasoning_content'])
+
+    const reasoningDetails = Array.isArray(message['reasoningDetails'])
+      ? (message['reasoningDetails'] as unknown[])
+      : Array.isArray(message['reasoning_details'])
+        ? (message['reasoning_details'] as unknown[])
+        : []
+    for (const detail of reasoningDetails) {
+      if (!detail || typeof detail !== 'object') {
+        continue
+      }
+
+      const detailObject = detail as Record<string, unknown>
+      addChunk(detailObject['text'])
+      addChunk(detailObject['reasoning'])
+    }
+
+    const content = Array.isArray(message['content'])
+      ? (message['content'] as unknown[])
+      : []
+    for (const block of content) {
+      if (!block || typeof block !== 'object') {
+        continue
+      }
+
+      const blockObject = block as Record<string, unknown>
+      const type = typeof blockObject['type'] === 'string'
+        ? (blockObject['type'] as string)
+        : ''
+      if (type.includes('reasoning')) {
+        addChunk(blockObject['text'])
+        addChunk(blockObject['reasoning'])
+      }
+    }
+
+    return chunks.join('\n')
+  }
+
+  private normalizeCompletionResultForOpenAICompatibleProvider(
+    rawResult: AxiosResponse
+  ): NormalizedCompletionResult {
+    const parsedCompletionResult = this.parseProviderResponseData(rawResult.data)
+    const choices = Array.isArray(parsedCompletionResult['choices'])
+      ? (parsedCompletionResult['choices'] as Record<string, unknown>[])
+      : []
+    const firstChoice = choices[0]
+    const message =
+      firstChoice && typeof firstChoice['message'] === 'object'
+        ? (firstChoice['message'] as Record<string, unknown>)
+        : {}
+    const usage =
+      parsedCompletionResult['usage'] &&
+      typeof parsedCompletionResult['usage'] === 'object'
+        ? (parsedCompletionResult['usage'] as Record<string, unknown>)
+        : {}
+
+    const contentField = message['content']
+    const normalizedContent =
+      typeof contentField === 'string'
+        ? contentField
+        : Array.isArray(contentField)
+          ? (contentField as Record<string, unknown>[])
+              .map((part) => {
+                if (typeof part['text'] === 'string') {
+                  return part['text'] as string
+                }
+                return ''
+              })
+              .join('')
+          : ''
+
+    const result: NormalizedCompletionResult = {
+      rawResult: normalizedContent,
+      usedInputTokens:
+        typeof usage['prompt_tokens'] === 'number'
+          ? (usage['prompt_tokens'] as number)
+          : typeof usage['promptTokens'] === 'number'
+            ? (usage['promptTokens'] as number)
+          : 0,
+      usedOutputTokens:
+        typeof usage['completion_tokens'] === 'number'
+          ? (usage['completion_tokens'] as number)
+          : typeof usage['completionTokens'] === 'number'
+            ? (usage['completionTokens'] as number)
+          : 0
+    }
+
+    const reasoning = this.extractOpenAICompatibleReasoning(message)
+    if (reasoning) {
+      result.reasoning = reasoning
+    }
+
+    const toolCallsRaw = Array.isArray(message['tool_calls'])
+      ? (message['tool_calls'] as unknown[])
+      : Array.isArray(message['toolCalls'])
+        ? (message['toolCalls'] as unknown[])
+        : []
+    if (toolCallsRaw.length > 0) {
+      const normalizedToolCalls: OpenAIToolCall[] = []
+      for (const [index, rawToolCall] of toolCallsRaw.entries()) {
+        if (!rawToolCall || typeof rawToolCall !== 'object') {
+          continue
+        }
+
+        const toolCallObject = rawToolCall as Record<string, unknown>
+        const fn =
+          toolCallObject['function'] &&
+          typeof toolCallObject['function'] === 'object'
+            ? (toolCallObject['function'] as Record<string, unknown>)
+            : {}
+        const fnName = typeof fn['name'] === 'string' ? (fn['name'] as string) : ''
+        const fnArguments =
+          typeof fn['arguments'] === 'string'
+            ? (fn['arguments'] as string)
+            : fn['arguments'] && typeof fn['arguments'] === 'object'
+              ? JSON.stringify(fn['arguments'])
+              : ''
+
+        normalizedToolCalls.push({
+          id:
+            typeof toolCallObject['id'] === 'string'
+              ? (toolCallObject['id'] as string)
+              : `tool_call_${index}`,
+          type: 'function',
+          function: {
+            name: fnName,
+            arguments: fnArguments
+          }
+        })
+      }
+
+      if (normalizedToolCalls.length > 0) {
+        result.toolCalls = normalizedToolCalls
+      }
     }
 
     return result
   }
 
-  private normalizeCompletionResultForOpenRouterProvider(
-    rawResult: AxiosResponse
-  ): NormalizedCompletionResult {
-    const parsedCompletionResult = rawResult.data
-    const message = parsedCompletionResult.choices[0].message
-
-    const result: NormalizedCompletionResult = {
-      rawResult: message.content || '',
-      usedInputTokens: parsedCompletionResult.usage.prompt_tokens,
-      usedOutputTokens: parsedCompletionResult.usage.completion_tokens
+  private toOpenAIResponsesToolCall(
+    item: Record<string, unknown>,
+    fallbackIndex: number
+  ): OpenAIToolCall | null {
+    const name = typeof item['name'] === 'string' ? (item['name'] as string) : ''
+    if (!name) {
+      return null
     }
 
-    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
-      result.toolCalls = message.tool_calls as OpenAIToolCall[]
-    }
+    const rawArguments = item['arguments']
+    const argumentsString =
+      typeof rawArguments === 'string'
+        ? rawArguments
+        : rawArguments && typeof rawArguments === 'object'
+          ? JSON.stringify(rawArguments)
+          : ''
 
-    return result
+    const id =
+      typeof item['call_id'] === 'string'
+        ? (item['call_id'] as string)
+        : typeof item['id'] === 'string'
+          ? (item['id'] as string)
+          : `tool_call_${fallbackIndex}`
+
+    return {
+      id,
+      type: 'function',
+      function: {
+        name,
+        arguments: argumentsString
+      }
+    }
   }
 
-  private normalizeCompletionResultForCerebrasProvider(
-    rawResult: AxiosResponse
-  ): NormalizedCompletionResult {
-    const parsedCompletionResult = rawResult.data
-    const message = parsedCompletionResult.choices[0].message
-
-    const result: NormalizedCompletionResult = {
-      rawResult: message.content || '',
-      usedInputTokens: parsedCompletionResult.usage.prompt_tokens,
-      usedOutputTokens: parsedCompletionResult.usage.completion_tokens
+  private extractOpenAIResponsesText(
+    parsedCompletionResult: Record<string, unknown>
+  ): string {
+    if (typeof parsedCompletionResult['output_text'] === 'string') {
+      return parsedCompletionResult['output_text'] as string
     }
 
-    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
-      result.toolCalls = message.tool_calls as OpenAIToolCall[]
+    const output = Array.isArray(parsedCompletionResult['output'])
+      ? (parsedCompletionResult['output'] as Record<string, unknown>[])
+      : []
+
+    const textParts: string[] = []
+
+    for (const item of output) {
+      const itemType =
+        typeof item['type'] === 'string' ? (item['type'] as string) : ''
+
+      if (itemType !== 'message') {
+        continue
+      }
+
+      const content = Array.isArray(item['content'])
+        ? (item['content'] as Record<string, unknown>[])
+        : []
+
+      for (const contentBlock of content) {
+        const blockType =
+          typeof contentBlock['type'] === 'string'
+            ? (contentBlock['type'] as string)
+            : ''
+        if (blockType !== 'output_text' && blockType !== 'text') {
+          continue
+        }
+
+        if (typeof contentBlock['text'] === 'string') {
+          textParts.push(contentBlock['text'] as string)
+        }
+      }
     }
 
-    return result
+    return textParts.join('')
   }
 
-  private normalizeCompletionResultForHuggingFaceProvider(
-    rawResult: AxiosResponse
-  ): NormalizedCompletionResult {
-    const parsedCompletionResult = rawResult.data
-    const message = parsedCompletionResult.choices[0].message
+  private extractOpenAIResponsesToolCalls(
+    parsedCompletionResult: Record<string, unknown>
+  ): OpenAIToolCall[] {
+    const output = Array.isArray(parsedCompletionResult['output'])
+      ? (parsedCompletionResult['output'] as Record<string, unknown>[])
+      : []
 
-    const result: NormalizedCompletionResult = {
-      rawResult: message.content || '',
-      usedInputTokens: parsedCompletionResult.usage.prompt_tokens,
-      usedOutputTokens: parsedCompletionResult.usage.completion_tokens
+    const toolCalls: OpenAIToolCall[] = []
+    for (const [index, item] of output.entries()) {
+      const itemType =
+        typeof item['type'] === 'string' ? (item['type'] as string) : ''
+      if (itemType !== 'function_call') {
+        continue
+      }
+
+      const toolCall = this.toOpenAIResponsesToolCall(item, index)
+      if (toolCall) {
+        toolCalls.push(toolCall)
+      }
     }
 
-    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
-      result.toolCalls = message.tool_calls as OpenAIToolCall[]
+    return toolCalls
+  }
+
+  private normalizeCompletionResultForOpenAIResponsesProvider(
+    rawResult: AxiosResponse
+  ): NormalizedCompletionResult {
+    const parsedCompletionResult = this.parseProviderResponseData(rawResult.data)
+    const usage =
+      parsedCompletionResult['usage'] &&
+      typeof parsedCompletionResult['usage'] === 'object'
+        ? (parsedCompletionResult['usage'] as Record<string, unknown>)
+        : {}
+
+    const toolCalls = this.extractOpenAIResponsesToolCalls(parsedCompletionResult)
+    const result: NormalizedCompletionResult = {
+      rawResult: this.extractOpenAIResponsesText(parsedCompletionResult),
+      usedInputTokens:
+        typeof usage['input_tokens'] === 'number'
+          ? (usage['input_tokens'] as number)
+          : 0,
+      usedOutputTokens:
+        typeof usage['output_tokens'] === 'number'
+          ? (usage['output_tokens'] as number)
+          : 0
+    }
+
+    if (toolCalls.length > 0) {
+      result.toolCalls = toolCalls
     }
 
     return result
@@ -227,7 +883,6 @@ export default class LLMProvider {
       value instanceof Readable ||
       (!!value &&
         typeof value === 'object' &&
-        typeof (value as { on?: unknown }).on === 'function' &&
         typeof (value as { [Symbol.asyncIterator]?: unknown })[
           Symbol.asyncIterator
         ] === 'function')
@@ -253,43 +908,88 @@ export default class LLMProvider {
     let buffer = ''
 
     const toolCallsByIndex: Record<number, OpenAIToolCall> = {}
+    const toolCallsById: Record<string, OpenAIToolCall> = {}
+    const toolCallOrder: string[] = []
 
-    const applyStreamingChunk = (payloadLine: string): void => {
-      const trimmedLine = payloadLine.trim()
-      if (!trimmedLine || !trimmedLine.startsWith('data:')) {
-        return
+    const updateTokenUsageFromObject = (
+      usage: Record<string, unknown>,
+      type: 'chat' | 'responses'
+    ): void => {
+      const inputTokens =
+        type === 'chat'
+          ? (usage['prompt_tokens'] ?? usage['promptTokens'])
+          : usage['input_tokens']
+      const outputTokens =
+        type === 'chat'
+          ? (usage['completion_tokens'] ?? usage['completionTokens'])
+          : usage['output_tokens']
+
+      if (typeof inputTokens === 'number' && Number.isFinite(inputTokens)) {
+        usedInputTokens = inputTokens
+      }
+      if (typeof outputTokens === 'number' && Number.isFinite(outputTokens)) {
+        usedOutputTokens = outputTokens
+      }
+    }
+
+    const getOrCreateResponseToolCall = (
+      toolCallId: string,
+      fallbackIndex: number
+    ): OpenAIToolCall => {
+      if (!toolCallsById[toolCallId]) {
+        const id = toolCallId || `tool_call_${fallbackIndex}`
+        toolCallsById[toolCallId] = {
+          id,
+          type: 'function',
+          function: {
+            name: '',
+            arguments: ''
+          }
+        }
+        toolCallOrder.push(toolCallId)
       }
 
-      const dataChunk = trimmedLine.slice(5).trim()
-      if (!dataChunk || dataChunk === '[DONE]') {
-        return
+      return toolCallsById[toolCallId]!
+    }
+
+    const parseSSEEventBlock = (
+      eventBlock: string
+    ): { eventName: string, data: string } | null => {
+      const lines = eventBlock.split('\n')
+      let eventName = ''
+      const dataLines: string[] = []
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim()
+        if (!line || line.startsWith(':')) {
+          continue
+        }
+
+        if (line.startsWith('event:')) {
+          eventName = line.slice(6).trim()
+          continue
+        }
+        if (line.startsWith('data:')) {
+          dataLines.push(line.slice(5).trim())
+        }
       }
 
-      let parsedChunk: Record<string, unknown>
-      try {
-        parsedChunk = JSON.parse(dataChunk) as Record<string, unknown>
-      } catch {
-        return
+      if (dataLines.length === 0) {
+        return null
       }
 
+      return {
+        eventName,
+        data: dataLines.join('\n')
+      }
+    }
+
+    const applyOpenAICompatibleStreamingChunk = (
+      parsedChunk: Record<string, unknown>
+    ): void => {
       const usage = parsedChunk['usage']
       if (usage && typeof usage === 'object') {
-        const promptTokens = (usage as Record<string, unknown>)[
-          'prompt_tokens'
-        ]
-        const completionTokens = (usage as Record<string, unknown>)[
-          'completion_tokens'
-        ]
-
-        if (typeof promptTokens === 'number' && Number.isFinite(promptTokens)) {
-          usedInputTokens = promptTokens
-        }
-        if (
-          typeof completionTokens === 'number' &&
-          Number.isFinite(completionTokens)
-        ) {
-          usedOutputTokens = completionTokens
-        }
+        updateTokenUsageFromObject(usage as Record<string, unknown>, 'chat')
       }
 
       const choices = parsedChunk['choices']
@@ -314,7 +1014,11 @@ export default class LLMProvider {
         completionParams.onToken?.(contentDelta)
       }
 
-      const toolCalls = deltaObject['tool_calls']
+      const toolCalls = Array.isArray(deltaObject['tool_calls'])
+        ? (deltaObject['tool_calls'] as unknown[])
+        : Array.isArray(deltaObject['toolCalls'])
+          ? (deltaObject['toolCalls'] as unknown[])
+          : null
       if (!Array.isArray(toolCalls)) {
         return
       }
@@ -370,7 +1074,143 @@ export default class LLMProvider {
       }
     }
 
-    for await (const chunk of responseStream) {
+    const applyOpenAIResponsesStreamingChunk = (
+      parsedChunk: Record<string, unknown>,
+      eventName: string
+    ): void => {
+      const type =
+        typeof parsedChunk['type'] === 'string'
+          ? (parsedChunk['type'] as string)
+          : eventName
+
+      if (type === 'response.output_text.delta') {
+        const delta = parsedChunk['delta']
+        if (typeof delta === 'string' && delta.length > 0) {
+          textOutput += delta
+          completionParams.onToken?.(delta)
+        }
+      }
+
+      if (type === 'response.function_call_arguments.delta') {
+        const itemId =
+          typeof parsedChunk['item_id'] === 'string'
+            ? (parsedChunk['item_id'] as string)
+            : typeof parsedChunk['call_id'] === 'string'
+              ? (parsedChunk['call_id'] as string)
+              : ''
+        const delta =
+          typeof parsedChunk['delta'] === 'string'
+            ? (parsedChunk['delta'] as string)
+            : ''
+        if (itemId) {
+          const toolCall = getOrCreateResponseToolCall(itemId, toolCallOrder.length)
+          if (delta) {
+            toolCall.function.arguments += delta
+          }
+          if (
+            !toolCall.function.name &&
+            typeof parsedChunk['name'] === 'string'
+          ) {
+            toolCall.function.name = parsedChunk['name'] as string
+          }
+        }
+      }
+
+      if (
+        type === 'response.function_call_arguments.done' ||
+        type === 'response.output_item.added' ||
+        type === 'response.output_item.done'
+      ) {
+        const item =
+          parsedChunk['item'] && typeof parsedChunk['item'] === 'object'
+            ? (parsedChunk['item'] as Record<string, unknown>)
+            : {}
+        const itemType =
+          typeof item['type'] === 'string' ? (item['type'] as string) : ''
+
+        if (itemType === 'function_call') {
+          const itemId =
+            typeof item['id'] === 'string'
+              ? (item['id'] as string)
+              : typeof item['call_id'] === 'string'
+                ? (item['call_id'] as string)
+                : ''
+
+          if (itemId) {
+            const toolCall = getOrCreateResponseToolCall(itemId, toolCallOrder.length)
+            if (typeof item['call_id'] === 'string' && item['call_id']) {
+              toolCall.id = item['call_id'] as string
+            }
+            if (typeof item['name'] === 'string' && item['name']) {
+              toolCall.function.name = item['name'] as string
+            }
+            const args = item['arguments']
+            if (typeof args === 'string' && args.length > 0) {
+              toolCall.function.arguments = args
+            } else if (args && typeof args === 'object') {
+              toolCall.function.arguments = JSON.stringify(args)
+            }
+          }
+        } else if (itemType === 'message' && textOutput.length === 0) {
+          const messageText = this.extractOpenAIResponsesText({
+            output: [item]
+          })
+          if (messageText) {
+            textOutput += messageText
+          }
+        }
+      }
+
+      const usageCandidate =
+        parsedChunk['response'] && typeof parsedChunk['response'] === 'object'
+          ? (
+              (parsedChunk['response'] as Record<string, unknown>)[
+                'usage'
+              ] as Record<string, unknown> | undefined
+            )
+          : undefined
+      if (usageCandidate && typeof usageCandidate === 'object') {
+        updateTokenUsageFromObject(usageCandidate, 'responses')
+      } else if (parsedChunk['usage'] && typeof parsedChunk['usage'] === 'object') {
+        updateTokenUsageFromObject(
+          parsedChunk['usage'] as Record<string, unknown>,
+          'responses'
+        )
+      }
+
+      if (type === 'response.completed') {
+        const response =
+          parsedChunk['response'] && typeof parsedChunk['response'] === 'object'
+            ? (parsedChunk['response'] as Record<string, unknown>)
+            : {}
+
+        if (textOutput.length === 0) {
+          textOutput = this.extractOpenAIResponsesText(response)
+        }
+
+        if (toolCallOrder.length === 0) {
+          for (const [index, toolCall] of this
+            .extractOpenAIResponsesToolCalls(response)
+            .entries()) {
+            const mapKey = `completed_${index}`
+            toolCallsById[mapKey] = toolCall
+            toolCallOrder.push(mapKey)
+          }
+        }
+      }
+    }
+
+    for await (const chunk of responseStream as AsyncIterable<unknown>) {
+      if (chunk && typeof chunk === 'object' && !Buffer.isBuffer(chunk)) {
+        const parsedChunk = chunk as Record<string, unknown>
+        if (LLM_PROVIDER === LLMProviders.OpenAI) {
+          applyOpenAIResponsesStreamingChunk(parsedChunk, '')
+        } else {
+          applyOpenAICompatibleStreamingChunk(parsedChunk)
+        }
+        continue
+      }
+
       const chunkString =
         typeof chunk === 'string' ? chunk : (chunk as Buffer).toString('utf8')
       buffer += chunkString.replace(/\r\n/g, '\n')
@@ -380,9 +1220,24 @@ export default class LLMProvider {
         const eventBlock = buffer.slice(0, separatorIndex)
         buffer = buffer.slice(separatorIndex + 2)
 
-        const blockLines = eventBlock.split('\n')
-        for (const line of blockLines) {
-          applyStreamingChunk(line)
+        const parsedEvent = parseSSEEventBlock(eventBlock)
+        if (!parsedEvent || !parsedEvent.data || parsedEvent.data === '[DONE]') {
+          separatorIndex = buffer.indexOf('\n\n')
+          continue
+        }
+
+        let parsedChunk: Record<string, unknown>
+        try {
+          parsedChunk = JSON.parse(parsedEvent.data) as Record<string, unknown>
+        } catch {
+          separatorIndex = buffer.indexOf('\n\n')
+          continue
+        }
+
+        if (LLM_PROVIDER === LLMProviders.OpenAI) {
+          applyOpenAIResponsesStreamingChunk(parsedChunk, parsedEvent.eventName)
+        } else {
+          applyOpenAICompatibleStreamingChunk(parsedChunk)
         }
 
         separatorIndex = buffer.indexOf('\n\n')
@@ -390,16 +1245,33 @@ export default class LLMProvider {
     }
 
     if (buffer.trim()) {
-      const blockLines = buffer.split('\n')
-      for (const line of blockLines) {
-        applyStreamingChunk(line)
+      const parsedEvent = parseSSEEventBlock(buffer)
+      if (parsedEvent && parsedEvent.data && parsedEvent.data !== '[DONE]') {
+        try {
+          const parsedChunk = JSON.parse(parsedEvent.data) as Record<
+            string,
+            unknown
+          >
+          if (LLM_PROVIDER === LLMProviders.OpenAI) {
+            applyOpenAIResponsesStreamingChunk(parsedChunk, parsedEvent.eventName)
+          } else {
+            applyOpenAICompatibleStreamingChunk(parsedChunk)
+          }
+        } catch {
+          // Ignore malformed trailing chunk
+        }
       }
     }
 
-    const toolCalls = Object.keys(toolCallsByIndex)
-      .map((index) => Number(index))
-      .sort((a, b) => a - b)
-      .map((index) => toolCallsByIndex[index]!)
+    const toolCalls =
+      LLM_PROVIDER === LLMProviders.OpenAI
+        ? toolCallOrder
+            .map((key) => toolCallsById[key]!)
+            .filter((toolCall) => toolCall.function.name.length > 0)
+        : Object.keys(toolCallsByIndex)
+            .map((index) => Number(index))
+            .sort((a, b) => a - b)
+            .map((index) => toolCallsByIndex[index]!)
 
     return {
       rawResult: textOutput,
@@ -432,6 +1304,8 @@ export default class LLMProvider {
     promptOrChatHistory: PromptOrChatHistory,
     completionParams: CompletionParams
   ): Promise<CompletionResult | null> {
+    this.lastProviderErrorMessage = null
+
     const measureExecutionTimeLabel = `Inference time for "${completionParams.dutyType}" duty`
 
     LogHelper.title('LLM Provider')
@@ -463,14 +1337,57 @@ export default class LLMProvider {
     completionParams.onToken = completionParams.onToken || ((): void => {})
     completionParams.shouldStream = completionParams.shouldStream ?? false
 
+    const normalizedTools = this.normalizeToolSchemasForCompatibility(
+      completionParams.tools
+    )
+    if (normalizedTools) {
+      completionParams.tools = normalizedTools
+    } else if ('tools' in completionParams) {
+      delete completionParams.tools
+    }
+
+    const normalizedToolChoice = this.normalizeToolChoiceForCompatibility(
+      completionParams.toolChoice,
+      completionParams.tools
+    )
+    if (normalizedToolChoice !== undefined) {
+      completionParams.toolChoice = normalizedToolChoice
+    } else if ('toolChoice' in completionParams) {
+      delete completionParams.toolChoice
+    }
+
     const isJSONMode = completionParams.data !== null
     const shouldStreamOutput =
       completionParams.shouldStream === true && !isJSONMode
 
     const abortController = new AbortController()
+    let timeoutHandle: NodeJS.Timeout | null = null
+    let hasStartedStreaming = false
+    const userOnToken = completionParams.onToken
+
+    type OnTokenChunk = Parameters<
+      NonNullable<CompletionParams['onToken']>
+    >[0]
+    const onTokenWithStreamStart = (chunk: OnTokenChunk): void => {
+      if (!hasStartedStreaming) {
+        hasStartedStreaming = true
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle)
+          timeoutHandle = null
+          LogHelper.title('LLM Provider')
+          LogHelper.debug(
+            'Streaming started; inference timeout watchdog disabled for this completion'
+          )
+        }
+      }
+
+      userOnToken?.(chunk)
+    }
+
     const completionParamsWithAbort = {
       ...completionParams,
       shouldStream: shouldStreamOutput,
+      onToken: onTokenWithStreamStart,
       signal: abortController.signal
     }
 
@@ -478,10 +1395,16 @@ export default class LLMProvider {
       promptOrChatHistory,
       completionParamsWithAbort
     )
+    // Ensure late rejections after timeout/abort are consumed to avoid
+    // unhandled promise rejection noise when we already moved to a retry.
+    void rawResultPromise.catch(() => undefined)
 
-    let timeoutHandle: NodeJS.Timeout | null = null
     const timeoutPromise = new Promise((_, reject) => {
       timeoutHandle = setTimeout(() => {
+        if (hasStartedStreaming) {
+          return
+        }
+
         abortController.abort()
         reject(
           new Error(
@@ -508,16 +1431,75 @@ export default class LLMProvider {
       LogHelper.error(`Error to complete prompt: ${e}`)
       LogHelper.timeEnd(measureExecutionTimeLabel)
 
-      const isTimeoutError =
-        (e instanceof Error && e.message.startsWith('Timeout (')) ||
-        (axios.isAxiosError(e) && e.code === 'ECONNABORTED')
+      const isTimeoutError = this.isTimeoutLikeError(e)
+      const isRetryableNonTimeoutError = this.isRetryablePromptError(e)
+      const isThinkingToolChoiceConflict =
+        this.isThinkingToolChoiceConflictError(e)
+      const isUnsupportedToolChoice = this.isUnsupportedToolChoiceError(e)
       const remainingRetries = completionParams.maxRetries ?? 0
 
-      if (isTimeoutError && remainingRetries > 0) {
-        const nextTimeout = (completionParams.timeout ?? 0) + TIMEOUT_RETRY_INCREMENT_MS
+      const hasForcedToolChoice =
+        Array.isArray(completionParams.tools) &&
+        completionParams.tools.length > 0 &&
+        completionParams.toolChoice !== undefined &&
+        completionParams.toolChoice !== 'auto'
+
+      if (
+        isThinkingToolChoiceConflict &&
+        hasForcedToolChoice &&
+        !completionParams.relaxForcedToolChoice &&
+        remainingRetries > 0
+      ) {
         LogHelper.title('LLM Provider')
         LogHelper.warning(
-          `Prompt timed out. Retrying with timeout=${nextTimeout}ms (${remainingRetries} retry left)`
+          'Provider rejected forced tool_choice with thinking enabled; retrying without tool_choice'
+        )
+
+        const retryParams = this.withOmittedToolChoice(completionParams)
+        return this.prompt(promptOrChatHistory, {
+          ...retryParams,
+          relaxForcedToolChoice: true,
+          maxRetries: remainingRetries - 1
+        })
+      }
+
+      if (
+        isUnsupportedToolChoice &&
+        hasForcedToolChoice &&
+        !completionParams.relaxForcedToolChoice &&
+        remainingRetries > 0
+      ) {
+        LogHelper.title('LLM Provider')
+        LogHelper.warning(
+          'Provider rejected forced tool_choice; retrying without tool_choice for compatibility'
+        )
+
+        const retryParams = this.withOmittedToolChoice(completionParams)
+        return this.prompt(promptOrChatHistory, {
+          ...retryParams,
+          relaxForcedToolChoice: true,
+          maxRetries: remainingRetries - 1
+        })
+      }
+
+      if ((isTimeoutError || isRetryableNonTimeoutError) && remainingRetries > 0) {
+        if (!abortController.signal.aborted) {
+          abortController.abort()
+        }
+
+        const nextTimeout = isTimeoutError
+          ? (completionParams.timeout ?? 0) + TIMEOUT_RETRY_INCREMENT_MS
+          : completionParams.timeout
+
+        if (!isTimeoutError) {
+          await this.waitForRetry(RETRYABLE_ERROR_RETRY_DELAY_MS)
+        }
+
+        LogHelper.title('LLM Provider')
+        LogHelper.warning(
+          isTimeoutError
+            ? `Prompt timed out. Previous inference canceled; retrying with timeout=${nextTimeout}ms (${remainingRetries} retry left)`
+            : `Prompt failed with a retryable provider/network error; retrying (${remainingRetries} retry left)`
         )
 
         return this.prompt(promptOrChatHistory, {
@@ -527,22 +1509,45 @@ export default class LLMProvider {
         })
       }
 
-      if (axios.isAxiosError(e)) {
-        const apiError = e.response?.data
-        let apiErrorDetails = ''
+      if (
+        axios.isAxiosError(e) ||
+        (e && typeof e === 'object' && ('status' in e || 'statusCode' in e))
+      ) {
+        const apiErrorDetails = this.buildProviderErrorDetails(e)
+        const statusLike =
+          e && typeof e === 'object' && 'statusCode' in e
+            ? (e as { statusCode?: unknown }).statusCode
+            : undefined
+        const brainMessage = BRAIN.wernicke('llm_provider_http_error', '', {
+          '{{ provider }}': LLM_PROVIDER,
+          '{{ error }}':
+            statusLike !== undefined
+              ? `${String(e)} (statusCode=${String(statusLike)})`
+              : String(e),
+          '{{ api_error }}': apiErrorDetails ? `\n${apiErrorDetails}` : ''
+        })
 
-        if (apiError) {
-          apiErrorDetails =
-            typeof apiError === 'string' ? apiError : JSON.stringify(apiError)
-        }
-
+        await this.safeTalk(brainMessage)
+        this.lastProviderErrorMessage = brainMessage
+      } else if (isRetryableNonTimeoutError) {
+        const apiErrorDetails = this.buildProviderErrorDetails(e)
         const brainMessage = BRAIN.wernicke('llm_provider_http_error', '', {
           '{{ provider }}': LLM_PROVIDER,
           '{{ error }}': String(e),
           '{{ api_error }}': apiErrorDetails ? `\n${apiErrorDetails}` : ''
         })
 
-        await BRAIN.talk(brainMessage, true)
+        await this.safeTalk(brainMessage)
+        this.lastProviderErrorMessage = brainMessage
+      }
+
+      if (!this.lastProviderErrorMessage) {
+        const apiErrorDetails = this.buildProviderErrorDetails(e)
+        this.lastProviderErrorMessage = BRAIN.wernicke('llm_provider_http_error', '', {
+          '{{ provider }}': LLM_PROVIDER,
+          '{{ error }}': String(e),
+          '{{ api_error }}': apiErrorDetails ? `\n${apiErrorDetails}` : ''
+        })
       }
 
       // throw new Error('Prompt failed after all retries')
@@ -572,14 +1577,30 @@ export default class LLMProvider {
     let usedInputTokens = 0
     let usedOutputTokens = 0
     let toolCalls: OpenAIToolCall[] | undefined
+    let reasoning: string | undefined
 
     /**
      * Normalize the completion result according to the provider
      */
     const isRemoteProvider = LLM_PROVIDER !== LLMProviders.Local
-    const shouldUseRemoteStreaming =
+    const remoteRawData =
       isRemoteProvider &&
-      shouldStreamOutput
+      rawResult &&
+      typeof rawResult === 'object' &&
+      'data' in (rawResult as Record<string, unknown>)
+        ? (rawResult as AxiosResponse).data
+        : null
+    const providerReturnedStream =
+      isRemoteProvider && this.isReadableStream(remoteRawData)
+    const shouldUseRemoteStreaming =
+      isRemoteProvider && shouldStreamOutput && providerReturnedStream
+
+    if (isRemoteProvider && shouldStreamOutput && !providerReturnedStream) {
+      LogHelper.title('LLM Provider')
+      LogHelper.debug(
+        'Streaming requested but provider returned non-stream payload; falling back to non-stream normalization'
+      )
+    }
 
     if (shouldUseRemoteStreaming) {
       const normalized = await this.normalizeStreamingCompletionResult(
@@ -591,6 +1612,7 @@ export default class LLMProvider {
       usedInputTokens = normalized.usedInputTokens
       usedOutputTokens = normalized.usedOutputTokens
       toolCalls = normalized.toolCalls
+      reasoning = normalized.reasoning
     } else if (LLM_PROVIDER === LLMProviders.Local) {
       if (completionParams.session) {
         const {
@@ -606,8 +1628,18 @@ export default class LLMProvider {
         usedInputTokens = inputTokens
         usedOutputTokens = outputTokens
       }
-    } else if (LLM_PROVIDER === LLMProviders.Groq) {
-      const normalized = this.normalizeCompletionResultForGroqProvider(
+    } else if (
+      [
+        LLMProviders.Groq,
+        LLMProviders.OpenRouter,
+        LLMProviders.ZAI,
+        LLMProviders.Anthropic,
+        LLMProviders.MoonshotAI,
+        LLMProviders.Cerebras,
+        LLMProviders.HuggingFace
+      ].includes(LLM_PROVIDER as LLMProviders)
+    ) {
+      const normalized = this.normalizeCompletionResultForOpenAICompatibleProvider(
         rawResult as AxiosResponse
       )
 
@@ -615,26 +1647,9 @@ export default class LLMProvider {
       usedInputTokens = normalized.usedInputTokens
       usedOutputTokens = normalized.usedOutputTokens
       toolCalls = normalized.toolCalls
-    } else if (LLM_PROVIDER === LLMProviders.OpenRouter) {
-      const normalized = this.normalizeCompletionResultForOpenRouterProvider(
-        rawResult as AxiosResponse
-      )
-
-      rawResult = normalized.rawResult
-      usedInputTokens = normalized.usedInputTokens
-      usedOutputTokens = normalized.usedOutputTokens
-      toolCalls = normalized.toolCalls
-    } else if (LLM_PROVIDER === LLMProviders.Cerebras) {
-      const normalized = this.normalizeCompletionResultForCerebrasProvider(
-        rawResult as AxiosResponse
-      )
-
-      rawResult = normalized.rawResult
-      usedInputTokens = normalized.usedInputTokens
-      usedOutputTokens = normalized.usedOutputTokens
-      toolCalls = normalized.toolCalls
-    } else if (LLM_PROVIDER === LLMProviders.HuggingFace) {
-      const normalized = this.normalizeCompletionResultForHuggingFaceProvider(
+      reasoning = normalized.reasoning
+    } else if (LLM_PROVIDER === LLMProviders.OpenAI) {
+      const normalized = this.normalizeCompletionResultForOpenAIResponsesProvider(
         rawResult as AxiosResponse
       )
 
@@ -653,11 +1668,53 @@ export default class LLMProvider {
       rawResultString = this.cleanUpResult(rawResultString)
     }
 
-    if (isJSONMode) {
-      // If a closing bracket is missing, add it
-      if (rawResultString[rawResultString.length - 1] !== '}') {
-        rawResultString += '}'
+    if (reasoning && reasoning.trim()) {
+      LogHelper.title('LLM Provider')
+      LogHelper.debug(`Reasoning:\n${this.truncateForLog(reasoning)}`)
+    }
+
+    // Guard against silent empty provider responses which otherwise trigger
+    // an unnecessary planning fallback and double latency.
+    const isSuspiciousEmptyRemoteResult =
+      isRemoteProvider &&
+      !isJSONMode &&
+      (!rawResultString || rawResultString.trim() === '') &&
+      !toolCalls &&
+      usedInputTokens === 0 &&
+      usedOutputTokens === 0
+
+    if (isSuspiciousEmptyRemoteResult) {
+      const remainingRetries = completionParams.maxRetries ?? 0
+      const providerPayloadSnippet =
+        remoteRawData !== null
+          ? this.truncateForLog(this.safeSerialize(remoteRawData))
+          : ''
+
+      LogHelper.title('LLM Provider')
+      LogHelper.warning(
+        `Received empty completion payload (no text/tool_calls/tokens) from "${LLM_PROVIDER}".${providerPayloadSnippet ? ` Payload: ${providerPayloadSnippet}` : ''}`
+      )
+
+      if (remainingRetries > 0) {
+        await this.waitForRetry(EMPTY_COMPLETION_RETRY_DELAY_MS)
+        return this.prompt(promptOrChatHistory, {
+          ...completionParams,
+          maxRetries: remainingRetries - 1
+        })
       }
+
+      const brainMessage = BRAIN.wernicke('llm_provider_http_error', '', {
+        '{{ provider }}': LLM_PROVIDER,
+        '{{ error }}':
+          'Provider returned an empty completion payload (no text, no tool call, no token usage)',
+        '{{ api_error }}': providerPayloadSnippet
+          ? `\n${providerPayloadSnippet}`
+          : ''
+      })
+
+      await this.safeTalk(brainMessage)
+      this.lastProviderErrorMessage = brainMessage
+      return null
     }
 
     LogHelper.title('LLM Provider')
@@ -670,35 +1727,72 @@ export default class LLMProvider {
       input:
         typeof promptOrChatHistory === 'string'
           ? promptOrChatHistory
-          : JSON.stringify(promptOrChatHistory),
+          : this.safeSerialize(promptOrChatHistory),
       // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
       output: (() => {
         if (!isJSONMode) {
           return rawResultString
         }
 
-        try {
-          return JSON.parse(rawResultString)
-        } catch {
-          // Some models wrap JSON in markdown code fences (```json ... ```).
-          // Strip them and retry.
-          const stripped = rawResultString
-            .replace(/^```(?:json)?\s*\n?/i, '')
-            .replace(/\n?```\s*$/i, '')
-            .trim()
+        const extractJsonSubstring = (input: string): string | null => {
+          const firstBrace = input.indexOf('{')
+          const firstBracket = input.indexOf('[')
+          const startIndex =
+            firstBrace !== -1 && firstBracket !== -1
+              ? Math.min(firstBrace, firstBracket)
+              : Math.max(firstBrace, firstBracket)
 
+          if (startIndex === -1) {
+            return null
+          }
+
+          const endIndex =
+            input[startIndex] === '{'
+              ? input.lastIndexOf('}')
+              : input.lastIndexOf(']')
+
+          if (endIndex <= startIndex) {
+            return null
+          }
+
+          return input.slice(startIndex, endIndex + 1)
+        }
+
+        const strippedCodeFence = rawResultString
+          .replace(/^```(?:json)?\s*\n?/i, '')
+          .replace(/\n?```\s*$/i, '')
+          .trim()
+        const extracted = extractJsonSubstring(strippedCodeFence)
+        const candidates = [
+          rawResultString.trim(),
+          strippedCodeFence,
+          extracted
+        ].filter((candidate): candidate is string => Boolean(candidate))
+
+        // Last resort for truncated object-only payloads.
+        if (
+          strippedCodeFence.startsWith('{') &&
+          !strippedCodeFence.endsWith('}')
+        ) {
+          candidates.push(`${strippedCodeFence}}`)
+        }
+
+        let lastError: Error | null = null
+        for (const candidate of candidates) {
           try {
-            return JSON.parse(stripped)
-          } catch (innerError) {
-            LogHelper.title('LLM Provider')
-            LogHelper.warning(
-              `Failed to parse JSON output for ${completionParams.dutyType}: ${
-                (innerError as Error).message
-              }`
-            )
-            return rawResultString
+            return JSON.parse(candidate)
+          } catch (error) {
+            lastError = error as Error
           }
         }
+
+        LogHelper.title('LLM Provider')
+        LogHelper.warning(
+          `Failed to parse JSON output for ${completionParams.dutyType}: ${
+            lastError?.message || 'unknown parse error'
+          }`
+        )
+        return rawResultString
       })(),
       data: completionParams.data,
       functions: completionParams.functions,

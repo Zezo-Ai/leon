@@ -17,20 +17,18 @@ import type {
 import { LogHelper } from '@/helpers/log-helper'
 
 /**
- * @see https://router.huggingface.co/v1/chat/completions
+ * @see https://docs.z.ai/api-reference/llm/chat-completion
  */
-type HuggingFaceCompletionParams = Omit<CompletionParams, ''>
+type ZAICompletionParams = Omit<CompletionParams, ''>
 
-export default class HuggingFaceLLMProvider {
-  protected readonly name = 'HuggingFace LLM Provider'
-  protected readonly apiKey = process.env['LEON_HUGGINGFACE_API_KEY']
+export default class ZAILLMProvider {
+  protected readonly name = 'Z-AI LLM Provider'
+  protected readonly apiKey = process.env['LEON_ZAI_API_KEY']
   protected readonly model =
-    process.env['LEON_HUGGINGFACE_AGENT_LLM'] ||
-    process.env['LEON_HUGGINGFACE_MODEL'] ||
-    'meta-llama/Meta-Llama-3.1-8B-Instruct'
+    process.env['LEON_ZAI_AGENT_LLM'] || process.env['LEON_ZAI_MODEL'] || 'glm-5'
   private readonly client = new OpenAI({
     apiKey: this.apiKey,
-    baseURL: 'https://router.huggingface.co/v1',
+    baseURL: 'https://api.z.ai/api/paas/v4',
     timeout: 120_000,
     maxRetries: 0
   })
@@ -58,7 +56,7 @@ export default class HuggingFaceLLMProvider {
 
   private toMessages(
     prompt: PromptOrChatHistory,
-    completionParams: HuggingFaceCompletionParams
+    completionParams: ZAICompletionParams
   ): ChatCompletionMessageParam[] {
     let systemPrompt = completionParams.systemPrompt
     if (completionParams.data !== null) {
@@ -122,7 +120,7 @@ export default class HuggingFaceLLMProvider {
 
   public runChatCompletion(
     prompt: PromptOrChatHistory,
-    completionParams: HuggingFaceCompletionParams
+    completionParams: ZAICompletionParams
   ): Promise<AxiosResponse> {
     return new Promise(async (resolve, reject) => {
       try {
@@ -138,9 +136,7 @@ export default class HuggingFaceLLMProvider {
 
         if (completionParams.disableThinking === true) {
           LogHelper.title(this.name)
-          LogHelper.debug(
-            'Retrying with thinking disabled due to tool_choice compatibility'
-          )
+          LogHelper.debug('Thinking disabled for this request')
         }
 
         const baseParams = {
@@ -161,6 +157,12 @@ export default class HuggingFaceLLMProvider {
               tool_choice: this.toToolChoice(completionParams.toolChoice)
             })
           }
+        } else if (completionParams.data !== null) {
+          Object.assign(baseParams, {
+            response_format: {
+              type: 'json_object'
+            }
+          })
         }
 
         const requestOptions = {
@@ -181,6 +183,7 @@ export default class HuggingFaceLLMProvider {
             streamingParams,
             requestOptions
           )
+
           return resolve({
             data: response
           } as AxiosResponse)
@@ -203,7 +206,7 @@ export default class HuggingFaceLLMProvider {
 
         LogHelper.title(this.name)
         LogHelper.error(errorMessage)
-        return reject(new Error(errorMessage))
+        return reject(e instanceof Error ? e : new Error(errorMessage))
       }
     })
   }

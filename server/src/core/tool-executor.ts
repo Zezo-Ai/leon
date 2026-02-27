@@ -284,7 +284,7 @@ export default class ToolExecutor {
         cliArgs,
         {
           cwd: NODEJS_BRIDGE_ROOT_PATH,
-          maxBuffer: 1024 * 1024 * 10
+          maxBuffer: 1_024 * 1_024 * 10
         }
       )
       const output = stdout ? stdout.toString().trim() : ''

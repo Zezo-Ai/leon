@@ -25,7 +25,9 @@ import {
   HTTP_SERVER,
   SOCKET_SERVER,
   LLM_PROVIDER,
-  LLM_MANAGER
+  LLM_MANAGER,
+  TOOLKIT_REGISTRY,
+  CONTEXT_MANAGER
 } from '@/core'
 import { shouldIgnoreTCPServerError } from '@/utilities'
 import { Updater } from '@/updater'
@@ -133,6 +135,18 @@ import { SystemHelper } from '@/helpers/system-helper'
     await LLM_MANAGER.loadLLM()
   } catch (e) {
     LogHelper.error(`LLM Manager failed to load: ${e}`)
+  }
+
+  try {
+    await TOOLKIT_REGISTRY.load()
+  } catch (e) {
+    LogHelper.error(`Toolkit Registry failed to load: ${e}`)
+  }
+
+  try {
+    await CONTEXT_MANAGER.load()
+  } catch (e) {
+    LogHelper.error(`Context Manager failed to load: ${e}`)
   }
 
   /*const actionRecognitionDuty = new ActionRecognitionLLMDuty({

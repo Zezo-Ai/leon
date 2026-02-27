@@ -2,6 +2,14 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Operating System Control",
   "description": "Tools for interacting with and controlling the operating system.",
-  "context_files": ["HOST_SYSTEM.md", "STORAGE.md"],
+  "context_files": [
+    "LEON.md",
+    "ARCHITECTURE.md",
+    "HOST_SYSTEM.md",
+    "ACTIVITY.md",
+    "SYSTEM_RESOURCES.md",
+    "STORAGE.md",
+    "NETWORK.md"
+  ],
   "tools": ["bash"]
 }

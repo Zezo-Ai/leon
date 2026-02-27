@@ -1,6 +1,10 @@
 import { LogHelper } from '@/helpers/log-helper'
 
-import type { PlanStep, ExecutionRecord } from './types'
+import type {
+  PlanStep,
+  ExecutionRecord,
+  PlanResult
+} from './types'
 
 export const formatFilePath = (filePath: string): string => {
   return `[FILE_PATH]${filePath}[/FILE_PATH]`
@@ -181,6 +185,126 @@ export function parseOutput(
     } catch {
       // Continue
     }
+  }
+
+  return null
+}
+
+export function parseToolCallArguments(
+  rawArguments: string
+): Record<string, unknown> | null {
+  if (!rawArguments || typeof rawArguments !== 'string') {
+    return null
+  }
+
+  const trimmed = rawArguments.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const candidates: string[] = [trimmed]
+  const strippedCodeFence = trimmed
+    .replace(/^```(?:json)?\s*\n?/i, '')
+    .replace(/\n?```\s*$/i, '')
+    .trim()
+
+  if (strippedCodeFence && strippedCodeFence !== trimmed) {
+    candidates.push(strippedCodeFence)
+  }
+
+  const extracted = extractJsonSubstring(strippedCodeFence)
+  if (extracted && !candidates.includes(extracted)) {
+    candidates.push(extracted)
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>
+      }
+    } catch {
+      // Continue with next candidate
+    }
+  }
+
+  return null
+}
+
+export function extractPlanResultFromCreatePlanArgs(
+  parsedArgs: Record<string, unknown>,
+  options: {
+    allowLegacySummaryAsFinal?: boolean
+  } = {}
+): PlanResult | null {
+  const { allowLegacySummaryAsFinal = true } = options
+
+  const parsedType =
+    typeof parsedArgs['type'] === 'string'
+      ? parsedArgs['type'].trim().toLowerCase()
+      : ''
+
+  if (parsedType === 'final') {
+    const answer =
+      typeof parsedArgs['answer'] === 'string'
+        ? parsedArgs['answer'].trim()
+        : ''
+    if (!answer) {
+      return null
+    }
+
+    return { type: 'final', answer }
+  }
+
+  if (parsedType === 'plan') {
+    if (!Array.isArray(parsedArgs['steps'])) {
+      return null
+    }
+
+    const steps = parseStepsFromArgs(
+      parsedArgs['steps'] as Record<string, unknown>[]
+    )
+    if (steps.length === 0) {
+      return null
+    }
+
+    const summary =
+      typeof parsedArgs['summary'] === 'string'
+        ? parsedArgs['summary'].trim()
+        : ''
+    return { type: 'plan', steps, summary }
+  }
+
+  // Backward compatibility for older payloads without explicit `type`.
+  if (Array.isArray(parsedArgs['steps'])) {
+    const steps = parseStepsFromArgs(
+      parsedArgs['steps'] as Record<string, unknown>[]
+    )
+    if (steps.length > 0) {
+      const summary =
+        typeof parsedArgs['summary'] === 'string'
+          ? parsedArgs['summary'].trim()
+          : ''
+      return { type: 'plan', steps, summary }
+    }
+  }
+
+  if (allowLegacySummaryAsFinal) {
+    const summary =
+      typeof parsedArgs['summary'] === 'string'
+        ? parsedArgs['summary'].trim()
+        : ''
+    if (summary) {
+      return { type: 'final', answer: summary }
+    }
+  }
+
+  const answer =
+    typeof parsedArgs['answer'] === 'string'
+      ? parsedArgs['answer'].trim()
+      : ''
+  if (answer) {
+    return { type: 'final', answer }
   }
 
   return null

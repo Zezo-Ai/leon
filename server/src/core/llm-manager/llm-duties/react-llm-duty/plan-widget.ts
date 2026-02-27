@@ -14,8 +14,10 @@ export const widgetId = (prefix: string): string =>
  */
 export function buildPlanComponentTree(
   steps: TrackedPlanStep[],
-  justCompletedIndex: number | null
+  _justCompletedIndex: number | null
 ): Record<string, unknown> {
+  void _justCompletedIndex
+
   const listItems = steps.map((step, i) => {
     let child: Record<string, unknown>
 
@@ -48,7 +50,6 @@ export function buildPlanComponentTree(
     } else {
       // Checkbox
       const isCompleted = step.status === 'completed'
-      const isJustCompleted = justCompletedIndex === i
       child = {
         component: 'Checkbox',
         id: widgetId('checkbox'),
@@ -56,7 +57,7 @@ export function buildPlanComponentTree(
           name: `step-${i}`,
           label: step.label,
           checked: isCompleted,
-          disabled: isCompleted && !isJustCompleted
+          disabled: isCompleted
         },
         events: []
       }
