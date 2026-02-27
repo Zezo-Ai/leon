@@ -33,7 +33,7 @@ export class LeonRuntimeContextFile extends ContextFile {
     const localLlmName = this.resolvers.getLocalLLMName()
 
     return [
-      `> Leon runtime ${LEON_VERSION || 'unknown'} on Node ${process.version}; routing mode ${LEON_ROUTING_MODE}; provider ${LLM_PROVIDER_NAME || 'unset'}; agent LLM ${agentLlmName}; local LLM ${localLlmName}; npm ${this.probeHelper.formatCommandProbe(npmProbe)}, pnpm ${this.probeHelper.formatCommandProbe(pnpmProbe)}, git ${this.probeHelper.formatCommandProbe(gitProbe)}.`,
+      `> I am running Leon ${LEON_VERSION || 'unknown'} on Node ${process.version}; routing mode ${LEON_ROUTING_MODE}; provider ${LLM_PROVIDER_NAME || 'unset'}; agent LLM ${agentLlmName}; local LLM ${localLlmName}; npm ${this.probeHelper.formatCommandProbe(npmProbe)}, pnpm ${this.probeHelper.formatCommandProbe(pnpmProbe)}, git ${this.probeHelper.formatCommandProbe(gitProbe)}.`,
       '# LEON_RUNTIME',
       `- Leon version: ${LEON_VERSION || 'unknown'}`,
       `- Node.js version: ${process.version}`,

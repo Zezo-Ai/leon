@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { CONTEXT_PATH } from '@/constants'
+import { CONTEXT_PATH, LEON_DISABLED_CONTEXT_FILES } from '@/constants'
 import { TOOLKIT_REGISTRY, LLM_PROVIDER } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
@@ -32,7 +32,7 @@ export default class ContextManager {
   private refreshIntervalId: NodeJS.Timeout | null = null
   private readonly metadata = new Map<string, ContextFileMetadata>()
   private readonly probeHelper = new ContextProbeHelper()
-  private readonly contextFiles: ContextFile[] = [
+  private readonly allContextFiles: ContextFile[] = [
     new HomeContextFile(),
     new HostSystemContextFile(this.probeHelper),
     new GpuComputeContextFile(this.probeHelper),
@@ -48,6 +48,12 @@ export default class ContextManager {
       getLocalLLMName: () => LLM_PROVIDER.localLLMName
     })
   ]
+  private readonly disabledContextFiles = this.parseContextFileList(
+    LEON_DISABLED_CONTEXT_FILES
+  )
+  private readonly contextFiles: ContextFile[] = this.allContextFiles.filter(
+    (definition) => !this.disabledContextFiles.has(definition.filename)
+  )
 
   public constructor() {
     if (!ContextManager.instance) {
@@ -69,6 +75,7 @@ export default class ContextManager {
 
     try {
       await fs.promises.mkdir(CONTEXT_PATH, { recursive: true })
+      this.cleanupDisabledContextFiles()
 
       for (const definition of this.contextFiles) {
         this.refreshContextFile(definition, true)
@@ -154,7 +161,9 @@ export default class ContextManager {
 
     return [...new Set(rawContextFiles)]
       .map((filename) => this.normalizeFilename(filename))
-      .filter((filename) => filename.length > 0)
+      .filter(
+        (filename) => filename.length > 0 && this.resolveDefinition(filename) !== null
+      )
   }
 
   private getContextFilePath(filename: string): string {
@@ -278,6 +287,32 @@ export default class ContextManager {
 
     if (typeof this.refreshIntervalId.unref === 'function') {
       this.refreshIntervalId.unref()
+    }
+  }
+
+  private parseContextFileList(rawFileList: string): Set<string> {
+    return new Set(
+      rawFileList
+        .split(/[,;\n]/)
+        .map((value) => this.normalizeFilename(value))
+        .filter((value) => value.length > 0)
+    )
+  }
+
+  private cleanupDisabledContextFiles(): void {
+    for (const filename of this.disabledContextFiles) {
+      const filePath = this.getContextFilePath(filename)
+      this.metadata.delete(filename)
+
+      if (!fs.existsSync(filePath)) {
+        continue
+      }
+
+      try {
+        fs.rmSync(filePath, { force: true })
+      } catch {
+        continue
+      }
     }
   }
 }

@@ -6,11 +6,10 @@ export class ArchitectureContextFile extends ContextFile {
 
   public generate(): string {
     return [
-      '> Leon architecture is layered as Skills -> Actions -> Tools -> Functions (-> Binaries), with smart routing between workflow and agent execution, a ReAct loop for dynamic tool use, shared SDK bridges, and a binary-first runtime with shared CUDA and PyTorch assets.',
+      '> My architecture is layered as Skills -> Actions -> Tools -> Functions (-> Binaries), with smart routing between workflow and agent execution, a ReAct loop for dynamic tool use, shared SDK bridges, and a binary-first runtime with shared CUDA and PyTorch assets.',
       '# ARCHITECTURE',
-      `- Generated at: ${new Date().toISOString()}`,
       '- Layer model: `Skills -> Actions -> Tools -> Functions (-> Binaries)`.',
-      '- Agent routing rule: when agent mode is selected, Leon jumps directly to the tools layer (toolkits/tools/functions).',
+      '- Agent routing rule: when agent mode is selected, I jump directly to the tools layer (toolkits/tools/functions).',
       '## Brain and Routing',
       '- `server/src/core/brain/brain.ts`: central orchestration for request handling and response lifecycle.',
       '- `server/src/core/llm-manager/llm-duties/skill-router-llm-duty.ts`: chooses high-level skill routing when needed.',
@@ -39,12 +38,12 @@ export class ArchitectureContextFile extends ContextFile {
       '## Context and Environment Awareness',
       '- `server/src/core/context-manager/context-manager.ts`: context file lifecycle and refresh policy.',
       '- `server/src/core/context-manager/files/*.ts`: environment/self-awareness context producers.',
-      '- Progressive context injection: toolkit-specific context is injected only when relevant, reducing noise and token waste.',
+      '- Progressive context injection: I inject toolkit-specific context only when relevant, reducing noise and token waste.',
       '## Reliability and Safety Mechanisms',
       '- Pre-crafted tool surface reduces unpredictable behavior compared to unconstrained execution.',
       '- Schema-guided function calling and validation constrain tool inputs.',
-      '- Replanning and retry paths improve robustness after tool or parsing failures.',
-      '- Routing flexibility (`smart`, `workflow`, `agent`) balances determinism and autonomy per request.'
+      '- Replanning and retry paths help me recover after tool or parsing failures.',
+      '- Routing flexibility (`smart`, `workflow`, `agent`) lets me balance determinism and autonomy per request.'
     ].join('\n')
   }
 }

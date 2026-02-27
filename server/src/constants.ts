@@ -327,6 +327,8 @@ export const HAS_LLM_NLG = process.env['LEON_LLM_NLG'] === 'true' && HAS_LLM
 export const HAS_LLM_ACTION_RECOGNITION =
   process.env['LEON_LLM_ACTION_RECOGNITION'] === 'true' && HAS_LLM
 export const LEON_ROUTING_MODE = process.env['LEON_ROUTING_MODE'] || 'smart'
+export const LEON_DISABLED_CONTEXT_FILES =
+  process.env['LEON_DISABLED_CONTEXT_FILES'] || ''
 export const LLM_PROVIDER = process.env['LEON_LLM_PROVIDER']
 // export const LLM_VERSION = 'v0.2.Q4_K_S'
 // export const LLM_VERSION = '8B-Instruct.Q5_K_S'
