@@ -15,6 +15,8 @@ import { NetworkContextFile } from '@/core/context-manager/files/network-context
 import { BrowserHistoryContextFile } from '@/core/context-manager/files/browser-history-context-file'
 import { LeonRuntimeContextFile } from '@/core/context-manager/files/leon-runtime-context-file'
 import { ActivityContextFile } from '@/core/context-manager/files/activity-context-file'
+import { LeonContextFile } from '@/core/context-manager/files/leon-context-file'
+import { ArchitectureContextFile } from '@/core/context-manager/files/architecture-context-file'
 
 interface ContextFileMetadata {
   lastGeneratedAt: number
@@ -39,6 +41,8 @@ export default class ContextManager {
     new NetworkContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
     new BrowserHistoryContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
     new ActivityContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
+    new LeonContextFile(),
+    new ArchitectureContextFile(),
     new LeonRuntimeContextFile(this.probeHelper, {
       getAgentLLMName: () => LLM_PROVIDER.agentLLMName,
       getLocalLLMName: () => LLM_PROVIDER.localLLMName

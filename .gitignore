@@ -10,6 +10,8 @@ test/coverage/
 **/src/.venv/*
 logs/*
 core/context/*[.md, .json]
+!core/context/LEON.md
+!core/context/ARCHITECTURE.md
 core/config/**/*.json
 bin/coqui/*
 bin/flite/*

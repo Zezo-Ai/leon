@@ -3,6 +3,8 @@
   "name": "Operating System Control",
   "description": "Tools for interacting with and controlling the operating system.",
   "context_files": [
+    "LEON.md",
+    "ARCHITECTURE.md",
     "HOST_SYSTEM.md",
     "ACTIVITY.md",
     "SYSTEM_RESOURCES.md",
