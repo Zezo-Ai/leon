@@ -22,13 +22,18 @@ export class HostSystemContextFile extends ContextFile {
       'unknown'
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || 'unknown'
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown'
+    const ownerLocation = this.probeHelper.probeOwnerLocation({
+      timeZone,
+      locale
+    })
+    const vpnProxyStatus = this.probeHelper.probeVpnOrProxyStatus()
     const cpuModel = os.cpus()[0]?.model || 'unknown'
     const cpuCores = os.cpus().length
     const totalMemory = this.probeHelper.formatGiB(os.totalmem())
     const bootTimeIso = new Date(Date.now() - os.uptime() * 1_000).toISOString()
 
     return [
-      `> Host system is ${operatingSystemNameVersion} (${os.platform()} ${os.release()}, ${os.arch()}), user ${username}, shell ${shell}.`,
+      `> Host system is ${operatingSystemNameVersion} (${os.platform()} ${os.release()}, ${os.arch()}), user ${username}, shell ${shell}, owner location ${ownerLocation.value}${vpnProxyStatus.behindVpnOrProxy ? ' (VPN/proxy detected).' : '.'}`,
       '# HOST_SYSTEM',
       `- OS name and version: ${operatingSystemNameVersion}`,
       `- Platform: ${os.platform()}`,
@@ -38,6 +43,13 @@ export class HostSystemContextFile extends ContextFile {
       `- Hostname: ${os.hostname()}`,
       `- Locale: ${locale}`,
       `- Time zone: ${timeZone}`,
+      `- Owner location: ${ownerLocation.value}`,
+      `- Owner location source: ${ownerLocation.source}`,
+      `- Owner location confidence: ${ownerLocation.confidence}`,
+      `- VPN/proxy detected: ${vpnProxyStatus.behindVpnOrProxy ? 'yes' : 'no'}`,
+      `- VPN/proxy reasons: ${vpnProxyStatus.reasons.join(', ') || 'none'}`,
+      `- VPN tunnel interfaces: ${vpnProxyStatus.tunnelInterfaces.join(', ') || 'none'}`,
+      `- VPN-related processes: ${vpnProxyStatus.vpnProcesses.join(', ') || 'none'}`,
       `- CPU model: ${cpuModel}`,
       `- CPU cores: ${cpuCores}`,
       `- Total RAM: ${totalMemory}`,

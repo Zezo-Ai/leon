@@ -6,10 +6,12 @@
     "LEON.md",
     "ARCHITECTURE.md",
     "HOST_SYSTEM.md",
+    "LOCAL_INVENTORY.md",
+    "NETWORK_ECOSYSTEM.md",
+    "HABITS.md",
     "ACTIVITY.md",
     "SYSTEM_RESOURCES.md",
-    "STORAGE.md",
-    "NETWORK.md"
+    "STORAGE.md"
   ],
   "tools": ["bash"]
 }

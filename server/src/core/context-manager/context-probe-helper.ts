@@ -38,6 +38,54 @@ export interface StorageSnapshot {
   entries: StorageSnapshotEntry[]
 }
 
+type OwnerLocationProbeSource =
+  | 'ip_geolocation'
+  | 'ip_geolocation_consensus'
+  | 'ip_geolocation_timezone_match'
+  | 'vpn_timezone_inference'
+  | 'timezone_locale_inference'
+  | 'timezone_inference'
+  | 'unavailable'
+type OwnerLocationProbeConfidence = 'high' | 'medium' | 'low'
+
+export interface OwnerLocationProbe {
+  value: string
+  source: OwnerLocationProbeSource
+  confidence: OwnerLocationProbeConfidence
+}
+
+export interface VpnProxyProbe {
+  behindVpnOrProxy: boolean
+  hasProxyEnv: boolean
+  tunnelInterfaces: string[]
+  defaultRouteInterface: string
+  vpnProcesses: string[]
+  reasons: string[]
+}
+
+export interface NeighborWarmupProbe {
+  source: string
+  attempted: number
+  reachable: number
+}
+
+export interface ReverseDnsProbe {
+  source: string
+  resolvedCount: number
+  hostnamesByIp: Record<string, string[]>
+}
+
+interface IpGeolocationRecord {
+  provider: string
+  city: string
+  region: string
+  country: string
+  countryCode: string
+  timezone: string
+  latitude: number | null
+  longitude: number | null
+}
+
 export type ProcessCpuMetric = 'percent' | 'seconds'
 
 export interface RunningProcessEntry {
@@ -65,13 +113,17 @@ export class ContextProbeHelper {
     }
   }
 
-  public runCommand(command: string, args: string[]): string | null {
+  public runCommand(
+    command: string,
+    args: string[],
+    options?: { timeoutMs?: number }
+  ): string | null {
     for (const candidate of this.getCommandCandidates(command)) {
       try {
         const output = execFileSync(candidate, args, {
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'pipe'],
-          timeout: 5_000
+          timeout: options?.timeoutMs ?? 5_000
         }).trim()
 
         if (output.length > 0) {
@@ -339,6 +391,354 @@ export class ContextProbeHelper {
     return this.probeStorageUnix()
   }
 
+  public probeOwnerLocation(options: {
+    timeZone?: string
+    locale?: string
+  }): OwnerLocationProbe {
+    const timeZone = (options.timeZone || '').trim()
+    const locale = (options.locale || '').trim()
+    const vpnProxyStatus = this.probeVpnOrProxyStatus()
+
+    if (vpnProxyStatus.behindVpnOrProxy) {
+      const cityFromTimeZone = this.extractCityFromTimeZone(timeZone)
+
+      if (cityFromTimeZone) {
+        return {
+          value: `${cityFromTimeZone} (inferred from ${timeZone}; VPN/proxy detected)`,
+          source: 'vpn_timezone_inference',
+          confidence: 'medium'
+        }
+      }
+
+      return {
+        value: 'unknown (VPN/proxy detected)',
+        source: 'vpn_timezone_inference',
+        confidence: 'low'
+      }
+    }
+
+    const ipGeolocationProbe = this.probeOwnerLocationFromIpGeolocation(
+      timeZone,
+      locale
+    )
+    if (ipGeolocationProbe) {
+      return ipGeolocationProbe
+    }
+
+    const cityFromTimeZone = this.extractCityFromTimeZone(timeZone)
+    const regionFromLocale = this.extractRegionFromLocale(locale)
+
+    if (cityFromTimeZone && regionFromLocale) {
+      return {
+        value: `${cityFromTimeZone}, ${regionFromLocale} (inferred from ${timeZone})`,
+        source: 'timezone_locale_inference',
+        confidence: 'medium'
+      }
+    }
+
+    if (cityFromTimeZone) {
+      return {
+        value: `${cityFromTimeZone} (inferred from ${timeZone})`,
+        source: 'timezone_inference',
+        confidence: 'low'
+      }
+    }
+
+    return {
+      value: 'unknown',
+      source: 'unavailable',
+      confidence: 'low'
+    }
+  }
+
+  public probeVpnOrProxyStatus(): VpnProxyProbe {
+    const interfaces = os.networkInterfaces()
+    const tunnelInterfaces = Object.keys(interfaces).filter((interfaceName) =>
+      this.isLikelyTunnelInterface(interfaceName)
+    )
+    const proxyValues = [
+      process.env['HTTP_PROXY'] || process.env['http_proxy'] || '',
+      process.env['HTTPS_PROXY'] || process.env['https_proxy'] || ''
+    ].filter((value) => value.trim().length > 0)
+    const hasProxyEnv = proxyValues.length > 0
+
+    const defaultRouteProbe = this.probeDefaultRoute()
+    const defaultRouteInterfaceMatch = defaultRouteProbe.route.match(
+      /\binterface\s+([^\s|]+)/
+    )
+    const defaultRouteInterface = defaultRouteInterfaceMatch?.[1] || 'unknown'
+    const hasTunnelDefaultRoute =
+      defaultRouteInterface !== 'unknown' &&
+      this.isLikelyTunnelInterface(defaultRouteInterface)
+
+    const runningProcesses = this.probeRunningProcesses(120)
+    const vpnKeywords = [
+      'openvpn',
+      'wireguard',
+      'wg-quick',
+      'tailscale',
+      'tailscaled',
+      'nordvpn',
+      'expressvpn',
+      'protonvpn',
+      'surfshark',
+      'clash',
+      'v2ray',
+      'sing-box',
+      'tunnelblick',
+      'zerotier'
+    ]
+    const vpnProcesses = [...new Set(
+      runningProcesses.entries
+        .map((entry) => entry.name.toLowerCase())
+        .filter((name) => vpnKeywords.some((keyword) => name.includes(keyword)))
+    )]
+
+    const reasons: string[] = []
+    if (hasProxyEnv) {
+      reasons.push('proxy_env')
+    }
+    if (tunnelInterfaces.length > 0) {
+      reasons.push('tunnel_interface')
+    }
+    if (hasTunnelDefaultRoute) {
+      reasons.push('tunnel_default_route')
+    }
+    if (vpnProcesses.length > 0) {
+      reasons.push('vpn_process')
+    }
+
+    return {
+      behindVpnOrProxy: reasons.length > 0,
+      hasProxyEnv,
+      tunnelInterfaces,
+      defaultRouteInterface,
+      vpnProcesses,
+      reasons
+    }
+  }
+
+  public warmNeighborCache(ipAddresses: string[]): NeighborWarmupProbe {
+    if (ipAddresses.length === 0) {
+      return {
+        source: 'ping_warmup',
+        attempted: 0,
+        reachable: 0
+      }
+    }
+
+    const uniqueIps = [...new Set(ipAddresses)].slice(0, 320)
+    const nodeScript = `
+import { execFile } from 'node:child_process'
+
+const [rawIps = '[]'] = process.argv.slice(1)
+
+const ips = (() => {
+  try {
+    const parsed = JSON.parse(rawIps)
+    return Array.isArray(parsed)
+      ? parsed.filter((entry) => typeof entry === 'string' && entry.length > 0)
+      : []
+  } catch {
+    return []
+  }
+})()
+
+const platform = process.platform
+const concurrency = 24
+
+const pingArgs = (ip) => {
+  if (platform === 'win32') {
+    return ['-n', '1', '-w', '300', ip]
+  }
+
+  if (platform === 'darwin') {
+    return ['-c', '1', '-W', '1000', ip]
+  }
+
+  return ['-c', '1', '-W', '1', ip]
+}
+
+const pingIp = (ip) =>
+  new Promise((resolve) => {
+    execFile('ping', pingArgs(ip), { timeout: 1400 }, (error) => {
+      resolve(!error)
+    })
+  })
+
+let reachable = 0
+let index = 0
+
+const worker = async () => {
+  while (index < ips.length) {
+    const currentIndex = index
+    index += 1
+    const ip = ips[currentIndex]
+    const ok = await pingIp(ip)
+    if (ok) {
+      reachable += 1
+    }
+  }
+}
+
+await Promise.all(Array.from({ length: Math.min(concurrency, ips.length) }, () => worker()))
+console.log(JSON.stringify({ attempted: ips.length, reachable }))
+    `.trim()
+
+    const rawOutput = this.runCommand(
+      process.execPath,
+      ['--no-warnings', '--input-type=module', '-e', nodeScript, JSON.stringify(uniqueIps)],
+      { timeoutMs: 15_000 }
+    )
+
+    if (!rawOutput) {
+      return {
+        source: 'ping_warmup_unavailable',
+        attempted: uniqueIps.length,
+        reachable: 0
+      }
+    }
+
+    try {
+      const parsed = JSON.parse(rawOutput) as {
+        attempted?: number
+        reachable?: number
+      }
+
+      return {
+        source: 'ping_warmup',
+        attempted: Number(parsed.attempted || uniqueIps.length),
+        reachable: Number(parsed.reachable || 0)
+      }
+    } catch {
+      return {
+        source: 'ping_warmup_unavailable',
+        attempted: uniqueIps.length,
+        reachable: 0
+      }
+    }
+  }
+
+  public probeReverseDnsHostnames(ipAddresses: string[]): ReverseDnsProbe {
+    const uniqueIps = [...new Set(ipAddresses)].filter((ip) => ip.length > 0).slice(0, 96)
+    if (uniqueIps.length === 0) {
+      return {
+        source: 'reverse_dns',
+        resolvedCount: 0,
+        hostnamesByIp: {}
+      }
+    }
+
+    const nodeScript = `
+import dns from 'node:dns/promises'
+
+const [rawIps = '[]'] = process.argv.slice(1)
+const ips = (() => {
+  try {
+    const parsed = JSON.parse(rawIps)
+    return Array.isArray(parsed)
+      ? parsed.filter((entry) => typeof entry === 'string' && entry.length > 0)
+      : []
+  } catch {
+    return []
+  }
+})()
+
+const timeoutMs = 850
+const concurrency = 16
+
+const withTimeout = (promise, ms) =>
+  Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve([]), ms))])
+
+let cursor = 0
+const results = {}
+
+const worker = async () => {
+  while (cursor < ips.length) {
+    const index = cursor
+    cursor += 1
+    const ip = ips[index]
+    try {
+      const rows = await withTimeout(dns.reverse(ip), timeoutMs)
+      const names = Array.isArray(rows)
+        ? [...new Set(
+            rows
+              .filter((row) => typeof row === 'string' && row.length > 0)
+              .map((row) => {
+                const normalized = row.trim().toLowerCase()
+                return normalized.endsWith('.') ? normalized.slice(0, -1) : normalized
+              })
+          )].slice(0, 4)
+        : []
+
+      if (names.length > 0) {
+        results[ip] = names
+      }
+    } catch {
+      continue
+    }
+  }
+}
+
+await Promise.all(Array.from({ length: Math.min(concurrency, ips.length) }, () => worker()))
+console.log(JSON.stringify(results))
+    `.trim()
+
+    const rawOutput = this.runCommand(
+      process.execPath,
+      ['--no-warnings', '--input-type=module', '-e', nodeScript, JSON.stringify(uniqueIps)],
+      { timeoutMs: 14_000 }
+    )
+
+    if (!rawOutput) {
+      return {
+        source: 'reverse_dns_unavailable',
+        resolvedCount: 0,
+        hostnamesByIp: {}
+      }
+    }
+
+    try {
+      const parsed = JSON.parse(rawOutput) as Record<string, unknown>
+      const hostnamesByIp: Record<string, string[]> = {}
+      let resolvedCount = 0
+
+      for (const [ip, rawNames] of Object.entries(parsed || {})) {
+        if (!uniqueIps.includes(ip)) {
+          continue
+        }
+
+        if (!Array.isArray(rawNames)) {
+          continue
+        }
+
+        const names = rawNames
+          .filter((name) => typeof name === 'string')
+          .map((name) => name.trim())
+          .filter((name) => name.length > 0)
+          .slice(0, 4)
+
+        if (names.length === 0) {
+          continue
+        }
+
+        hostnamesByIp[ip] = names
+        resolvedCount += 1
+      }
+
+      return {
+        source: 'reverse_dns',
+        resolvedCount,
+        hostnamesByIp
+      }
+    } catch {
+      return {
+        source: 'reverse_dns_unavailable',
+        resolvedCount: 0,
+        hostnamesByIp: {}
+      }
+    }
+  }
   public probeRunningProcesses(limit = 80): RunningProcessSnapshot {
     if (SystemHelper.isWindows()) {
       return this.probeRunningProcessesWindows(limit)
@@ -384,6 +784,308 @@ export class ContextProbeHelper {
         name: '',
         version: ''
       }
+    }
+  }
+
+  private extractCityFromTimeZone(timeZone: string): string {
+    if (!timeZone || !timeZone.includes('/')) {
+      return ''
+    }
+
+    const segments = timeZone.split('/').filter((segment) => segment.length > 0)
+    if (segments.length === 0) {
+      return ''
+    }
+
+    const city = segments[segments.length - 1] || ''
+    return city.replace(/_/g, ' ').trim()
+  }
+
+  private extractRegionFromLocale(locale: string): string {
+    if (!locale) {
+      return ''
+    }
+
+    const matched = locale.match(/[-_]([A-Z]{2}|\d{3})\b/)
+    if (!matched || !matched[1]) {
+      return ''
+    }
+
+    return matched[1]
+  }
+
+  private probeOwnerLocationFromIpGeolocation(
+    currentTimeZone: string,
+    locale: string
+  ): OwnerLocationProbe | null {
+    const geolocationRecords = this.fetchIpGeolocationRecords()
+    if (geolocationRecords.length === 0) {
+      return null
+    }
+
+    const localeCountryCode = this.extractRegionFromLocale(locale).toUpperCase()
+    const groupedByLocation = new Map<
+      string,
+      {
+        records: IpGeolocationRecord[]
+        timezoneMatches: number
+        localeMatches: number
+      }
+    >()
+
+    for (const record of geolocationRecords) {
+      const key = `${record.city}|${record.region}|${record.countryCode}`.toLowerCase()
+      const existing = groupedByLocation.get(key)
+      const hasTimezoneMatch =
+        currentTimeZone.length > 0 &&
+        record.timezone.length > 0 &&
+        record.timezone === currentTimeZone
+      const hasLocaleCountryMatch =
+        localeCountryCode.length > 0 &&
+        record.countryCode.length > 0 &&
+        localeCountryCode === record.countryCode.toUpperCase()
+
+      if (!existing) {
+        groupedByLocation.set(key, {
+          records: [record],
+          timezoneMatches: hasTimezoneMatch ? 1 : 0,
+          localeMatches: hasLocaleCountryMatch ? 1 : 0
+        })
+        continue
+      }
+
+      existing.records.push(record)
+      existing.timezoneMatches += hasTimezoneMatch ? 1 : 0
+      existing.localeMatches += hasLocaleCountryMatch ? 1 : 0
+    }
+
+    const bestGroup = [...groupedByLocation.values()].sort((entryA, entryB) => {
+      if (entryA.records.length !== entryB.records.length) {
+        return entryB.records.length - entryA.records.length
+      }
+
+      if (entryA.timezoneMatches !== entryB.timezoneMatches) {
+        return entryB.timezoneMatches - entryA.timezoneMatches
+      }
+
+      return entryB.localeMatches - entryA.localeMatches
+    })[0]
+
+    if (!bestGroup || bestGroup.records.length === 0) {
+      return null
+    }
+
+    const representativeRecord =
+      bestGroup.records.find(
+        (record) =>
+          record.timezone.length > 0 && record.timezone === currentTimeZone
+      ) ||
+      bestGroup.records.find(
+        (record) => record.latitude !== null && record.longitude !== null
+      ) ||
+      bestGroup.records[0]
+
+    if (!representativeRecord) {
+      return null
+    }
+
+    const hasTimezoneMatch = bestGroup.timezoneMatches > 0
+    const hasLocaleMatch = bestGroup.localeMatches > 0
+    const hasConsensus = bestGroup.records.length >= 2
+    const coordinates =
+      representativeRecord.latitude !== null && representativeRecord.longitude !== null
+        ? ` (~${representativeRecord.latitude.toFixed(2)}, ${representativeRecord.longitude.toFixed(2)})`
+        : ''
+    const locationValue = representativeRecord.region
+      ? `${representativeRecord.city}, ${representativeRecord.region}, ${representativeRecord.country}`
+      : `${representativeRecord.city}, ${representativeRecord.country}`
+    const matchSegments = [
+      hasConsensus
+        ? `provider consensus ${bestGroup.records.length}/${geolocationRecords.length}`
+        : '',
+      hasTimezoneMatch ? 'timezone match' : '',
+      hasLocaleMatch ? 'locale match' : ''
+    ].filter((segment) => segment.length > 0)
+    const matchSuffix =
+      matchSegments.length > 0 ? ` (${matchSegments.join(', ')})` : ''
+
+    let confidence: OwnerLocationProbeConfidence = 'low'
+    if (hasTimezoneMatch && hasConsensus) {
+      confidence = 'high'
+    } else if (hasTimezoneMatch || hasConsensus || hasLocaleMatch) {
+      confidence = 'medium'
+    }
+
+    let source: OwnerLocationProbeSource = 'ip_geolocation'
+    if (hasTimezoneMatch) {
+      source = 'ip_geolocation_timezone_match'
+    } else if (hasConsensus) {
+      source = 'ip_geolocation_consensus'
+    }
+
+    return {
+      value: `${locationValue}${coordinates} (inferred from IP geolocation${matchSuffix})`,
+      source,
+      confidence
+    }
+  }
+
+  private fetchIpGeolocationRecords(): IpGeolocationRecord[] {
+    const nodeScript = `
+const timeoutMs = 2000
+const endpoints = [
+  { provider: 'ipapi', url: 'https://ipapi.co/json/' },
+  { provider: 'ipwhois', url: 'https://ipwho.is/' },
+  { provider: 'ipinfo', url: 'https://ipinfo.io/json' }
+]
+
+const withTimeout = async (url) => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Leon/1.0 (+https://getleon.ai)'
+      }
+    })
+    if (!response.ok) {
+      return null
+    }
+    return await response.json()
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+const normalizeRecord = (provider, payload) => {
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+
+  const toNumberOrNull = (value) => {
+    const numeric = Number(value)
+    return Number.isFinite(numeric) ? numeric : null
+  }
+
+  if (provider === 'ipapi') {
+    const city = String(payload.city || '').trim()
+    const country = String(payload.country_name || payload.country || '').trim()
+    if (!city || !country) {
+      return null
+    }
+
+    return {
+      provider,
+      city,
+      region: String(payload.region || '').trim(),
+      country,
+      countryCode: String(payload.country_code || payload.country || '').trim(),
+      timezone: String(payload.timezone || '').trim(),
+      latitude: toNumberOrNull(payload.latitude),
+      longitude: toNumberOrNull(payload.longitude)
+    }
+  }
+
+  if (provider === 'ipwhois') {
+    if (payload.success === false) {
+      return null
+    }
+
+    const city = String(payload.city || '').trim()
+    const country = String(payload.country || '').trim()
+    if (!city || !country) {
+      return null
+    }
+
+    const timezone =
+      typeof payload.timezone === 'object' && payload.timezone
+        ? String(payload.timezone.id || '').trim()
+        : ''
+
+    return {
+      provider,
+      city,
+      region: String(payload.region || '').trim(),
+      country,
+      countryCode: String(payload.country_code || '').trim(),
+      timezone,
+      latitude: toNumberOrNull(payload.latitude),
+      longitude: toNumberOrNull(payload.longitude)
+    }
+  }
+
+  if (provider === 'ipinfo') {
+    const city = String(payload.city || '').trim()
+    const countryCode = String(payload.country || '').trim()
+    if (!city || !countryCode) {
+      return null
+    }
+
+    const locParts = String(payload.loc || '')
+      .split(',')
+      .map((entry) => entry.trim())
+
+    return {
+      provider,
+      city,
+      region: String(payload.region || '').trim(),
+      country: countryCode,
+      countryCode,
+      timezone: String(payload.timezone || '').trim(),
+      latitude: toNumberOrNull(locParts[0]),
+      longitude: toNumberOrNull(locParts[1])
+    }
+  }
+
+  return null
+}
+
+const results = []
+for (const endpoint of endpoints) {
+  const payload = await withTimeout(endpoint.url)
+  const record = normalizeRecord(endpoint.provider, payload)
+  if (record) {
+    results.push(record)
+  }
+}
+
+console.log(JSON.stringify(results))
+    `.trim()
+
+    const rawOutput = this.runCommand(process.execPath, [
+      '--no-warnings',
+      '--input-type=module',
+      '-e',
+      nodeScript
+    ])
+
+    if (!rawOutput) {
+      return []
+    }
+
+    try {
+      const parsed = JSON.parse(rawOutput) as IpGeolocationRecord[]
+      if (!Array.isArray(parsed)) {
+        return []
+      }
+
+      return parsed.filter((record) => {
+        return (
+          !!record &&
+          typeof record.provider === 'string' &&
+          record.provider.length > 0 &&
+          typeof record.city === 'string' &&
+          record.city.length > 0 &&
+          typeof record.country === 'string' &&
+          record.country.length > 0 &&
+          typeof record.countryCode === 'string'
+        )
+      })
+    } catch {
+      return []
     }
   }
 

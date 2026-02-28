@@ -35,6 +35,7 @@ interface ActivityTrackingState {
 const MAX_PROCESS_ENTRIES = 96
 const MAX_APP_LINES = 16
 const MAX_LOG_LINES = 20
+const MAX_LOG_LINES_PER_APP = 2
 const MAX_OBSERVED_APP_LINES = 16
 const MAX_LOG_DIR_DEPTH = 3
 const MAX_LOG_DIRECTORIES_SCANNED = 600
@@ -238,7 +239,7 @@ export class ActivityContextFile extends ContextFile {
       }
     }
 
-    return discoveredFiles
+    const sortedEntries = discoveredFiles
       .sort((entryA, entryB) => {
         if (entryA.modifiedAt < entryB.modifiedAt) {
           return 1
@@ -250,7 +251,8 @@ export class ActivityContextFile extends ContextFile {
 
         return entryB.sizeBytes - entryA.sizeBytes
       })
-      .slice(0, MAX_LOG_LINES)
+
+    return this.balanceRecentLogEntries(sortedEntries)
   }
 
   private getCandidateLogRoots(): string[] {
@@ -365,10 +367,62 @@ export class ActivityContextFile extends ContextFile {
     const normalizedPath = filePath.toLowerCase()
     const matchedTerm = appTerms.find((term) => normalizedPath.includes(term))
     if (matchedTerm) {
-      return matchedTerm
+      return this.normalizeAppHint(matchedTerm)
     }
 
-    return path.basename(path.dirname(filePath)) || 'unknown-app'
+    return this.normalizeAppHint(path.basename(path.dirname(filePath)) || 'unknown-app')
+  }
+
+  private normalizeAppHint(rawAppHint: string): string {
+    const normalized = rawAppHint.toLowerCase()
+
+    if (/(jetbrains|intellij|idea|pycharm|webstorm|goland|clion|rubymine)/.test(normalized)) {
+      return 'jetbrains-ide'
+    }
+
+    if (/(vscode|code)/.test(normalized)) {
+      return 'vscode'
+    }
+
+    if (/chrome/.test(normalized)) {
+      return 'chrome'
+    }
+
+    if (/brave/.test(normalized)) {
+      return 'brave'
+    }
+
+    if (/firefox/.test(normalized)) {
+      return 'firefox'
+    }
+
+    return normalized
+  }
+
+  private balanceRecentLogEntries(entries: ActivityLogFileEntry[]): ActivityLogFileEntry[] {
+    const appHintCounts = new Map<string, number>()
+    const selectedEntries: ActivityLogFileEntry[] = []
+
+    for (const entry of entries) {
+      const key = entry.appHint || 'unknown-app'
+      const currentCount = appHintCounts.get(key) || 0
+      if (currentCount >= MAX_LOG_LINES_PER_APP) {
+        continue
+      }
+
+      selectedEntries.push(entry)
+      appHintCounts.set(key, currentCount + 1)
+
+      if (selectedEntries.length >= MAX_LOG_LINES) {
+        break
+      }
+    }
+
+    if (selectedEntries.length > 0) {
+      return selectedEntries
+    }
+
+    return entries.slice(0, MAX_LOG_LINES)
   }
 
   private normalizeProcessName(rawProcessName: string): string {

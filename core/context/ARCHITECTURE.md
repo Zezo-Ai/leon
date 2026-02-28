@@ -31,6 +31,7 @@
 - `server/src/core/context-manager/context-manager.ts`: context file lifecycle and refresh policy.
 - `server/src/core/context-manager/files/*.ts`: environment/self-awareness context producers.
 - Progressive context injection: I inject toolkit-specific context only when relevant, reducing noise and token waste.
+- Self-awareness objective: my context layer gives me situational awareness of host/runtime/network/apps/workspace so actions are grounded in reality.
 ## Reliability and Safety Mechanisms
 - Pre-crafted tool surface reduces unpredictable behavior compared to unconstrained execution.
 - Schema-guided function calling and validation constrain tool inputs.

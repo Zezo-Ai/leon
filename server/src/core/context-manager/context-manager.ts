@@ -11,10 +11,14 @@ import { HostSystemContextFile } from '@/core/context-manager/files/host-system-
 import { GpuComputeContextFile } from '@/core/context-manager/files/gpu-compute-context-file'
 import { StorageContextFile } from '@/core/context-manager/files/storage-context-file'
 import { SystemResourcesContextFile } from '@/core/context-manager/files/system-resources-context-file'
-import { NetworkContextFile } from '@/core/context-manager/files/network-context-file'
 import { BrowserHistoryContextFile } from '@/core/context-manager/files/browser-history-context-file'
 import { LeonRuntimeContextFile } from '@/core/context-manager/files/leon-runtime-context-file'
 import { ActivityContextFile } from '@/core/context-manager/files/activity-context-file'
+import { LocalInventoryContextFile } from '@/core/context-manager/files/local-inventory-context-file'
+import { NetworkEcosystemContextFile } from '@/core/context-manager/files/network-ecosystem-context-file'
+import { WorkspaceIntelligenceContextFile } from '@/core/context-manager/files/workspace-intelligence-context-file'
+import { HabitsContextFile } from '@/core/context-manager/files/habits-context-file'
+import { MediaProfileContextFile } from '@/core/context-manager/files/media-profile-context-file'
 import { LeonContextFile } from '@/core/context-manager/files/leon-context-file'
 import { ArchitectureContextFile } from '@/core/context-manager/files/architecture-context-file'
 
@@ -23,6 +27,13 @@ interface ContextFileMetadata {
 }
 
 const CONTEXT_REFRESH_TTL_MS = 10 * 60 * 1_000
+const RETIRED_CONTEXT_FILES = [
+  'LOCAL_ECOSYSTEM.md',
+  'NETWORK.md',
+  'AUTOMATION_OPPORTUNITIES.md',
+  'MEDIA_TASTES.md'
+]
+const RETIRED_STATE_FILES = ['.media-tastes-state.json']
 
 export default class ContextManager {
   private static instance: ContextManager
@@ -38,9 +49,13 @@ export default class ContextManager {
     new GpuComputeContextFile(this.probeHelper),
     new StorageContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
     new SystemResourcesContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
-    new NetworkContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
     new BrowserHistoryContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
     new ActivityContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
+    new LocalInventoryContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
+    new NetworkEcosystemContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
+    new WorkspaceIntelligenceContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
+    new HabitsContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
+    new MediaProfileContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
     new LeonContextFile(),
     new ArchitectureContextFile(),
     new LeonRuntimeContextFile(this.probeHelper, {
@@ -76,6 +91,7 @@ export default class ContextManager {
     try {
       await fs.promises.mkdir(CONTEXT_PATH, { recursive: true })
       this.cleanupDisabledContextFiles()
+      this.cleanupRetiredContextFiles()
 
       for (const definition of this.contextFiles) {
         this.refreshContextFile(definition, true)
@@ -217,13 +233,20 @@ export default class ContextManager {
     }
 
     const filePath = this.getContextFilePath(definition.filename)
-    const content = this.ensureTrailingNewline(definition.generate())
+    try {
+      const content = this.ensureTrailingNewline(definition.generate())
 
-    fs.mkdirSync(CONTEXT_PATH, { recursive: true })
-    fs.writeFileSync(filePath, content, 'utf-8')
-    this.metadata.set(definition.filename, {
-      lastGeneratedAt: Date.now()
-    })
+      fs.mkdirSync(CONTEXT_PATH, { recursive: true })
+      fs.writeFileSync(filePath, content, 'utf-8')
+      this.metadata.set(definition.filename, {
+        lastGeneratedAt: Date.now()
+      })
+    } catch (e) {
+      LogHelper.title('Context Manager')
+      LogHelper.error(
+        `Failed to refresh context file "${definition.filename}": ${String(e)}`
+      )
+    }
   }
 
   private ensureTrailingNewline(content: string): string {
@@ -303,6 +326,36 @@ export default class ContextManager {
     for (const filename of this.disabledContextFiles) {
       const filePath = this.getContextFilePath(filename)
       this.metadata.delete(filename)
+
+      if (!fs.existsSync(filePath)) {
+        continue
+      }
+
+      try {
+        fs.rmSync(filePath, { force: true })
+      } catch {
+        continue
+      }
+    }
+  }
+
+  private cleanupRetiredContextFiles(): void {
+    for (const filename of RETIRED_CONTEXT_FILES) {
+      const filePath = this.getContextFilePath(filename)
+
+      if (!fs.existsSync(filePath)) {
+        continue
+      }
+
+      try {
+        fs.rmSync(filePath, { force: true })
+      } catch {
+        continue
+      }
+    }
+
+    for (const filename of RETIRED_STATE_FILES) {
+      const filePath = this.getContextFilePath(filename)
 
       if (!fs.existsSync(filePath)) {
         continue

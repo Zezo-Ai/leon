@@ -2,6 +2,11 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Search & Web",
   "description": "Tools to search the web and social media platforms.",
-  "context_files": ["NETWORK.md", "BROWSER_HISTORY.md"],
+  "context_files": [
+    "NETWORK_ECOSYSTEM.md",
+    "BROWSER_HISTORY.md",
+    "MEDIA_PROFILE.md",
+    "HABITS.md"
+  ],
   "tools": ["grok"]
 }
