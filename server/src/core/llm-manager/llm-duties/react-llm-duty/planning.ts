@@ -75,8 +75,13 @@ export async function runPlanningPhase(
       `Planning memory injection: ${memoryPack.length} chars`
     )
   }
+  const contextAwareInstruction = memoryPack.includes(
+    'Relevant Context Files (full content):'
+  )
+    ? '\n\nImportant: If the injected context files already contain enough information to answer the user request, return type="final" and do not plan tool calls.'
+    : ''
   const memorySection = memoryPack ? `\n\n${memoryPack}` : ''
-  const prompt = `${catalog.text}${catalogNote}${contextManifestSection}${memorySection}\n\nUser Request: "${caller.input}"`
+  const prompt = `${catalog.text}${catalogNote}${contextManifestSection}${memorySection}${contextAwareInstruction}\n\nUser Request: "${caller.input}"`
 
   const planSchema = PLAN_RESPONSE_SCHEMA
 

@@ -10,19 +10,11 @@ import {
 import { LLMDuties } from '@/core/llm-manager/types'
 import { LogHelper } from '@/helpers/log-helper'
 
-import { chunkText } from './chunker'
-import { cosineSimilarity } from './embedding-provider'
-import LlamaEmbeddingProvider from './llama-embedding-provider'
 import MemoryRepository from './memory-repository'
+import QMDBackend from './qmd-backend'
 import { buildDailyMarkdownSummary } from './summarizer'
 import type {
-  ContextChunkInput,
-  ContextDocumentInput,
-  EmbeddingProvider,
-  KnowledgeNamespace,
-  MemoryChunkInput,
   MemoryRecord,
-  MemoryScope,
   MemoryWriteInput,
   RecallHit,
   RecallQuery,
@@ -34,6 +26,7 @@ const CONTEXT_SYNC_TTL_MS = 5 * 60 * 1_000
 const LEON_MEMORY_DISCUSSION_TTL_DAYS = 5
 const LEON_MEMORY_RECALL_TOP_K = 12
 const LEON_MEMORY_PLANNING_TOKEN_BUDGET = 220
+const LEON_MEMORY_PLANNING_CONTEXT_FILES_TOKEN_BUDGET = 1_200
 const LEON_MEMORY_EXECUTION_TOKEN_BUDGET = 320
 const PERSISTENT_EXTRACTION_TIMEOUT_MS = 45_000
 const PERSISTENT_EXTRACTION_MAX_RETRIES = 1
@@ -48,6 +41,7 @@ const PERSISTENT_SIMILARITY_CONTAINMENT_MIN_CHARS = 40
 const RECALL_MIN_QUERY_TERMS = 3
 const MIN_TRUNCATED_RECALL_TOKENS = 48
 const TRUNCATED_RECALL_BUDGET_RATIO = 0.6
+const PERSISTENT_SIMILARITY_LOOKBACK = 300
 const DISCUSSION_TTL_MS = LEON_MEMORY_DISCUSSION_TTL_DAYS * 24 * 60 * 60 * 1_000
 const EXTRACT_PERSISTENT_MEMORY_SCHEMA = {
   type: 'object',
@@ -69,18 +63,6 @@ const EXTRACT_PERSISTENT_MEMORY_SCHEMA = {
   additionalProperties: false
 } as const
 
-function normalizeFTSQuery(query: string): string {
-  const terms = (query.toLowerCase().match(/[a-z0-9_]+/g) || [])
-    .map((term) => term.trim())
-    .filter((term) => term.length >= 2)
-
-  if (terms.length === 0) {
-    return ''
-  }
-
-  return terms.map((term) => `${term}*`).join(' OR ')
-}
-
 function normalizeContent(content: string): string {
   return content.replace(/\r\n/g, '\n').trim()
 }
@@ -91,26 +73,27 @@ function tokenizeWords(content: string): string[] {
     .filter((token) => token.length >= 2)
 }
 
-function namespaceRecallWeight(namespace: KnowledgeNamespace): number {
+function tokenizeFilenameWords(filename: string): string[] {
+  return (filename.toLowerCase().replace(/\.md$/i, '').match(/[a-z0-9_]+/g) || [])
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2)
+}
+
+function namespaceRecallWeight(namespace: RecallHit['namespace']): number {
   switch (namespace) {
     case 'context':
       return 1
     case 'memory_persistent':
-      return 0.85
+      return 1.05
     case 'memory_daily':
-      return 0.6
+      return 0.95
     case 'memory_discussion':
-      return 0.5
+      return 0.72
     case 'conversation_daily':
-      return 0.55
+      return 0.9
     default:
-      return 0.6
+      return 0.8
   }
-}
-
-function isConversationEchoChunk(content: string): boolean {
-  const normalized = normalizeContent(content)
-  return normalized.startsWith('Owner:') && normalized.includes('\nLeon:')
 }
 
 function computeHash(value: string): string {
@@ -119,18 +102,6 @@ function computeHash(value: string): string {
 
 function toDayKey(timestamp: number): string {
   return new Date(timestamp).toISOString().slice(0, 10)
-}
-
-function namespaceForScope(scope: MemoryScope): KnowledgeNamespace {
-  switch (scope) {
-    case 'persistent':
-      return 'memory_persistent'
-    case 'daily':
-      return 'memory_daily'
-    case 'discussion':
-    default:
-      return 'memory_discussion'
-  }
 }
 
 function renderRecallPrompt(result: RecallResult): string {
@@ -209,7 +180,8 @@ export default class MemoryManager {
   private lastContextSyncAt = 0
   private lastStorageMaintenanceAt = 0
   private readonly repository = new MemoryRepository()
-  private readonly embeddingProvider: EmbeddingProvider = new LlamaEmbeddingProvider()
+  private readonly qmdBackend = new QMDBackend()
+  private readonly contextChecksums = new Map<string, string>()
   private readonly persistentPath = path.join(MEMORY_PATH, 'persistent')
   private readonly dailyPath = path.join(MEMORY_PATH, 'daily')
   private readonly discussionPath = path.join(MEMORY_PATH, 'discussion')
@@ -308,22 +280,15 @@ export default class MemoryManager {
   private async shouldSkipSimilarPersistentCandidate(
     candidate: string
   ): Promise<boolean> {
-    const ftsQuery = normalizeFTSQuery(candidate)
-    if (!ftsQuery) {
-      return false
-    }
+    const existingContents = this.repository.listRecentPersistentContents(
+      PERSISTENT_SIMILARITY_LOOKBACK
+    )
 
-    const hits = this.repository.searchMemoryChunks({
-      query: ftsQuery,
-      namespaces: ['memory_persistent'],
-      topK: 8
-    })
-
-    for (const hit of hits) {
-      if (this.isNearDuplicatePersistentContent(candidate, hit.content)) {
-        const preview = hit.content.length > 200
-          ? `${hit.content.slice(0, 200)}...`
-          : hit.content
+    for (const existingContent of existingContents) {
+      if (this.isNearDuplicatePersistentContent(candidate, existingContent)) {
+        const preview = existingContent.length > 200
+          ? `${existingContent.slice(0, 200)}...`
+          : existingContent
         LogHelper.title('Memory Manager')
         LogHelper.debug(
           `Skipped persistent candidate due to similarity with existing memory: ${JSON.stringify(
@@ -335,6 +300,291 @@ export default class MemoryManager {
     }
 
     return false
+  }
+
+  private async buildContextFilesInjectionFromHits(
+    hits: RecallHit[],
+    query: string,
+    tokenBudget: number
+  ): Promise<string> {
+    if (tokenBudget <= 0) {
+      return ''
+    }
+
+    const queryTokens = new Set(tokenizeWords(query))
+    const contextCandidates = hits
+      .filter((hit) => hit.namespace === 'context')
+      .map((hit) => {
+        const filename = hit.sourcePath
+          ? path.basename(hit.sourcePath)
+          : hit.title || ''
+        const filenameTokens = tokenizeFilenameWords(filename)
+        const matchedFilenameTokens = filenameTokens.filter((token) =>
+          queryTokens.has(token)
+        ).length
+        const overlapBoost =
+          filenameTokens.length > 0
+            ? matchedFilenameTokens / filenameTokens.length
+            : 0
+
+        return {
+          filename,
+          baseScore: hit.bm25Score,
+          score: hit.bm25Score + overlapBoost * 0.8
+        }
+      })
+      .filter((candidate) => candidate.filename.endsWith('.md'))
+      .sort((a, b) => b.score - a.score)
+
+    const contextFilenames = [
+      ...new Set(contextCandidates.map((candidate) => candidate.filename))
+    ]
+
+    if (contextFilenames.length === 0) {
+      return ''
+    }
+
+    const maxInjectedFiles = Math.min(3, contextFilenames.length)
+    const selectedFilenames = contextFilenames.slice(0, maxInjectedFiles)
+    let remainingTokens = tokenBudget
+    const sections: string[] = []
+    const injectedFiles: string[] = []
+    const minReservePerRemainingFile = 180
+
+    for (const [index, filename] of selectedFilenames.entries()) {
+      if (remainingTokens <= 0) {
+        break
+      }
+
+      const filePath = path.join(CONTEXT_PATH, filename)
+      if (!fs.existsSync(filePath)) {
+        continue
+      }
+
+      const rawContent = await fs.promises.readFile(filePath, 'utf8')
+      const normalizedContent = normalizeContent(rawContent)
+      if (!normalizedContent) {
+        continue
+      }
+
+      const fullTokens = Math.max(1, Math.ceil(normalizedContent.length / 4))
+      const remainingFiles = selectedFilenames.length - (index + 1)
+      const reservedForRemaining = remainingFiles * minReservePerRemainingFile
+      const budgetForThisFile = Math.max(
+        minReservePerRemainingFile,
+        remainingTokens - reservedForRemaining
+      )
+
+      let fileContent = normalizedContent
+      let usedTokens = fullTokens
+
+      if (fullTokens > budgetForThisFile) {
+        const maxChars = budgetForThisFile * 4
+        if (maxChars < 120) {
+          break
+        }
+        fileContent = `${normalizedContent.slice(0, maxChars).trimEnd()}...`
+        usedTokens = Math.max(1, Math.ceil(fileContent.length / 4))
+      }
+
+      sections.push(`### ${filename}\n${fileContent}`)
+      injectedFiles.push(filename)
+      remainingTokens -= usedTokens
+    }
+
+    if (sections.length === 0) {
+      return ''
+    }
+
+    LogHelper.title('Memory Manager')
+    LogHelper.debug(
+      `Planning context files injection: files=${injectedFiles.join(', ')} | used_tokens=${tokenBudget - remainingTokens}`
+    )
+
+    return `Relevant Context Files (full content):\n${sections.join('\n\n')}`
+  }
+
+  private buildContextSnippet(
+    content: string,
+    queryTokens: string[]
+  ): string {
+    const normalized = normalizeContent(content)
+    if (!normalized) {
+      return ''
+    }
+
+    const lines = normalized.split('\n')
+    const relevantLines = lines.filter((line) => {
+      const lowerLine = line.toLowerCase()
+      return queryTokens.some((token) => lowerLine.includes(token))
+    })
+
+    const selected = (relevantLines.length > 0 ? relevantLines : lines.slice(0, 18))
+      .slice(0, 28)
+      .join('\n')
+
+    const maxChars = 1_800
+    if (selected.length <= maxChars) {
+      return selected
+    }
+
+    return `${selected.slice(0, maxChars).trimEnd()}...`
+  }
+
+  private async buildContextFilesystemFallbackHits(
+    query: string,
+    contextFilenames: string[] | undefined,
+    topK: number
+  ): Promise<RecallHit[]> {
+    const queryTokens = [...new Set(tokenizeWords(query))]
+    if (queryTokens.length === 0) {
+      return []
+    }
+
+    const allowedFilenames = new Set(
+      (contextFilenames || []).map((filename) => filename.toUpperCase())
+    )
+    const contextEntries = await fs.promises.readdir(CONTEXT_PATH, {
+      withFileTypes: true
+    })
+    const markdownPaths = contextEntries
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+      .filter((entry) =>
+        allowedFilenames.size === 0 ||
+        allowedFilenames.has(entry.name.toUpperCase())
+      )
+      .map((entry) => path.join(CONTEXT_PATH, entry.name))
+
+    const hits: RecallHit[] = []
+
+    for (const filePath of markdownPaths) {
+      const content = await fs.promises.readFile(filePath, 'utf8')
+      const normalized = normalizeContent(content)
+      if (!normalized) {
+        continue
+      }
+
+      const lower = normalized.toLowerCase()
+      const matchedTokens = queryTokens.filter((token) => lower.includes(token))
+      if (matchedTokens.length === 0) {
+        continue
+      }
+
+      let matchDensity = 0
+      for (const token of matchedTokens) {
+        const regex = new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')
+        matchDensity += (lower.match(regex) || []).length
+      }
+
+      const coverage = matchedTokens.length / queryTokens.length
+      const score = coverage + Math.min(1, matchDensity / 12) * 0.25
+      const snippet = this.buildContextSnippet(normalized, queryTokens)
+      if (!snippet) {
+        continue
+      }
+
+      hits.push({
+        chunkId: `context-fs:${filePath}`,
+        itemId: filePath,
+        namespace: 'context',
+        scope: null,
+        kind: null,
+        title: path.basename(filePath),
+        content: snippet,
+        bm25Score: score,
+        createdAt: Date.now(),
+        sourcePath: filePath
+      })
+    }
+
+    return hits
+      .sort((a, b) => b.bm25Score - a.bm25Score)
+      .slice(0, Math.max(topK, 1))
+  }
+
+  private async buildMemoryRepositoryFallbackHits(
+    query: string,
+    namespaces: RecallQuery['namespaces'],
+    topK: number
+  ): Promise<RecallHit[]> {
+    const queryTokens = [...new Set(tokenizeWords(query))]
+    if (queryTokens.length === 0) {
+      return []
+    }
+
+    const scopeByNamespace: Record<string, 'persistent' | 'daily' | 'discussion'> = {
+      memory_persistent: 'persistent',
+      memory_daily: 'daily',
+      memory_discussion: 'discussion',
+      conversation_daily: 'daily'
+    }
+
+    const scopes = [...new Set(
+      (namespaces || [])
+        .map((namespace) => scopeByNamespace[namespace])
+        .filter(
+          (scope): scope is 'persistent' | 'daily' | 'discussion' =>
+            Boolean(scope)
+        )
+    )]
+
+    if (scopes.length === 0) {
+      return []
+    }
+
+    const rows = this.repository.listMemoryItemsForRecall(scopes, 800)
+    const hits: RecallHit[] = []
+
+    for (const row of rows) {
+      const normalized = normalizeContent(row.content)
+      if (!normalized) {
+        continue
+      }
+
+      const lower = normalized.toLowerCase()
+      const matchedTokens = queryTokens.filter((token) => lower.includes(token))
+      if (matchedTokens.length === 0) {
+        continue
+      }
+
+      let matchDensity = 0
+      for (const token of matchedTokens) {
+        const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const regex = new RegExp(escaped, 'g')
+        matchDensity += (lower.match(regex) || []).length
+      }
+
+      const coverage = matchedTokens.length / queryTokens.length
+      const densityBoost = Math.min(1, matchDensity / 10) * 0.3
+      const baseScore = coverage + densityBoost
+
+      const namespace =
+        row.scope === 'persistent'
+          ? 'memory_persistent'
+          : row.scope === 'daily'
+            ? 'memory_daily'
+            : 'memory_discussion'
+
+      hits.push({
+        chunkId: `memory-db:${row.id}`,
+        itemId: row.id,
+        namespace,
+        scope: row.scope,
+        kind: null,
+        title: row.title,
+        content:
+          normalized.length > 2_200
+            ? `${normalized.slice(0, 2_200).trimEnd()}...`
+            : normalized,
+        bm25Score: baseScore,
+        createdAt: row.updatedAt,
+        sourcePath: null
+      })
+    }
+
+    return hits
+      .sort((a, b) => b.bm25Score - a.bm25Score)
+      .slice(0, Math.max(topK * 2, topK))
   }
 
   public constructor() {
@@ -362,9 +612,10 @@ export default class MemoryManager {
       ])
 
       await this.repository.load(MEMORY_DB_PATH)
-      await this.embeddingProvider.load()
 
       await this.syncContextFiles(true)
+      await this.qmdBackend.load()
+      await this.qmdBackend.refresh(true)
 
       this._isLoaded = true
       LogHelper.title('Memory Manager')
@@ -404,42 +655,32 @@ export default class MemoryManager {
       () => randomUUID()
     )
 
-    const namespace = namespaceForScope(saved.scope)
-    const chunks = chunkText(saved.content).map<MemoryChunkInput>((chunk) => ({
-      id: randomUUID(),
-      itemId: saved.id,
-      namespace,
-      chunkIndex: chunk.index,
-      content: chunk.content,
-      tokenEstimate: chunk.tokenEstimate,
-      createdAt: now,
-      updatedAt: now
-    }))
-
-    if (this.embeddingProvider.isReady) {
-      for (const chunk of chunks) {
-        const vector = await this.embeddingProvider.embedText(chunk.content)
-        if (!vector || vector.length === 0) {
-          continue
-        }
-
-        chunk.embeddingModel = this.embeddingProvider.modelName || 'embedding'
-        chunk.embeddingVector = vector
-      }
-    }
-
-    this.repository.replaceMemoryChunks(saved.id, chunks)
-
     if (saved.scope === 'persistent') {
       const filePath = this.getPersistentEntryFilePath(saved.id, saved.createdAt)
       const markdown = `> Persistent memory entry (${saved.kind})\n\n# ${saved.title || saved.kind}\n\nID: ${saved.id}\nCreated At: ${new Date(saved.createdAt).toISOString()}\n\n${saved.content}\n`
       await fs.promises.mkdir(path.dirname(filePath), { recursive: true })
       await fs.promises.writeFile(filePath, markdown, 'utf8')
+      this.qmdBackend.markDirty('memory_persistent')
     }
 
     if (saved.scope === 'daily' && saved.kind === 'summary' && saved.dayKey) {
       const filePath = path.join(this.dailyPath, `${saved.dayKey}.md`)
       await fs.promises.writeFile(filePath, saved.content, 'utf8')
+      this.qmdBackend.markDirty('memory_daily')
+    }
+
+    if (saved.scope === 'discussion' && saved.dayKey) {
+      const dayDiscussionPath = path.join(this.discussionPath, `${saved.dayKey}.md`)
+      const discussionHeader = `> Discussion memory for ${saved.dayKey}. Short-term rolling conversation context.\n# ${saved.dayKey}\n\n`
+      const line = `- ${new Date(saved.createdAt).toISOString()} | ${saved.content.replace(/\n/g, ' | ')}\n`
+
+      if (!fs.existsSync(dayDiscussionPath)) {
+        await fs.promises.writeFile(dayDiscussionPath, `${discussionHeader}${line}`, 'utf8')
+      } else {
+        await fs.promises.appendFile(dayDiscussionPath, line, 'utf8')
+      }
+
+      this.qmdBackend.markDirty('memory_discussion')
     }
 
     return saved
@@ -474,12 +715,12 @@ export default class MemoryManager {
       await this.load()
     }
 
-    const ftsQuery = normalizeFTSQuery(query)
-    if (!ftsQuery) {
+    const normalizedQuery = normalizeContent(query)
+    if (!normalizedQuery) {
       return 0
     }
 
-    return this.repository.softDeleteByQuery(ftsQuery)
+    return this.repository.softDeleteByQuery(normalizedQuery)
   }
 
   public async recall(input: RecallQuery): Promise<RecallResult> {
@@ -498,176 +739,136 @@ export default class MemoryManager {
       'context'
     ]
 
-    const ftsQuery = normalizeFTSQuery(input.query || '')
-    const memoryNamespaces = namespaces.filter((namespace) =>
-      namespace !== 'context'
-    )
-
-    const hits: RecallHit[] = []
-
     LogHelper.title('Memory Manager')
     LogHelper.debug(
       `Recall query="${input.query}" | namespaces=${namespaces.join(', ')} | context_files=${
         input.contextFilenames && input.contextFilenames.length > 0
           ? input.contextFilenames.join(', ')
           : 'all'
-      } | topK=${topK} | token_budget=${tokenBudget} | fts_query="${ftsQuery || 'none'}"`
+      } | topK=${topK} | token_budget=${tokenBudget}`
     )
 
-    if (ftsQuery) {
-      if (memoryNamespaces.length > 0) {
-        hits.push(
-          ...this.repository.searchMemoryChunks({
-            query: ftsQuery,
-            namespaces: memoryNamespaces,
-            topK: topK * 2
-          })
+    const qmdHits = await this.qmdBackend.query({
+      query: input.query,
+      namespaces,
+      topK,
+      ...(input.contextFilenames && input.contextFilenames.length > 0
+        ? { contextFilenames: input.contextFilenames }
+        : {})
+    })
+
+    const hits: RecallHit[] = qmdHits.map((hit, index) => ({
+      chunkId: hit.id || `${hit.namespace}:${index}`,
+      itemId: hit.path || hit.id,
+      namespace: hit.namespace,
+      scope:
+        hit.namespace === 'memory_persistent'
+          ? 'persistent'
+          : hit.namespace === 'memory_daily'
+            ? 'daily'
+            : hit.namespace === 'memory_discussion'
+              ? 'discussion'
+              : null,
+      kind: null,
+      title: hit.title || path.basename(hit.path || '') || null,
+      content: normalizeContent(hit.content),
+      bm25Score: hit.score,
+      createdAt: Date.now(),
+      sourcePath: hit.path || null
+    }))
+
+    const requestedMemoryNamespaces = (namespaces || []).filter((namespace) =>
+      namespace === 'memory_persistent' ||
+      namespace === 'memory_daily' ||
+      namespace === 'memory_discussion' ||
+      namespace === 'conversation_daily'
+    )
+    const hasMemoryHits = hits.some((hit) =>
+      hit.namespace === 'memory_persistent' ||
+      hit.namespace === 'memory_daily' ||
+      hit.namespace === 'memory_discussion'
+    )
+
+    if (requestedMemoryNamespaces.length > 0 && !hasMemoryHits) {
+      try {
+        const memoryFallbackHits = await this.buildMemoryRepositoryFallbackHits(
+          input.query,
+          namespaces,
+          topK
         )
-      }
-
-      if (namespaces.includes('context')) {
-        const contextSearchParams: {
-          query: string
-          namespaces: string[]
-          topK: number
-          filenames?: string[]
-        } = {
-          query: ftsQuery,
-          namespaces: ['context'],
-          topK: topK * 2
-        }
-
-        if (input.contextFilenames && input.contextFilenames.length > 0) {
-          contextSearchParams.filenames = input.contextFilenames
-        }
-
-        hits.push(
-          ...this.repository.searchContextChunks(contextSearchParams)
-        )
-      }
-    }
-
-    const queryTokens = [...new Set(tokenizeWords(input.query))]
-    const lexicalScores = new Map<string, number>()
-    const rankingScores = new Map<string, number>()
-    if (hits.length > 0 && queryTokens.length > 0) {
-      const queryTokenSet = new Set(queryTokens)
-      const tokenDocumentFrequency = new Map<string, number>()
-      const perHitTokenSets = new Map<string, Set<string>>()
-
-      for (const hit of hits) {
-        const hitTokenSet = new Set(tokenizeWords(hit.content))
-        perHitTokenSets.set(hit.chunkId, hitTokenSet)
-
-        for (const token of queryTokenSet) {
-          if (!hitTokenSet.has(token)) {
-            continue
-          }
-          tokenDocumentFrequency.set(
-            token,
-            (tokenDocumentFrequency.get(token) || 0) + 1
+        if (memoryFallbackHits.length > 0) {
+          hits.push(...memoryFallbackHits)
+          LogHelper.title('Memory Manager')
+          LogHelper.debug(
+            `Memory lexical fallback added ${memoryFallbackHits.length} candidate(s)`
           )
         }
-      }
-
-      const totalDocs = hits.length
-      const tokenWeights = new Map<string, number>()
-      let totalWeight = 0
-      for (const token of queryTokenSet) {
-        const df = tokenDocumentFrequency.get(token) || 0
-        const idf = Math.log((totalDocs + 1) / (df + 1)) + 1
-        tokenWeights.set(token, idf)
-        totalWeight += idf
-      }
-
-      for (const hit of hits) {
-        const hitTokenSet = perHitTokenSets.get(hit.chunkId)
-        if (!hitTokenSet || totalWeight <= 0) {
-          lexicalScores.set(hit.chunkId, 0)
-          continue
-        }
-
-        let matchedWeight = 0
-        for (const token of queryTokenSet) {
-          if (hitTokenSet.has(token)) {
-            matchedWeight += tokenWeights.get(token) || 0
-          }
-        }
-
-        lexicalScores.set(hit.chunkId, matchedWeight / totalWeight)
+      } catch (error) {
+        LogHelper.title('Memory Manager')
+        LogHelper.warning(`Memory lexical fallback skipped: ${error}`)
       }
     }
 
-    for (const hit of hits) {
-      const lexical = lexicalScores.get(hit.chunkId) || 0
-      const namespaceWeight = namespaceRecallWeight(hit.namespace)
-      const structureWeight = isConversationEchoChunk(hit.content) ? 0.55 : 1
-      rankingScores.set(
-        hit.chunkId,
-        lexical * namespaceWeight * structureWeight
-      )
-    }
-
-    if (hits.length > 1) {
-      if (input.useEmbeddings && this.embeddingProvider.isReady) {
-        const queryVector = await this.embeddingProvider.embedText(input.query)
-        if (queryVector && queryVector.length > 0) {
-          for (const hit of hits) {
-            let chunkVector = this.repository.getChunkEmbeddingVector(hit.chunkId)
-            if (!chunkVector) {
-              chunkVector = await this.embeddingProvider.embedText(hit.content)
-              if (chunkVector && chunkVector.length > 0) {
-                this.repository.setChunkEmbeddingVector(
-                  hit.chunkId,
-                  chunkVector,
-                  this.embeddingProvider.modelName || 'embedding'
-                )
-              }
-            }
-
-            if (chunkVector && chunkVector.length > 0) {
-              hit.rerankScore = cosineSimilarity(queryVector, chunkVector)
-            }
-          }
-
-          hits.sort((a, b) => {
-            const aRank = rankingScores.get(a.chunkId) || 0
-            const bRank = rankingScores.get(b.chunkId) || 0
-            if (aRank !== bRank) {
-              return bRank - aRank
-            }
-
-            const aRerank = a.rerankScore ?? -1
-            const bRerank = b.rerankScore ?? -1
-            if (aRerank !== bRerank) {
-              return bRerank - aRerank
-            }
-
-            return a.bm25Score - b.bm25Score
-          })
-        } else {
-          hits.sort((a, b) => {
-            const aRank = rankingScores.get(a.chunkId) || 0
-            const bRank = rankingScores.get(b.chunkId) || 0
-            if (aRank !== bRank) {
-              return bRank - aRank
-            }
-
-            return a.bm25Score - b.bm25Score
-          })
+    if (
+      namespaces.includes('context') &&
+      !hits.some((hit) => hit.namespace === 'context')
+    ) {
+      try {
+        const fallbackContextHits = await this.buildContextFilesystemFallbackHits(
+          input.query,
+          input.contextFilenames,
+          topK
+        )
+        if (fallbackContextHits.length > 0) {
+          hits.push(...fallbackContextHits)
+          LogHelper.title('Memory Manager')
+          LogHelper.debug(
+            `Context lexical fallback added ${fallbackContextHits.length} candidate(s)`
+          )
         }
-      } else {
-        hits.sort((a, b) => {
-          const aRank = rankingScores.get(a.chunkId) || 0
-          const bRank = rankingScores.get(b.chunkId) || 0
-          if (aRank !== bRank) {
-            return bRank - aRank
-          }
-
-          return a.bm25Score - b.bm25Score
-        })
+      } catch (error) {
+        LogHelper.title('Memory Manager')
+        LogHelper.warning(`Context lexical fallback skipped: ${error}`)
       }
     }
+
+    const queryTokens = new Set(tokenizeWords(input.query))
+    const contextFilenameBoost = (hit: RecallHit): number => {
+      if (hit.namespace !== 'context') {
+        return 0
+      }
+
+      const sourceLabel = hit.sourcePath
+        ? path.basename(hit.sourcePath)
+        : hit.title || ''
+      const filenameTokens = tokenizeFilenameWords(sourceLabel)
+      if (filenameTokens.length === 0) {
+        return 0
+      }
+
+      const matchedCount = filenameTokens.filter((token) =>
+        queryTokens.has(token)
+      ).length
+      if (matchedCount === 0) {
+        return 0
+      }
+
+      return (matchedCount / filenameTokens.length) * 0.8
+    }
+
+    hits.sort((a, b) => {
+      const aScore =
+        a.bm25Score * namespaceRecallWeight(a.namespace) +
+        contextFilenameBoost(a)
+      const bScore =
+        b.bm25Score * namespaceRecallWeight(b.namespace) +
+        contextFilenameBoost(b)
+      if (aScore !== bScore) {
+        return bScore - aScore
+      }
+
+      return b.bm25Score - a.bm25Score
+    })
 
     LogHelper.title('Memory Manager')
     LogHelper.debug(`Recall candidates: ${hits.length}`)
@@ -810,8 +1011,9 @@ export default class MemoryManager {
       const preview = hit.content.length > 280
         ? `${hit.content.slice(0, 280)}...`
         : hit.content
+      const weightedScore = hit.bm25Score * namespaceRecallWeight(hit.namespace)
       LogHelper.debug(
-        `Recall selected[${index + 1}] source="${sourceLabel}" namespace=${hit.namespace} score=${(rankingScores.get(hit.chunkId) || 0).toFixed(4)} lexical=${(lexicalScores.get(hit.chunkId) || 0).toFixed(4)} bm25=${hit.bm25Score.toFixed(4)} rerank=${(hit.rerankScore ?? -1).toFixed(4)} content=${JSON.stringify(preview)}`
+        `Recall selected[${index + 1}] source="${sourceLabel}" namespace=${hit.namespace} score=${hit.bm25Score.toFixed(4)} weighted=${weightedScore.toFixed(4)} content=${JSON.stringify(preview)}`
       )
     }
 
@@ -844,20 +1046,29 @@ export default class MemoryManager {
       ],
       topK: LEON_MEMORY_RECALL_TOP_K,
       tokenBudget,
-      includeFacts: true,
-      useEmbeddings: true
+      includeFacts: true
     })
 
     if (!recalled.hits.length && !recalled.facts.length) {
       return ''
     }
 
-    LogHelper.title('Memory Manager')
-    LogHelper.debug(
-      `Planning memory pack built | chars=${recalled.promptText.length} | used_tokens=${recalled.usedTokenEstimate}`
+    const contextFilesPack = await this.buildContextFilesInjectionFromHits(
+      recalled.hits,
+      query,
+      LEON_MEMORY_PLANNING_CONTEXT_FILES_TOKEN_BUDGET
     )
 
-    return recalled.promptText
+    const promptText = contextFilesPack
+      ? `${recalled.promptText}\n\n${contextFilesPack}`
+      : recalled.promptText
+
+    LogHelper.title('Memory Manager')
+    LogHelper.debug(
+      `Planning memory pack built | chars=${promptText.length} | used_tokens=${recalled.usedTokenEstimate}`
+    )
+
+    return promptText
   }
 
   public async buildExecutionMemoryPack(
@@ -881,8 +1092,7 @@ export default class MemoryManager {
       contextFilenames: includeContext ? normalizedContextFiles : [],
       topK: LEON_MEMORY_RECALL_TOP_K,
       tokenBudget,
-      includeFacts: true,
-      useEmbeddings: true
+      includeFacts: true
     })
 
     if (!recalled.hits.length && !recalled.facts.length) {
@@ -1248,70 +1458,29 @@ Return JSON.`
         .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
         .map((entry) => path.join(CONTEXT_PATH, entry.name))
 
-      const livePaths = new Set(markdownFiles)
-
+      let hasChanges = force
+      const livePaths = new Set<string>()
       for (const filePath of markdownFiles) {
-        const filename = path.basename(filePath)
-        const content = normalizeContent(await fs.promises.readFile(filePath, 'utf8'))
-        if (!content) {
-          continue
-        }
-
+        livePaths.add(filePath)
+        const content = await fs.promises.readFile(filePath, 'utf8')
         const checksum = computeHash(content)
-        const currentDocument = this.repository.getContextDocumentByPath(filePath)
-        if (currentDocument && String(currentDocument['checksum'] || '') === checksum) {
-          continue
+        const previousChecksum = this.contextChecksums.get(filePath)
+
+        if (previousChecksum !== checksum) {
+          this.contextChecksums.set(filePath, checksum)
+          hasChanges = true
         }
-
-        const nowTs = Date.now()
-        const documentId = currentDocument?.['id']
-          ? String(currentDocument['id'])
-          : randomUUID()
-
-        const documentInput: ContextDocumentInput = {
-          id: documentId,
-          filename,
-          filePath,
-          checksum,
-          title: filename,
-          createdAt: currentDocument?.['created_at']
-            ? Number(currentDocument['created_at'])
-            : nowTs,
-          updatedAt: nowTs,
-          lastIndexedAt: nowTs
-        }
-        this.repository.upsertContextDocument(documentInput)
-
-        const chunks = chunkText(content).map<ContextChunkInput>((chunk) => ({
-          id: randomUUID(),
-          documentId,
-          chunkIndex: chunk.index,
-          content: chunk.content,
-          tokenEstimate: chunk.tokenEstimate,
-          createdAt: nowTs,
-          updatedAt: nowTs
-        }))
-
-        if (this.embeddingProvider.isReady) {
-          for (const chunk of chunks) {
-            const vector = await this.embeddingProvider.embedText(chunk.content)
-            if (!vector || vector.length === 0) {
-              continue
-            }
-
-            chunk.embeddingModel = this.embeddingProvider.modelName || 'embedding'
-            chunk.embeddingVector = vector
-          }
-        }
-
-        this.repository.replaceContextChunks(documentId, chunks)
       }
 
-      const indexedPaths = this.repository.listContextDocumentPaths()
-      for (const indexedPath of indexedPaths) {
-        if (!livePaths.has(indexedPath)) {
-          this.repository.markContextDocumentDeleted(indexedPath)
+      for (const trackedPath of [...this.contextChecksums.keys()]) {
+        if (!livePaths.has(trackedPath)) {
+          this.contextChecksums.delete(trackedPath)
+          hasChanges = true
         }
+      }
+
+      if (hasChanges) {
+        this.qmdBackend.markDirty('context')
       }
 
       this.lastContextSyncAt = now

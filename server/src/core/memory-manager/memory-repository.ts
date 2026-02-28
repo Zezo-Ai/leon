@@ -3,38 +3,18 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
 
+import SQLite from 'better-sqlite3'
+import type {
+  Database as SQLiteDatabase
+} from 'better-sqlite3'
+
 import { LogHelper } from '@/helpers/log-helper'
 
 import type {
-  ContextChunkInput,
-  ContextDocumentInput,
-  MemoryChunkInput,
   MemoryRecord,
   MemoryScope,
-  MemoryWriteInput,
-  RecallHit
+  MemoryWriteInput
 } from './types'
-
-interface SQLiteStatement {
-  run(...args: unknown[]): {
-    changes?: number
-    lastInsertRowid?: number | bigint
-  }
-  get(...args: unknown[]): Record<string, unknown> | undefined
-  all(...args: unknown[]): Array<Record<string, unknown>>
-}
-
-interface SQLiteDatabase {
-  exec(sql: string): void
-  prepare(sql: string): SQLiteStatement
-}
-
-interface SearchParams {
-  query: string
-  namespaces: string[]
-  filenames?: string[]
-  topK: number
-}
 
 const fileName = fileURLToPath(import.meta.url)
 const dirName = path.dirname(fileName)
@@ -93,11 +73,7 @@ export default class MemoryRepository {
 
     await fs.promises.mkdir(path.dirname(dbPath), { recursive: true })
 
-    const sqliteModule = await Function('return import("node:sqlite")')() as {
-      DatabaseSync: new (filename: string) => SQLiteDatabase
-    }
-
-    this.db = new sqliteModule.DatabaseSync(dbPath)
+    this.db = new SQLite(dbPath)
     const schemaPath = path.join(dirName, 'sql', 'schema.sql')
     const schemaSQL = await fs.promises.readFile(schemaPath, 'utf8')
     this.db.exec(schemaSQL)
@@ -219,277 +195,6 @@ export default class MemoryRepository {
     )
   }
 
-  public replaceMemoryChunks(itemId: string, chunks: MemoryChunkInput[]): void {
-    const db = this.ensureDb()
-    db.prepare('DELETE FROM memory_chunks WHERE item_id = ?').run(itemId)
-
-    if (chunks.length === 0) {
-      return
-    }
-
-    const insertStmt = db.prepare(
-      `INSERT INTO memory_chunks (
-        id, item_id, namespace, chunk_index, content, token_estimate,
-        created_at, updated_at, embedding_model, embedding_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-
-    for (const chunk of chunks) {
-      insertStmt.run(
-        chunk.id,
-        chunk.itemId,
-        chunk.namespace,
-        chunk.chunkIndex,
-        chunk.content,
-        chunk.tokenEstimate,
-        chunk.createdAt,
-        chunk.updatedAt,
-        chunk.embeddingModel || null,
-        chunk.embeddingVector ? JSON.stringify(chunk.embeddingVector) : null
-      )
-    }
-  }
-
-  public upsertContextDocument(input: ContextDocumentInput): void {
-    const db = this.ensureDb()
-    const existing = db
-      .prepare('SELECT id FROM context_documents WHERE file_path = ? LIMIT 1')
-      .get(input.filePath)
-
-    if (existing?.['id']) {
-      db.prepare(
-        `UPDATE context_documents
-         SET filename = ?, checksum = ?, title = ?, updated_at = ?, last_indexed_at = ?, is_deleted = 0
-         WHERE id = ?`
-      ).run(
-        input.filename,
-        input.checksum,
-        input.title || null,
-        input.updatedAt,
-        input.lastIndexedAt,
-        existing['id']
-      )
-      return
-    }
-
-    db.prepare(
-      `INSERT INTO context_documents (
-         id, filename, file_path, checksum, title,
-         created_at, updated_at, last_indexed_at, is_deleted
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`
-    ).run(
-      input.id,
-      input.filename,
-      input.filePath,
-      input.checksum,
-      input.title || null,
-      input.createdAt,
-      input.updatedAt,
-      input.lastIndexedAt
-    )
-  }
-
-  public getContextDocumentByPath(
-    filePath: string
-  ): Record<string, unknown> | null {
-    const db = this.ensureDb()
-    const row = db
-      .prepare('SELECT * FROM context_documents WHERE file_path = ? LIMIT 1')
-      .get(filePath)
-
-    return row || null
-  }
-
-  public replaceContextChunks(
-    documentId: string,
-    chunks: ContextChunkInput[]
-  ): void {
-    const db = this.ensureDb()
-    db.prepare('DELETE FROM context_chunks WHERE document_id = ?').run(documentId)
-
-    if (chunks.length === 0) {
-      return
-    }
-
-    const insertStmt = db.prepare(
-      `INSERT INTO context_chunks (
-         id, document_id, chunk_index, content, token_estimate,
-         created_at, updated_at, embedding_model, embedding_json
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-
-    for (const chunk of chunks) {
-      insertStmt.run(
-        chunk.id,
-        chunk.documentId,
-        chunk.chunkIndex,
-        chunk.content,
-        chunk.tokenEstimate,
-        chunk.createdAt,
-        chunk.updatedAt,
-        chunk.embeddingModel || null,
-        chunk.embeddingVector ? JSON.stringify(chunk.embeddingVector) : null
-      )
-    }
-  }
-
-  public searchMemoryChunks(params: SearchParams): RecallHit[] {
-    if (!params.namespaces.length) {
-      return []
-    }
-
-    const db = this.ensureDb()
-    const placeholders = params.namespaces.map(() => '?').join(',')
-    const stmt = db.prepare(
-      `SELECT
-         memory_chunks.id AS chunk_id,
-         memory_chunks.item_id AS item_id,
-         memory_chunks.namespace AS namespace,
-         memory_chunks.content AS content,
-         memory_chunks.updated_at AS created_at,
-         memory_items.scope AS scope,
-         memory_items.kind AS kind,
-         memory_items.title AS title,
-         bm25(memory_chunks_fts) AS bm25_score
-       FROM memory_chunks_fts
-       JOIN memory_chunks ON memory_chunks.id = memory_chunks_fts.chunk_id
-       JOIN memory_items ON memory_items.id = memory_chunks.item_id
-       WHERE memory_chunks_fts MATCH ?
-         AND memory_chunks.namespace IN (${placeholders})
-         AND memory_items.is_deleted = 0
-       ORDER BY bm25_score
-       LIMIT ?`
-    )
-
-    const rows = stmt.all(
-      params.query,
-      ...params.namespaces,
-      params.topK
-    )
-
-    return rows.map((row) => ({
-      chunkId: String(row['chunk_id'] || ''),
-      itemId: String(row['item_id'] || ''),
-      namespace: String(row['namespace'] || 'memory_discussion') as RecallHit['namespace'],
-      scope: row['scope'] ? (String(row['scope']) as RecallHit['scope']) : null,
-      kind: row['kind'] ? (String(row['kind']) as RecallHit['kind']) : null,
-      title: row['title'] ? String(row['title']) : null,
-      content: String(row['content'] || ''),
-      bm25Score: Number(row['bm25_score'] || 0),
-      createdAt: Number(row['created_at'] || Date.now()),
-      sourcePath: null
-    }))
-  }
-
-  public searchContextChunks(params: SearchParams): RecallHit[] {
-    const db = this.ensureDb()
-    const filenameFilters =
-      params.filenames && params.filenames.length > 0
-        ? params.filenames
-        : null
-    const filenamePlaceholders = filenameFilters
-      ? filenameFilters.map(() => '?').join(',')
-      : ''
-    const filenameWhere = filenameFilters
-      ? ` AND context_documents.filename IN (${filenamePlaceholders})`
-      : ''
-    const stmt = db.prepare(
-      `SELECT
-         context_chunks.id AS chunk_id,
-         context_chunks.document_id AS item_id,
-         context_chunks.content AS content,
-         context_chunks.updated_at AS created_at,
-         context_documents.filename AS title,
-         context_documents.file_path AS source_path,
-         bm25(context_chunks_fts) AS bm25_score
-       FROM context_chunks_fts
-       JOIN context_chunks ON context_chunks.id = context_chunks_fts.chunk_id
-       JOIN context_documents ON context_documents.id = context_chunks.document_id
-       WHERE context_chunks_fts MATCH ?
-         AND context_documents.is_deleted = 0
-         ${filenameWhere}
-       ORDER BY bm25_score
-       LIMIT ?`
-    )
-
-    const rows = filenameFilters
-      ? stmt.all(params.query, ...filenameFilters, params.topK)
-      : stmt.all(params.query, params.topK)
-
-    return rows.map((row) => ({
-      chunkId: String(row['chunk_id'] || ''),
-      itemId: String(row['item_id'] || ''),
-      namespace: 'context',
-      scope: null,
-      kind: null,
-      title: row['title'] ? String(row['title']) : null,
-      content: String(row['content'] || ''),
-      bm25Score: Number(row['bm25_score'] || 0),
-      createdAt: Number(row['created_at'] || Date.now()),
-      sourcePath: row['source_path'] ? String(row['source_path']) : null
-    }))
-  }
-
-  public getChunkEmbeddingVector(chunkId: string): number[] | null {
-    const db = this.ensureDb()
-    const row = db
-      .prepare(
-        `SELECT embedding_json
-         FROM memory_chunks
-         WHERE id = ?
-         UNION ALL
-         SELECT embedding_json
-         FROM context_chunks
-         WHERE id = ?
-         LIMIT 1`
-      )
-      .get(chunkId, chunkId)
-
-    if (!row || typeof row['embedding_json'] !== 'string') {
-      return null
-    }
-
-    try {
-      const parsed = JSON.parse(String(row['embedding_json']))
-      if (Array.isArray(parsed)) {
-        return parsed
-          .map((value) => Number(value))
-          .filter((value) => Number.isFinite(value))
-      }
-    } catch {
-      // Ignore malformed embeddings.
-    }
-
-    return null
-  }
-
-  public setChunkEmbeddingVector(
-    chunkId: string,
-    vector: number[],
-    modelName: string
-  ): void {
-    const db = this.ensureDb()
-    const payload = JSON.stringify(vector)
-
-    const memoryResult = db
-      .prepare(
-        `UPDATE memory_chunks
-         SET embedding_model = ?, embedding_json = ?, updated_at = ?
-         WHERE id = ?`
-      )
-      .run(modelName, payload, Date.now(), chunkId)
-
-    if ((memoryResult.changes || 0) > 0) {
-      return
-    }
-
-    db.prepare(
-      `UPDATE context_chunks
-       SET embedding_model = ?, embedding_json = ?, updated_at = ?
-       WHERE id = ?`
-    ).run(modelName, payload, Date.now(), chunkId)
-  }
-
   public getDailyConversationLogs(dayKey: string): Array<{ content: string }> {
     const db = this.ensureDb()
     const rows = db
@@ -598,6 +303,60 @@ export default class MemoryRepository {
     return Number(row?.['count'] || 0)
   }
 
+  public listRecentPersistentContents(limit = 200): string[] {
+    const db = this.ensureDb()
+    return db
+      .prepare(
+        `SELECT content_text
+         FROM memory_items
+         WHERE scope = 'persistent'
+           AND is_deleted = 0
+         ORDER BY updated_at DESC
+         LIMIT ?`
+      )
+      .all(limit)
+      .map((row) => String(row['content_text'] || '').trim())
+      .filter((value) => value.length > 0)
+  }
+
+  public listMemoryItemsForRecall(
+    scopes: MemoryScope[],
+    limit = 500
+  ): Array<{
+    id: string
+    scope: MemoryScope
+    kind: string
+    title: string | null
+    content: string
+    updatedAt: number
+  }> {
+    const db = this.ensureDb()
+    if (scopes.length === 0) {
+      return []
+    }
+
+    const placeholders = scopes.map(() => '?').join(',')
+    const rows = db
+      .prepare(
+        `SELECT id, scope, kind, title, content_text, updated_at
+         FROM memory_items
+         WHERE is_deleted = 0
+           AND scope IN (${placeholders})
+         ORDER BY updated_at DESC
+         LIMIT ?`
+      )
+      .all(...scopes, limit)
+
+    return rows.map((row) => ({
+      id: String(row['id'] || ''),
+      scope: String(row['scope'] || 'discussion') as MemoryScope,
+      kind: String(row['kind'] || 'note'),
+      title: row['title'] ? String(row['title']) : null,
+      content: String(row['content_text'] || ''),
+      updatedAt: Number(row['updated_at'] || Date.now())
+    }))
+  }
+
   public softDeleteById(id: string): boolean {
     const db = this.ensureDb()
     const result = db
@@ -614,16 +373,21 @@ export default class MemoryRepository {
   public softDeleteByQuery(query: string): number {
     const db = this.ensureDb()
 
+    const normalizedQuery = query.trim().toLowerCase()
+    if (!normalizedQuery) {
+      return 0
+    }
+
     const ids = db
       .prepare(
-        `SELECT DISTINCT memory_items.id
-         FROM memory_chunks_fts
-         JOIN memory_chunks ON memory_chunks.id = memory_chunks_fts.chunk_id
-         JOIN memory_items ON memory_items.id = memory_chunks.item_id
-         WHERE memory_chunks_fts MATCH ?
-           AND memory_items.is_deleted = 0`
+        `SELECT id
+         FROM memory_items
+         WHERE is_deleted = 0
+           AND LOWER(content_text) LIKE ?
+         ORDER BY updated_at DESC
+         LIMIT 200`
       )
-      .all(query)
+      .all(`%${normalizedQuery}%`)
       .map((row) => String(row['id'] || ''))
       .filter((id) => id.length > 0)
 
@@ -733,24 +497,6 @@ export default class MemoryRepository {
       now,
       now
     )
-  }
-
-  public markContextDocumentDeleted(filePath: string): void {
-    const db = this.ensureDb()
-    db.prepare(
-      `UPDATE context_documents
-       SET is_deleted = 1, updated_at = ?
-       WHERE file_path = ?`
-    ).run(Date.now(), filePath)
-  }
-
-  public listContextDocumentPaths(): string[] {
-    const db = this.ensureDb()
-    return db
-      .prepare('SELECT file_path FROM context_documents WHERE is_deleted = 0')
-      .all()
-      .map((row) => String(row['file_path'] || ''))
-      .filter((value) => value.length > 0)
   }
 
   public debugHealthCheck(): void {

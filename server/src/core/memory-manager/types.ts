@@ -66,7 +66,6 @@ export interface RecallQuery {
   topK?: number
   tokenBudget?: number
   includeFacts?: boolean
-  useEmbeddings?: boolean
 }
 
 export interface RecallHit {
@@ -105,47 +104,4 @@ export interface TurnObservationInput {
     status: 'success' | 'error'
     observation: string
   }>
-}
-
-export interface MemoryChunkInput {
-  id: string
-  itemId: string
-  namespace: KnowledgeNamespace
-  chunkIndex: number
-  content: string
-  tokenEstimate: number
-  createdAt: number
-  updatedAt: number
-  embeddingModel?: string
-  embeddingVector?: number[] | null
-}
-
-export interface ContextDocumentInput {
-  id: string
-  filename: string
-  filePath: string
-  checksum: string
-  title?: string | null
-  createdAt: number
-  updatedAt: number
-  lastIndexedAt: number
-}
-
-export interface ContextChunkInput {
-  id: string
-  documentId: string
-  chunkIndex: number
-  content: string
-  tokenEstimate: number
-  createdAt: number
-  updatedAt: number
-  embeddingModel?: string
-  embeddingVector?: number[] | null
-}
-
-export interface EmbeddingProvider {
-  readonly isReady: boolean
-  readonly modelName: string | null
-  load(): Promise<void>
-  embedText(text: string): Promise<number[] | null>
 }

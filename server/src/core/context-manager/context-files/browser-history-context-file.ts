@@ -222,9 +222,9 @@ let db = null
 let tempDirectory = ''
 
 try {
-  const sqliteModule = await import('node:sqlite')
-  const DatabaseSync = sqliteModule.DatabaseSync
-  if (!DatabaseSync || !dbPath || !flavor) {
+  const sqliteModule = await import('better-sqlite3')
+  const Database = sqliteModule.default
+  if (!Database || !dbPath || !flavor) {
     console.log('[]')
     process.exit(0)
   }
@@ -241,7 +241,10 @@ try {
     fs.copyFileSync(shmPath, tempDatabasePath + '-shm')
   }
 
-  db = new DatabaseSync(tempDatabasePath, { readBigInts: true })
+  db = new Database(tempDatabasePath, {
+    readonly: true,
+    fileMustExist: true
+  })
 
   let rows = []
 

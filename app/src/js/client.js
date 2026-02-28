@@ -20,6 +20,7 @@ export default class Client {
     this._recorder = {}
     this._suggestions = []
     this._answerGenerationId = 'xxx'
+    this._activeStreamGenerationId = null
     this._ttsAudioContext = null
     this._isLeonGeneratingAnswer = false
     this._isVoiceModeEnabled = false
@@ -177,25 +178,30 @@ export default class Client {
        * Just save the bubble if the newest bubble is from the streaming.
        * Otherwise, create a new bubble
        */
-      const newestBubbleContainerElement =
-        document.querySelector('.leon:last-child')
-      const isNewestBubbleFromStreaming =
-        newestBubbleContainerElement?.classList.contains(
-          this._answerGenerationId
-        )
+      const streamGenerationId =
+        this._activeStreamGenerationId || this._answerGenerationId
+      const streamedBubbleContainerElement = streamGenerationId
+        ? document.querySelector(
+            `.bubble-container.leon.${streamGenerationId}`
+          )
+        : null
+      const isBubbleFromStreaming = Boolean(streamedBubbleContainerElement)
 
-      if (isNewestBubbleFromStreaming) {
+      if (isBubbleFromStreaming && streamedBubbleContainerElement) {
         this.chatbot.saveBubble('leon', data)
 
         // Slightly delay the update to avoid the stream animation to be interrupted
         setTimeout(() => {
           // Update the text of the bubble (quick emoji fix)
-          newestBubbleContainerElement.querySelector('p.bubble').innerHTML =
+          streamedBubbleContainerElement.querySelector('p.bubble').innerHTML =
             this.chatbot.formatMessage(data)
         }, 2_500)
       } else {
         this.chatbot.receivedFrom('leon', data)
       }
+
+      this._activeStreamGenerationId = null
+      this._answerGenerationId = 'xxx'
     })
 
     this.socket.on('suggest', (data) => {
@@ -239,6 +245,7 @@ export default class Client {
       const previousGenerationId = this._answerGenerationId
       const newGenerationId = data.generationId
       this._answerGenerationId = newGenerationId
+      this._activeStreamGenerationId = newGenerationId
       const isSameGeneration = previousGenerationId === newGenerationId
       let bubbleContainerElement = null
 

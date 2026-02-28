@@ -23,7 +23,15 @@ export async function runFinalAnswerPhase(
 
   const historySection = formatExecutionHistory(executionHistory)
   const systemPrompt = PERSONA.getCompactDutySystemPrompt(
-    `You are synthesizing a final answer from tool execution results. Provide a clear, helpful, and complete response to the user based on the observations collected. Always include relevant details from the tool results.\n\n${FORMATTING_RULES}`
+    `You are synthesizing a final answer from tool execution results. Provide a clear, helpful, and complete response to the user based on the observations collected. Always include relevant details from the tool results.
+
+Important:
+- The execution loop is already finished.
+- Do not promise additional actions.
+- Do not say "let me", "I will", or any future-step phrasing.
+- Return a completed answer based only on available observations.
+
+${FORMATTING_RULES}`
   )
   const prompt = `${historySection}\n\nUser Request: "${caller.input}"\n\nBased on the execution results above, provide a final answer to the user.`
 
@@ -126,6 +134,14 @@ export async function runFinalAnswerPhase(
 
     const elapsedMs = Date.now() - attemptStart
     if (!candidateAnswer) {
+      continue
+    }
+
+    if (candidateAnswer.trim().endsWith(':') && attempt < FINAL_ANSWER_MAX_RETRIES) {
+      LogHelper.title(DUTY_NAME)
+      LogHelper.warning(
+        `Final answer looked incomplete (trailing colon); retrying (${attempt + 1}/${FINAL_ANSWER_MAX_RETRIES})`
+      )
       continue
     }
 
