@@ -3,10 +3,7 @@
   "name": "Search & Web",
   "description": "Tools to search the web and social media platforms.",
   "context_files": [
-    "NETWORK_ECOSYSTEM.md",
-    "BROWSER_HISTORY.md",
-    "MEDIA_PROFILE.md",
-    "HABITS.md"
+    "BROWSER_HISTORY.md"
   ],
   "tools": ["grok"]
 }

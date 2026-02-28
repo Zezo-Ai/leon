@@ -5,9 +5,6 @@
   "context_files": [
     "LEON.md",
     "ARCHITECTURE.md",
-    "LEON_RUNTIME.md",
-    "LOCAL_INVENTORY.md",
-    "HABITS.md",
     "MEDIA_PROFILE.md"
   ],
   "tools": ["openrouter", "cerebras"]

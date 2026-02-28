@@ -3,15 +3,9 @@
   "name": "Coding & Development",
   "description": "Tools for code generation, development, and automation.",
   "context_files": [
-    "LEON.md",
     "ARCHITECTURE.md",
-    "HOST_SYSTEM.md",
-    "LOCAL_INVENTORY.md",
     "WORKSPACE_INTELLIGENCE.md",
-    "HABITS.md",
-    "ACTIVITY.md",
     "LEON_RUNTIME.md",
-    "SYSTEM_RESOURCES.md",
     "HOME.md"
   ],
   "tools": ["opencode"]
