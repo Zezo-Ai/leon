@@ -15,7 +15,7 @@ import {
   type SlotFillingOutput,
   SlotFillingStatus
 } from '@/core/llm-manager/types'
-import { BRAIN, CONVERSATION_LOGGER, SOCKET_SERVER } from '@/core'
+import { BRAIN, CONVERSATION_LOGGER, SOCKET_SERVER, MEMORY_MANAGER } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import Conversation from '@/core/nlp/conversation'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
@@ -675,6 +675,15 @@ export default class NLU {
     await reactDuty.init()
     const reactResult = await reactDuty.execute()
     const output = reactResult?.output as unknown as string
+
+    if (output) {
+      await MEMORY_MANAGER.observeTurn({
+        userMessage: utterance,
+        assistantMessage: String(output),
+        sentAt: Date.now(),
+        route: 'react'
+      })
+    }
 
     if (output && !BRAIN.isMuted) {
       await BRAIN.talk(String(output), true)

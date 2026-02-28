@@ -16,6 +16,7 @@ import {
   PERSONA,
   TOOLKIT_REGISTRY,
   CONTEXT_MANAGER,
+  MEMORY_MANAGER,
   CONVERSATION_LOGGER,
   BRAIN,
   SOCKET_SERVER
@@ -95,6 +96,10 @@ export class ReActLLMDuty extends LLMDuty {
 
     if (!CONTEXT_MANAGER.isLoaded || params.force) {
       await CONTEXT_MANAGER.load()
+    }
+
+    if (!MEMORY_MANAGER.isLoaded || params.force) {
+      await MEMORY_MANAGER.load()
     }
 
     if (LLM_PROVIDER_NAME === LLMProviders.Local) {
@@ -469,6 +474,12 @@ export class ReActLLMDuty extends LLMDuty {
       history,
       getContextForToolkit: CONTEXT_MANAGER.getContextForToolkit.bind(
         CONTEXT_MANAGER
+      ),
+      getPlanningMemoryPack: MEMORY_MANAGER.buildPlanningMemoryPack.bind(
+        MEMORY_MANAGER
+      ),
+      getExecutionMemoryPack: MEMORY_MANAGER.buildExecutionMemoryPack.bind(
+        MEMORY_MANAGER
       ),
       consumeProviderErrorMessage:
         LLM_PROVIDER.consumeLastProviderErrorMessage.bind(LLM_PROVIDER)

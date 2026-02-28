@@ -15,6 +15,7 @@ import {
   EXECUTE_SYSTEM_PROMPT,
   MAX_RETRIES_PER_FUNCTION,
   MAX_TOOL_FAILURE_RETRIES,
+  CHARS_PER_TOKEN,
   DUTY_NAME
 } from './constants'
 import type {
@@ -42,6 +43,30 @@ import {
   buildPreviouslyUsedInputsSection,
   buildToolkitContextSection
 } from './phase-helpers'
+
+async function buildExecutionMemorySection(
+  caller: LLMCaller,
+  toolkitId: string
+): Promise<string> {
+  const memoryPack = await caller.getExecutionMemoryPack(
+    String(caller.input || ''),
+    toolkitId
+  )
+
+  const charCount = memoryPack.length
+  const estimatedTokens = Math.ceil(charCount / CHARS_PER_TOKEN)
+
+  LogHelper.title(DUTY_NAME)
+  LogHelper.debug(
+    `Execution memory injection [${toolkitId}] chars=${charCount} | est_tokens=${estimatedTokens}`
+  )
+
+  if (!memoryPack) {
+    return 'Execution Memory: none'
+  }
+
+  return memoryPack
+}
 
 export async function runExecutionStep(
   caller: LLMCaller,
@@ -246,6 +271,10 @@ async function resolveToolFunctionWithNativeTools(
   executionHistory: ExecutionRecord[]
 ): Promise<ExecutionStepResult> {
   const toolkitContextSection = buildToolkitContextSection(caller, toolkitId)
+  const executionMemorySection = await buildExecutionMemorySection(
+    caller,
+    toolkitId
+  )
   const historySection = formatExecutionHistory(executionHistory)
   const resolveSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     RESOLVE_FUNCTION_SYSTEM_PROMPT
@@ -262,7 +291,7 @@ async function resolveToolFunctionWithNativeTools(
     })
   )
 
-  const prompt = `Tool: ${toolkitId}.${toolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide arguments.`
+  const prompt = `Tool: ${toolkitId}.${toolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide arguments.`
 
   const result = await caller.callLLMWithTools(
     prompt,
@@ -366,6 +395,10 @@ async function resolveToolFunctionWithJSONMode(
     caller,
     effectiveToolkitId
   )
+  const executionMemorySection = await buildExecutionMemorySection(
+    caller,
+    effectiveToolkitId
+  )
   const functionsSection = functionEntries
     .map(([fnName, fnConfig]) => {
       const params = JSON.stringify(fnConfig.parameters)
@@ -377,7 +410,7 @@ async function resolveToolFunctionWithJSONMode(
   const resolveSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     RESOLVE_FUNCTION_SYSTEM_PROMPT
   )
-  const prompt = `Tool: ${effectiveToolkitId}.${effectiveToolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\nAvailable Functions:\n${functionsSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide tool_input.`
+  const prompt = `Tool: ${effectiveToolkitId}.${effectiveToolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\nAvailable Functions:\n${functionsSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide tool_input.`
 
   const resolveSchema = {
     oneOf: [
@@ -547,6 +580,10 @@ async function executeFunctionWithNativeTools(
     qualifiedName
   )
   const toolkitContextSection = buildToolkitContextSection(caller, toolkitId)
+  const executionMemorySection = await buildExecutionMemorySection(
+    caller,
+    toolkitId
+  )
   const historySection = formatExecutionHistory(executionHistory)
   const executeSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     EXECUTE_SYSTEM_PROMPT
@@ -571,7 +608,7 @@ async function executeFunctionWithNativeTools(
     const retryNote = lastError
       ? `\n\nPrevious attempt failed: ${lastError}.${lastFailedToolInput ? `\nPrevious failed tool_input: ${lastFailedToolInput}\nDo not reuse the same tool_input. Change the arguments to address the failure.` : ' Please fix the arguments.'}`
       : ''
-    const prompt = `Current Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\n\n${toolkitContextSection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}`
+    const prompt = `Current Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}`
 
     const result = await caller.callLLMWithTools(
       prompt,
@@ -755,6 +792,10 @@ async function executeFunctionWithJSONMode(
   )
   const paramsSchema = JSON.stringify(functionConfig.parameters)
   const toolkitContextSection = buildToolkitContextSection(caller, toolkitId)
+  const executionMemorySection = await buildExecutionMemorySection(
+    caller,
+    toolkitId
+  )
   const historySection = formatExecutionHistory(executionHistory)
   const executeSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     EXECUTE_SYSTEM_PROMPT
@@ -807,7 +848,7 @@ async function executeFunctionWithJSONMode(
     const retryNote = lastError
       ? `\n\nPrevious attempt failed: ${lastError}.${lastFailedToolInput ? `\nPrevious failed tool_input: ${lastFailedToolInput}\nDo not reuse the same tool_input. Change the arguments to address the failure.` : ' Please fix the tool_input.'}`
       : ''
-    const prompt = `Function: ${qualifiedName}\nDescription: ${functionConfig.description}\nCurrent Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\nParameters: ${paramsSchema}\n\n${toolkitContextSection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}\n\nProvide the tool_input for this function.`
+    const prompt = `Function: ${qualifiedName}\nDescription: ${functionConfig.description}\nCurrent Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\nParameters: ${paramsSchema}\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}\n\nProvide the tool_input for this function.`
 
     const completionResult = await caller.callLLM(
       prompt,

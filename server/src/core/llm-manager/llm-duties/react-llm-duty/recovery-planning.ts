@@ -60,8 +60,12 @@ export async function runRecoveryPlanningPhase(
   const contextManifestSection = contextManifest
     ? `\n\nEnvironment Context Manifest:\n${contextManifest}`
     : ''
+  const memoryPack = await caller.getPlanningMemoryPack(
+    String(caller.input || '')
+  )
+  const memorySection = memoryPack ? `\n\n${memoryPack}` : ''
 
-  const prompt = `${catalog.text}${catalogNote}${contextManifestSection}
+  const prompt = `${catalog.text}${catalogNote}${contextManifestSection}${memorySection}
 
 Recovery Context:
 - Failed Step Function: ${failedStep.function}

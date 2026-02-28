@@ -51,7 +51,16 @@ export async function runPlanningPhase(
   const contextManifestSection = contextManifest
     ? `\n\nEnvironment Context Manifest:\n${contextManifest}`
     : ''
-  const prompt = `${catalog.text}${catalogNote}${contextManifestSection}\n\nUser Request: "${caller.input}"`
+  const memoryPack = await caller.getPlanningMemoryPack(
+    String(caller.input || '')
+  )
+  if (memoryPack) {
+    LogHelper.debug(
+      `Planning memory injection: ${memoryPack.length} chars`
+    )
+  }
+  const memorySection = memoryPack ? `\n\n${memoryPack}` : ''
+  const prompt = `${catalog.text}${catalogNote}${contextManifestSection}${memorySection}\n\nUser Request: "${caller.input}"`
 
   const planSchema = PLAN_RESPONSE_SCHEMA
 

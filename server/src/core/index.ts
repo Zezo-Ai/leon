@@ -21,6 +21,7 @@ import LLMProvider from '@/core/llm-manager/llm-provider'
 import Persona from '@/core/llm-manager/persona'
 import ToolkitRegistry from '@/core/toolkit-registry'
 import ContextManager from '@/core/context-manager/context-manager'
+import MemoryManager from '@/core/memory-manager'
 import ToolExecutor from '@/core/tool-executor'
 import { ConversationLogger } from '@/conversation-logger'
 
@@ -66,6 +67,7 @@ export const PERSONA = new Persona()
 export const TOOLKIT_REGISTRY = new ToolkitRegistry()
 
 export const CONTEXT_MANAGER = new ContextManager()
+export const MEMORY_MANAGER = new MemoryManager()
 
 export const TOOL_EXECUTOR = new ToolExecutor()
 

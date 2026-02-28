@@ -107,5 +107,11 @@ export interface LLMCaller {
   readonly input: string | object | null
   readonly history: MessageLog[]
   getContextForToolkit(toolkitId: string): string
+  getPlanningMemoryPack(query: string, tokenBudget?: number): Promise<string>
+  getExecutionMemoryPack(
+    query: string,
+    toolkitId: string,
+    tokenBudget?: number
+  ): Promise<string>
   consumeProviderErrorMessage(): string | null
 }
