@@ -15,7 +15,12 @@ import {
   type SlotFillingOutput,
   SlotFillingStatus
 } from '@/core/llm-manager/types'
-import { BRAIN, CONVERSATION_LOGGER, SOCKET_SERVER, MEMORY_MANAGER } from '@/core'
+import {
+  BRAIN,
+  CONVERSATION_LOGGER,
+  SOCKET_SERVER,
+  MEMORY_MANAGER
+} from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import Conversation from '@/core/nlp/conversation'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
@@ -677,11 +682,26 @@ export default class NLU {
     const output = reactResult?.output as unknown as string
 
     if (output) {
-      await MEMORY_MANAGER.observeTurn({
+      const sentAt = Date.now()
+      void MEMORY_MANAGER.observeTurn({
         userMessage: utterance,
         assistantMessage: String(output),
-        sentAt: Date.now(),
+        sentAt,
         route: 'react'
+      }).catch((error: unknown) => {
+        LogHelper.title('NLU')
+        LogHelper.warning(`Failed to store turn memory: ${error}`)
+      })
+
+      void MEMORY_MANAGER.savePersistentMemoryCandidatesFromTurn(
+        utterance,
+        String(output),
+        sentAt
+      ).catch((error: unknown) => {
+        LogHelper.title('NLU')
+        LogHelper.warning(
+          `Failed to save persistent memory candidates: ${error}`
+        )
       })
     }
 

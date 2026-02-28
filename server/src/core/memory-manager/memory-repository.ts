@@ -32,6 +32,7 @@ interface SQLiteDatabase {
 interface SearchParams {
   query: string
   namespaces: string[]
+  filenames?: string[]
   topK: number
 }
 
@@ -382,6 +383,16 @@ export default class MemoryRepository {
 
   public searchContextChunks(params: SearchParams): RecallHit[] {
     const db = this.ensureDb()
+    const filenameFilters =
+      params.filenames && params.filenames.length > 0
+        ? params.filenames
+        : null
+    const filenamePlaceholders = filenameFilters
+      ? filenameFilters.map(() => '?').join(',')
+      : ''
+    const filenameWhere = filenameFilters
+      ? ` AND context_documents.filename IN (${filenamePlaceholders})`
+      : ''
     const stmt = db.prepare(
       `SELECT
          context_chunks.id AS chunk_id,
@@ -396,11 +407,14 @@ export default class MemoryRepository {
        JOIN context_documents ON context_documents.id = context_chunks.document_id
        WHERE context_chunks_fts MATCH ?
          AND context_documents.is_deleted = 0
+         ${filenameWhere}
        ORDER BY bm25_score
        LIMIT ?`
     )
 
-    const rows = stmt.all(params.query, params.topK)
+    const rows = filenameFilters
+      ? stmt.all(params.query, ...filenameFilters, params.topK)
+      : stmt.all(params.query, params.topK)
 
     return rows.map((row) => ({
       chunkId: String(row['chunk_id'] || ''),
@@ -528,6 +542,60 @@ export default class MemoryRepository {
       .run(nowTs, nowTs)
 
     return Number(result.changes || 0)
+  }
+
+  public purgeSoftDeleted(olderThanTs: number): number {
+    const db = this.ensureDb()
+
+    const deletedItemRows = db
+      .prepare(
+        `DELETE FROM memory_items
+         WHERE is_deleted = 1
+           AND updated_at <= ?`
+      )
+      .run(olderThanTs)
+
+    const deletedFactRows = db
+      .prepare(
+        `DELETE FROM memory_facts
+         WHERE is_deleted = 1
+           AND updated_at <= ?`
+      )
+      .run(olderThanTs)
+
+    const deletedContextRows = db
+      .prepare(
+        `DELETE FROM context_documents
+         WHERE is_deleted = 1
+           AND updated_at <= ?`
+      )
+      .run(olderThanTs)
+
+    return (
+      Number(deletedItemRows.changes || 0) +
+      Number(deletedFactRows.changes || 0) +
+      Number(deletedContextRows.changes || 0)
+    )
+  }
+
+  public optimizeStorage(): void {
+    const db = this.ensureDb()
+    db.exec('PRAGMA optimize;')
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE);')
+  }
+
+  public countActivePersistentItems(): number {
+    const db = this.ensureDb()
+    const row = db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM memory_items
+         WHERE scope = 'persistent'
+           AND is_deleted = 0`
+      )
+      .get()
+
+    return Number(row?.['count'] || 0)
   }
 
   public softDeleteById(id: string): boolean {

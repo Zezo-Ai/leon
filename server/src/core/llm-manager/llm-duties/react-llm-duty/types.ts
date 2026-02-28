@@ -106,11 +106,13 @@ export interface LLMCaller {
   readonly supportsNativeTools: boolean
   readonly input: string | object | null
   readonly history: MessageLog[]
-  getContextForToolkit(toolkitId: string): string
+  getContextFileContent(filename: string): string | null
   getPlanningMemoryPack(query: string, tokenBudget?: number): Promise<string>
+  shouldRecallPlanningMemory(query: string): boolean
   getExecutionMemoryPack(
     query: string,
     toolkitId: string,
+    contextFiles?: string[],
     tokenBudget?: number
   ): Promise<string>
   consumeProviderErrorMessage(): string | null

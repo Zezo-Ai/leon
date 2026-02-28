@@ -6,21 +6,21 @@ import { TOOLKIT_REGISTRY, LLM_PROVIDER } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 import { ContextProbeHelper } from '@/core/context-manager/context-probe-helper'
-import { HomeContextFile } from '@/core/context-manager/files/home-context-file'
-import { HostSystemContextFile } from '@/core/context-manager/files/host-system-context-file'
-import { GpuComputeContextFile } from '@/core/context-manager/files/gpu-compute-context-file'
-import { StorageContextFile } from '@/core/context-manager/files/storage-context-file'
-import { SystemResourcesContextFile } from '@/core/context-manager/files/system-resources-context-file'
-import { BrowserHistoryContextFile } from '@/core/context-manager/files/browser-history-context-file'
-import { LeonRuntimeContextFile } from '@/core/context-manager/files/leon-runtime-context-file'
-import { ActivityContextFile } from '@/core/context-manager/files/activity-context-file'
-import { LocalInventoryContextFile } from '@/core/context-manager/files/local-inventory-context-file'
-import { NetworkEcosystemContextFile } from '@/core/context-manager/files/network-ecosystem-context-file'
-import { WorkspaceIntelligenceContextFile } from '@/core/context-manager/files/workspace-intelligence-context-file'
-import { HabitsContextFile } from '@/core/context-manager/files/habits-context-file'
-import { MediaProfileContextFile } from '@/core/context-manager/files/media-profile-context-file'
-import { LeonContextFile } from '@/core/context-manager/files/leon-context-file'
-import { ArchitectureContextFile } from '@/core/context-manager/files/architecture-context-file'
+import { HomeContextFile } from '@/core/context-manager/context-files/home-context-file'
+import { HostSystemContextFile } from '@/core/context-manager/context-files/host-system-context-file'
+import { GpuComputeContextFile } from '@/core/context-manager/context-files/gpu-compute-context-file'
+import { StorageContextFile } from '@/core/context-manager/context-files/storage-context-file'
+import { SystemResourcesContextFile } from '@/core/context-manager/context-files/system-resources-context-file'
+import { BrowserHistoryContextFile } from '@/core/context-manager/context-files/browser-history-context-file'
+import { LeonRuntimeContextFile } from '@/core/context-manager/context-files/leon-runtime-context-file'
+import { ActivityContextFile } from '@/core/context-manager/context-files/activity-context-file'
+import { LocalInventoryContextFile } from '@/core/context-manager/context-files/local-inventory-context-file'
+import { NetworkEcosystemContextFile } from '@/core/context-manager/context-files/network-ecosystem-context-file'
+import { WorkspaceIntelligenceContextFile } from '@/core/context-manager/context-files/workspace-intelligence-context-file'
+import { HabitsContextFile } from '@/core/context-manager/context-files/habits-context-file'
+import { MediaProfileContextFile } from '@/core/context-manager/context-files/media-profile-context-file'
+import { LeonContextFile } from '@/core/context-manager/context-files/leon-context-file'
+import { ArchitectureContextFile } from '@/core/context-manager/context-files/architecture-context-file'
 
 interface ContextFileMetadata {
   lastGeneratedAt: number
@@ -94,7 +94,7 @@ export default class ContextManager {
       this.cleanupRetiredContextFiles()
 
       for (const definition of this.contextFiles) {
-        this.refreshContextFile(definition, true)
+        this.refreshContextFile(definition)
       }
 
       this.manifest = this.buildManifest()
@@ -217,14 +217,27 @@ export default class ContextManager {
       return true
     }
 
-    const fileMetadata = this.metadata.get(definition.filename)
-    if (!fileMetadata) {
-      return true
+    if (definition.ttlMs === null) {
+      return false
     }
 
-    const effectiveTtlMs = definition.ttlMs ?? CONTEXT_REFRESH_TTL_MS
+    const fileMetadata = this.metadata.get(definition.filename)
+    let lastGeneratedAt = fileMetadata?.lastGeneratedAt
 
-    return Date.now() - fileMetadata.lastGeneratedAt >= effectiveTtlMs
+    if (!lastGeneratedAt) {
+      try {
+        lastGeneratedAt = fs.statSync(filePath).mtimeMs
+      } catch {
+        return true
+      }
+      this.metadata.set(definition.filename, {
+        lastGeneratedAt
+      })
+    }
+
+    const effectiveTtlMs = definition.ttlMs
+
+    return Date.now() - lastGeneratedAt >= effectiveTtlMs
   }
 
   private refreshContextFile(definition: ContextFile, force = false): void {

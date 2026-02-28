@@ -24,6 +24,7 @@ export function buildDailyMarkdownSummary(
   dayKey: string,
   conversationLogs: MessageLog[]
 ): string {
+  const updatedAt = new Date().toISOString()
   const bullets: string[] = []
 
   const lastLogs = conversationLogs.slice(-40)
@@ -55,5 +56,5 @@ export function buildDailyMarkdownSummary(
       ? bullets.join('\n')
       : '- No notable memory yet for this day.'
 
-  return `${summaryLine}\n\n# ${dayKey}\n\n${body}\n`
+  return `${summaryLine}\n\n# ${dayKey}\n\nUpdated At: ${updatedAt}\n\n${body}\n`
 }

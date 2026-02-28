@@ -4,7 +4,6 @@ import type {
 } from 'node-llama-cpp'
 
 import {
-  LEON_MEMORY_EMBEDDING_MODEL_PATH,
   LLM_PROVIDER as LLM_PROVIDER_NAME
 } from '@/constants'
 import { LLM_MANAGER } from '@/core'
@@ -18,6 +17,7 @@ export default class LlamaEmbeddingProvider implements EmbeddingProvider {
   private embeddingContext: LlamaEmbeddingContext | null = null
   private embeddingModel: LlamaModel | null = null
   private _modelName: string | null = null
+  private hasLoggedUnavailable = false
 
   public get isReady(): boolean {
     return this._isReady
@@ -33,29 +33,19 @@ export default class LlamaEmbeddingProvider implements EmbeddingProvider {
     }
 
     try {
-      // Prefer a dedicated embedding model when configured.
-      if (LEON_MEMORY_EMBEDDING_MODEL_PATH) {
-        const llama = LLM_MANAGER.llama
-        if (!llama) {
-          throw new Error('LLM manager llama instance is not ready')
-        }
-
-        this.embeddingModel = await llama.loadModel({
-          modelPath: LEON_MEMORY_EMBEDDING_MODEL_PATH,
-          gpuLayers: 'auto'
-        })
-        this.embeddingContext = await this.embeddingModel.createEmbeddingContext()
-        this._modelName = LEON_MEMORY_EMBEDDING_MODEL_PATH
-      } else if (LLM_PROVIDER_NAME === LLMProviders.Local && LLM_MANAGER.model) {
-        // Fallback: try using the local chat model embedding capability.
+      if (LLM_PROVIDER_NAME === LLMProviders.Local && LLM_MANAGER.model) {
+        // Use the currently loaded local model for embeddings.
         this.embeddingModel = LLM_MANAGER.model
         this.embeddingContext = await this.embeddingModel.createEmbeddingContext()
         this._modelName = 'local-chat-model'
       } else {
-        LogHelper.title('Memory Manager')
-        LogHelper.info(
-          'Embedding provider disabled: no local embedding model configured'
-        )
+        if (!this.hasLoggedUnavailable) {
+          LogHelper.title('Memory Manager')
+          LogHelper.debug(
+            `Embedding provider disabled for provider "${LLM_PROVIDER_NAME}" (local model required)`
+          )
+          this.hasLoggedUnavailable = true
+        }
         return
       }
 

@@ -48,9 +48,11 @@ async function buildExecutionMemorySection(
   caller: LLMCaller,
   toolkitId: string
 ): Promise<string> {
+  const toolkitContextFiles = TOOLKIT_REGISTRY.getToolkitContextFiles(toolkitId)
   const memoryPack = await caller.getExecutionMemoryPack(
     String(caller.input || ''),
-    toolkitId
+    toolkitId,
+    toolkitContextFiles
   )
 
   const charCount = memoryPack.length

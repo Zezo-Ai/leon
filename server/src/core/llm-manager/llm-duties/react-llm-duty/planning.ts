@@ -28,10 +28,21 @@ import {
   PLAN_STEP_SCHEMA
 } from './plan-contract'
 
+function isOperatingSystemControlOnlyPlan(steps: { function: string }[]): boolean {
+  if (steps.length === 0) {
+    return false
+  }
+
+  return steps.every((step) =>
+    step.function.startsWith('operating_system_control.')
+  )
+}
+
 export async function runPlanningPhase(
   caller: LLMCaller,
   catalog: Catalog,
-  history: MessageLog[]
+  history: MessageLog[],
+  onPlanningStage?: (stage: 'recalling' | 'thinking') => void
 ): Promise<PlanResult> {
   const catalogNote =
     catalog.mode === 'tool'
@@ -51,9 +62,14 @@ export async function runPlanningPhase(
   const contextManifestSection = contextManifest
     ? `\n\nEnvironment Context Manifest:\n${contextManifest}`
     : ''
-  const memoryPack = await caller.getPlanningMemoryPack(
-    String(caller.input || '')
-  )
+  const inputQuery = String(caller.input || '')
+  const shouldRecallMemory = caller.shouldRecallPlanningMemory(inputQuery)
+  if (shouldRecallMemory) {
+    onPlanningStage?.('recalling')
+  }
+  const memoryPack = shouldRecallMemory
+    ? await caller.getPlanningMemoryPack(inputQuery)
+    : ''
   if (memoryPack) {
     LogHelper.debug(
       `Planning memory injection: ${memoryPack.length} chars`
@@ -66,6 +82,7 @@ export async function runPlanningPhase(
 
   // --- Remote providers: use native tool calling to force structured output ---
   if (caller.supportsNativeTools) {
+    onPlanningStage?.('thinking')
     const planTools: OpenAITool[] = [
       {
         type: 'function',
@@ -125,7 +142,8 @@ export async function runPlanningPhase(
       planSystemPrompt,
       planTools,
       { type: 'function', function: { name: 'create_plan' } },
-      history
+      history,
+      true
     )
 
     LogHelper.title(DUTY_NAME)
@@ -155,6 +173,64 @@ export async function runPlanningPhase(
             allowLegacySummaryAsFinal: true
           })
           if (interpreted) {
+            if (
+              interpreted.type === 'plan' &&
+              memoryPack &&
+              isOperatingSystemControlOnlyPlan(interpreted.steps)
+            ) {
+              LogHelper.debug(
+                'Planning: detected operating_system_control-only plan with memory available; running memory-first validation'
+              )
+              const memoryValidationSchema = {
+                type: 'object',
+                properties: {
+                  type: {
+                    type: 'string',
+                    enum: ['final', 'plan']
+                  },
+                  answer: {
+                    type: 'string'
+                  }
+                },
+                required: ['type'],
+                additionalProperties: false
+              }
+              const memoryValidationPrompt = `User Request: "${caller.input}"
+
+Memory Recall:
+${memoryPack}
+
+Proposed Plan:
+${interpreted.steps.map((step) => `- ${step.function} (${step.label})`).join('\n')}
+
+If the memory recall is sufficient, return type="final" with a direct user-facing answer.
+If it is insufficient, return type="plan".`
+              const memoryValidationResult = await caller.callLLM(
+                memoryValidationPrompt,
+                planSystemPrompt,
+                memoryValidationSchema,
+                history
+              )
+              const parsedMemoryValidation = parseOutput(
+                memoryValidationResult?.output
+              )
+              LogHelper.debug(
+                `Planning memory-first validation output: ${JSON.stringify(
+                  parsedMemoryValidation
+                )}`
+              )
+              if (
+                parsedMemoryValidation &&
+                parsedMemoryValidation['type'] === 'final' &&
+                typeof parsedMemoryValidation['answer'] === 'string' &&
+                String(parsedMemoryValidation['answer']).trim()
+              ) {
+                return {
+                  type: 'final',
+                  answer: String(parsedMemoryValidation['answer']).trim()
+                }
+              }
+            }
             return interpreted
           }
 
@@ -216,6 +292,7 @@ export async function runPlanningPhase(
     }
 
     // Final fallback: JSON mode planning
+    onPlanningStage?.('thinking')
     const jsonModeResult = await caller.callLLM(
       prompt,
       planSystemPrompt,
@@ -302,6 +379,7 @@ export async function runPlanningPhase(
   }
 
   // --- Local provider: use grammar-constrained JSON mode ---
+  onPlanningStage?.('thinking')
   const completionResult = await caller.callLLM(
     prompt,
     planSystemPrompt,

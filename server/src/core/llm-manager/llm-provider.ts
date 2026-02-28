@@ -1304,7 +1304,10 @@ export default class LLMProvider {
     promptOrChatHistory: PromptOrChatHistory,
     completionParams: CompletionParams
   ): Promise<CompletionResult | null> {
-    this.lastProviderErrorMessage = null
+    const trackProviderErrors = completionParams.trackProviderErrors !== false
+    if (trackProviderErrors) {
+      this.lastProviderErrorMessage = null
+    }
 
     const measureExecutionTimeLabel = `Inference time for "${completionParams.dutyType}" duty`
 
@@ -1510,8 +1513,9 @@ export default class LLMProvider {
       }
 
       if (
-        axios.isAxiosError(e) ||
-        (e && typeof e === 'object' && ('status' in e || 'statusCode' in e))
+        trackProviderErrors &&
+        (axios.isAxiosError(e) ||
+          (e && typeof e === 'object' && ('status' in e || 'statusCode' in e)))
       ) {
         const apiErrorDetails = this.buildProviderErrorDetails(e)
         const statusLike =
@@ -1529,7 +1533,7 @@ export default class LLMProvider {
 
         await this.safeTalk(brainMessage)
         this.lastProviderErrorMessage = brainMessage
-      } else if (isRetryableNonTimeoutError) {
+      } else if (trackProviderErrors && isRetryableNonTimeoutError) {
         const apiErrorDetails = this.buildProviderErrorDetails(e)
         const brainMessage = BRAIN.wernicke('llm_provider_http_error', '', {
           '{{ provider }}': LLM_PROVIDER,
@@ -1541,7 +1545,7 @@ export default class LLMProvider {
         this.lastProviderErrorMessage = brainMessage
       }
 
-      if (!this.lastProviderErrorMessage) {
+      if (trackProviderErrors && !this.lastProviderErrorMessage) {
         const apiErrorDetails = this.buildProviderErrorDetails(e)
         this.lastProviderErrorMessage = BRAIN.wernicke('llm_provider_http_error', '', {
           '{{ provider }}': LLM_PROVIDER,
@@ -1703,17 +1707,19 @@ export default class LLMProvider {
         })
       }
 
-      const brainMessage = BRAIN.wernicke('llm_provider_http_error', '', {
-        '{{ provider }}': LLM_PROVIDER,
-        '{{ error }}':
-          'Provider returned an empty completion payload (no text, no tool call, no token usage)',
-        '{{ api_error }}': providerPayloadSnippet
-          ? `\n${providerPayloadSnippet}`
-          : ''
-      })
+      if (trackProviderErrors) {
+        const brainMessage = BRAIN.wernicke('llm_provider_http_error', '', {
+          '{{ provider }}': LLM_PROVIDER,
+          '{{ error }}':
+            'Provider returned an empty completion payload (no text, no tool call, no token usage)',
+          '{{ api_error }}': providerPayloadSnippet
+            ? `\n${providerPayloadSnippet}`
+            : ''
+        })
 
-      await this.safeTalk(brainMessage)
-      this.lastProviderErrorMessage = brainMessage
+        await this.safeTalk(brainMessage)
+        this.lastProviderErrorMessage = brainMessage
+      }
       return null
     }
 

@@ -59,6 +59,7 @@ export interface MemoryRecord {
 export interface RecallQuery {
   query: string
   namespaces?: KnowledgeNamespace[]
+  contextFilenames?: string[]
   scopes?: MemoryScope[]
   kinds?: MemoryKind[]
   dayKeys?: string[]

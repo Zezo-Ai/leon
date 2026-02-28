@@ -39,7 +39,6 @@ import {
   CHARS_PER_TOKEN,
   TOOL_CALL_WAIT_NOTICE_DELAY_MS,
   TOOL_CALL_DIAGNOSIS_DELAY_MS,
-  PLANNING_WAIT_NOTICE_DELAY_MS,
   REACT_LOCAL_PROVIDER_HISTORY_LOGS,
   REACT_REMOTE_PROVIDER_HISTORY_LOGS,
   MAX_EXECUTIONS,
@@ -167,38 +166,71 @@ export class ReActLLMDuty extends LLMDuty {
       const caller = this.createLLMCaller(history)
       const planWidgetIdValue = widgetId('plan')
       let hasPlanningWidget = false
-      let planningCompleted = false
-      let planningWaitTimer: NodeJS.Timeout | null = null
+      let planningUiSteps: TrackedPlanStep[] = [
+        { label: 'Thinking...', status: 'in_progress' }
+      ]
+      let planningHasRecallingStage = false
 
-      planningWaitTimer = setTimeout(() => {
-        if (planningCompleted) {
+      emitPlanWidget(
+        planningUiSteps,
+        null,
+        planWidgetIdValue,
+        false
+      )
+      hasPlanningWidget = true
+
+      const updatePlanningStage = (stage: 'recalling' | 'thinking'): void => {
+        if (stage === 'recalling') {
+          planningHasRecallingStage = true
+          planningUiSteps = [
+            { label: 'Recalling...', status: 'in_progress' },
+            { label: 'Thinking...', status: 'pending' }
+          ]
+          emitPlanWidget(
+            planningUiSteps,
+            null,
+            planWidgetIdValue,
+            true
+          )
           return
         }
 
-        emitPlanWidget(
-          [{ label: 'Thinking...', status: 'in_progress' }],
-          null,
-          planWidgetIdValue,
-          false
-        )
-        hasPlanningWidget = true
-      }, PLANNING_WAIT_NOTICE_DELAY_MS)
-
-      let planResult
-      try {
-        planResult = await runPlanningPhase(caller, catalog, history)
-      } finally {
-        planningCompleted = true
-        if (planningWaitTimer) {
-          clearTimeout(planningWaitTimer)
+        if (planningHasRecallingStage) {
+          planningUiSteps = [
+            { label: 'Recalling...', status: 'completed' },
+            { label: 'Thinking...', status: 'in_progress' }
+          ]
+          emitPlanWidget(
+            planningUiSteps,
+            0,
+            planWidgetIdValue,
+            true
+          )
+        } else {
+          planningUiSteps = [
+            { label: 'Thinking...', status: 'in_progress' }
+          ]
+          emitPlanWidget(
+            planningUiSteps,
+            null,
+            planWidgetIdValue,
+            true
+          )
         }
       }
+
+      const planResult = await runPlanningPhase(
+        caller,
+        catalog,
+        history,
+        updatePlanningStage
+      )
 
       if (planResult.type === 'final') {
         if (hasPlanningWidget) {
           emitPlanWidget(
-            [{ label: 'Thinking...', status: 'completed' }],
-            0,
+            planningUiSteps.map((step) => ({ ...step, status: 'completed' })),
+            null,
             planWidgetIdValue,
             true
           )
@@ -472,15 +504,28 @@ export class ReActLLMDuty extends LLMDuty {
       supportsNativeTools: this.supportsNativeTools,
       input: this.input,
       history,
-      getContextForToolkit: CONTEXT_MANAGER.getContextForToolkit.bind(
+      getContextFileContent: CONTEXT_MANAGER.getContextFileContent.bind(
         CONTEXT_MANAGER
       ),
       getPlanningMemoryPack: MEMORY_MANAGER.buildPlanningMemoryPack.bind(
         MEMORY_MANAGER
       ),
-      getExecutionMemoryPack: MEMORY_MANAGER.buildExecutionMemoryPack.bind(
+      shouldRecallPlanningMemory: MEMORY_MANAGER.shouldRecallForQuery.bind(
         MEMORY_MANAGER
       ),
+      getExecutionMemoryPack: (
+        query: string,
+        toolkitId: string,
+        contextFiles?: string[],
+        tokenBudget?: number
+      ) =>
+        MEMORY_MANAGER.buildExecutionMemoryPack(
+          query,
+          toolkitId,
+          contextFiles ||
+            TOOLKIT_REGISTRY.getToolkitContextFiles(toolkitId),
+          tokenBudget
+        ),
       consumeProviderErrorMessage:
         LLM_PROVIDER.consumeLastProviderErrorMessage.bind(LLM_PROVIDER)
     }

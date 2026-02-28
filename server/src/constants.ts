@@ -331,26 +331,6 @@ export const HAS_LLM_ACTION_RECOGNITION =
 export const LEON_ROUTING_MODE = process.env['LEON_ROUTING_MODE'] || 'smart'
 export const LEON_DISABLED_CONTEXT_FILES =
   process.env['LEON_DISABLED_CONTEXT_FILES'] || ''
-export const LEON_MEMORY_ENABLE_EMBEDDINGS =
-  process.env['LEON_MEMORY_ENABLE_EMBEDDINGS'] === 'true'
-export const LEON_MEMORY_EMBEDDING_MODEL_PATH =
-  process.env['LEON_MEMORY_EMBEDDING_MODEL_PATH'] || ''
-export const LEON_MEMORY_DISCUSSION_TTL_DAYS = Math.max(
-  1,
-  Number(process.env['LEON_MEMORY_DISCUSSION_TTL_DAYS'] || 5)
-)
-export const LEON_MEMORY_RECALL_TOP_K = Math.max(
-  1,
-  Number(process.env['LEON_MEMORY_RECALL_TOP_K'] || 12)
-)
-export const LEON_MEMORY_PLANNING_TOKEN_BUDGET = Math.max(
-  64,
-  Number(process.env['LEON_MEMORY_PLANNING_TOKEN_BUDGET'] || 220)
-)
-export const LEON_MEMORY_EXECUTION_TOKEN_BUDGET = Math.max(
-  64,
-  Number(process.env['LEON_MEMORY_EXECUTION_TOKEN_BUDGET'] || 320)
-)
 export const LLM_PROVIDER = process.env['LEON_LLM_PROVIDER']
 // export const LLM_VERSION = 'v0.2.Q4_K_S'
 // export const LLM_VERSION = '8B-Instruct.Q5_K_S'
