@@ -409,6 +409,37 @@ async function resolveToolFunctionWithNativeTools(
           : []
       }
     }
+    if (parsed?.['type'] === 'execute') {
+      const fnName = String(parsed['function_name'] || '')
+        .split(/[./]/)
+        .filter(Boolean)
+        .pop() || ''
+      const fnConfig = toolFunctions[fnName]
+      if (!fnConfig) {
+        return {
+          type: 'executed',
+          execution: {
+            function: `${toolkitId}.${toolId}.${fnName}`,
+            status: 'error',
+            observation: `Function "${fnName}" not found. Available: ${Object.keys(toolFunctions).join(', ')}.`
+          }
+        }
+      }
+
+      const toolInput =
+        typeof parsed['tool_input'] === 'string'
+          ? (parsed['tool_input'] as string)
+          : '{}'
+      return runToolExecution(
+        toolkitId,
+        toolId,
+        fnName,
+        toolInput,
+        fnConfig,
+        undefined,
+        stepLabel
+      )
+    }
   }
 
   return {
@@ -658,6 +689,85 @@ async function executeFunctionWithNativeTools(
   let lastFailedToolInput: string | null = null
   const attemptedInputsInCurrentStep = new Set<string>()
 
+  const runValidatedToolInput = async (
+    toolInputRaw: string
+  ): Promise<ToolExecutionResult | { retry: true }> => {
+    const inputValidation = validateToolInput(
+      toolInputRaw,
+      functionConfig.parameters
+    )
+    if (!inputValidation.isValid) {
+      retries += 1
+      lastError = inputValidation.message || 'tool arguments do not match schema'
+      return { retry: true }
+    }
+
+    const validatedToolInput = inputValidation.repairedToolInput ?? toolInputRaw
+    const duplicateInputMatch = findDuplicateToolInputMatch(
+      executionHistory,
+      qualifiedName,
+      currentStepLabel,
+      validatedToolInput
+    )
+    if (duplicateInputMatch) {
+      retries += 1
+      const previousStepLabel = duplicateInputMatch.stepLabel
+        ? `"${duplicateInputMatch.stepLabel}"`
+        : '(no label)'
+      lastError = `tool_input duplicates Step ${duplicateInputMatch.stepNumber} ${previousStepLabel}; provide different arguments for the current step`
+      LogHelper.title(DUTY_NAME)
+      LogHelper.debug(
+        `Rejected duplicate tool_input for "${qualifiedName}" at step ${currentStepNumber}: matches step ${duplicateInputMatch.stepNumber}`
+      )
+      return { retry: true }
+    }
+    const normalizedCurrentAttempt = normalizeToolInputForComparison(
+      validatedToolInput
+    )
+    if (
+      normalizedCurrentAttempt &&
+      attemptedInputsInCurrentStep.has(normalizedCurrentAttempt)
+    ) {
+      retries += 1
+      lastError = 'tool_input duplicates a previous attempt for the current step'
+      LogHelper.title(DUTY_NAME)
+      LogHelper.debug(
+        `Rejected duplicate retry tool_input for "${qualifiedName}" at step ${currentStepNumber}`
+      )
+      return { retry: true }
+    }
+    if (normalizedCurrentAttempt) {
+      attemptedInputsInCurrentStep.add(normalizedCurrentAttempt)
+    }
+
+    const toolResult = await runToolExecution(
+      toolkitId,
+      toolId,
+      functionName,
+      validatedToolInput,
+      functionConfig,
+      inputValidation.parsedValue,
+      currentStepLabel
+    )
+
+    if (toolResult.missingSettingsMessage || toolResult.finalAnswer) {
+      return toolResult
+    }
+
+    if (toolResult.execution.status === 'error') {
+      if (toolFailureRetries < MAX_TOOL_FAILURE_RETRIES) {
+        toolFailureRetries += 1
+        lastError = extractFailureMessageFromObservation(
+          toolResult.execution.observation
+        )
+        lastFailedToolInput = validatedToolInput
+        return { retry: true }
+      }
+    }
+
+    return toolResult
+  }
+
   while (retries <= MAX_RETRIES_PER_FUNCTION) {
     const retryNote = lastError
       ? `\n\nPrevious attempt failed: ${lastError}.${lastFailedToolInput ? `\nPrevious failed tool_input: ${lastFailedToolInput}\nDo not reuse the same tool_input. Change the arguments to address the failure.` : ' Please fix the arguments.'}`
@@ -719,87 +829,10 @@ async function executeFunctionWithNativeTools(
     // Model returned a tool call — extract and validate arguments
     if (result.toolCall) {
       const toolInput = result.toolCall.arguments || '{}'
-
-      const inputValidation = validateToolInput(
-        toolInput,
-        functionConfig.parameters
-      )
-      if (!inputValidation.isValid) {
-        retries += 1
-        lastError =
-          inputValidation.message || 'tool arguments do not match schema'
+      const toolResult = await runValidatedToolInput(toolInput)
+      if ('retry' in toolResult) {
         continue
       }
-
-      const validatedToolInput =
-        inputValidation.repairedToolInput ?? toolInput
-      const duplicateInputMatch = findDuplicateToolInputMatch(
-        executionHistory,
-        qualifiedName,
-        currentStepLabel,
-        validatedToolInput
-      )
-      if (duplicateInputMatch) {
-        retries += 1
-        const previousStepLabel = duplicateInputMatch.stepLabel
-          ? `"${duplicateInputMatch.stepLabel}"`
-          : '(no label)'
-        lastError = `tool_input duplicates Step ${duplicateInputMatch.stepNumber} ${previousStepLabel}; provide different arguments for the current step`
-        LogHelper.title(DUTY_NAME)
-        LogHelper.debug(
-          `Rejected duplicate tool_input for "${qualifiedName}" at step ${currentStepNumber}: matches step ${duplicateInputMatch.stepNumber}`
-        )
-        continue
-      }
-      const normalizedCurrentAttempt = normalizeToolInputForComparison(
-        validatedToolInput
-      )
-      if (
-        normalizedCurrentAttempt &&
-        attemptedInputsInCurrentStep.has(normalizedCurrentAttempt)
-      ) {
-        retries += 1
-        lastError =
-          'tool_input duplicates a previous attempt for the current step'
-        LogHelper.title(DUTY_NAME)
-        LogHelper.debug(
-          `Rejected duplicate retry tool_input for "${qualifiedName}" at step ${currentStepNumber}`
-        )
-        continue
-      }
-      if (normalizedCurrentAttempt) {
-        attemptedInputsInCurrentStep.add(normalizedCurrentAttempt)
-      }
-
-      const toolResult = await runToolExecution(
-        toolkitId,
-        toolId,
-        functionName,
-        validatedToolInput,
-        functionConfig,
-        inputValidation.parsedValue,
-        currentStepLabel
-      )
-
-      if (toolResult.missingSettingsMessage) {
-        return toolResult
-      }
-
-      if (toolResult.finalAnswer) {
-        return toolResult
-      }
-
-      if (toolResult.execution.status === 'error') {
-        if (toolFailureRetries < MAX_TOOL_FAILURE_RETRIES) {
-          toolFailureRetries += 1
-          lastError = extractFailureMessageFromObservation(
-            toolResult.execution.observation
-          )
-          lastFailedToolInput = validatedToolInput
-          continue
-        }
-      }
-
       return toolResult
     }
 
@@ -817,6 +850,34 @@ async function executeFunctionWithNativeTools(
             ? (parsed['functions'] as string[])
             : []
         }
+      }
+      if (parsed?.['type'] === 'execute') {
+        const parsedFunctionName =
+          typeof parsed['function_name'] === 'string'
+            ? (parsed['function_name'] as string).trim()
+            : ''
+        const parsedToolInput =
+          typeof parsed['tool_input'] === 'string'
+            ? (parsed['tool_input'] as string)
+            : '{}'
+
+        if (parsedFunctionName) {
+          const parsedLeaf = parsedFunctionName
+            .split(/[./]/)
+            .filter(Boolean)
+            .pop()
+          if (parsedLeaf && parsedLeaf !== functionName) {
+            retries += 1
+            lastError = `model selected unexpected function "${parsedFunctionName}" while executing "${functionName}"`
+            continue
+          }
+        }
+
+        const toolResult = await runValidatedToolInput(parsedToolInput)
+        if ('retry' in toolResult) {
+          continue
+        }
+        return toolResult
       }
     }
 
@@ -1169,9 +1230,11 @@ export async function runToolExecution(
       'Tool result normalized to [error]: tool output reported success=false'
     )
   }
-  LogHelper.debug(
-    `Tool result: ${qualifiedName} [${effectiveStatus}] — ${effectiveMessage}`
-  )
+  if (effectiveStatus !== 'success') {
+    LogHelper.debug(
+      `Tool result: ${qualifiedName} [${effectiveStatus}] — ${effectiveMessage}`
+    )
+  }
   LogHelper.debug(
     `Tool output: ${JSON.stringify(toolExecutionResult.data?.output)}`
   )

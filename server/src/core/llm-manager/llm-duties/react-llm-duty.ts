@@ -152,27 +152,9 @@ export class ReActLLMDuty extends LLMDuty {
 
       // --- Build adaptive catalog ---
       const catalog = buildCatalog()
-      const fullFunctionNames = TOOLKIT_REGISTRY.getFlattenedTools()
-        .flatMap((tool) => {
-          const toolFunctions = TOOLKIT_REGISTRY.getToolFunctions(
-            tool.toolkitId,
-            tool.toolId
-          )
-          if (!toolFunctions) {
-            return []
-          }
-
-          return Object.keys(toolFunctions).map(
-            (fnName) => `${tool.toolkitId}.${tool.toolId}.${fnName}`
-          )
-        })
-        .sort((a, b) => a.localeCompare(b))
 
       LogHelper.title(this.name)
       LogHelper.debug(`Catalog mode: ${catalog.mode} | Catalog length: ${catalog.text.length} chars (~${Math.ceil(catalog.text.length / 4)} tokens) | Input: "${this.input}"`)
-      LogHelper.debug(
-        `Catalog full functions (${fullFunctionNames.length}): ${fullFunctionNames.join(', ')}`
-      )
       LogHelper.debug(`Native tools supported: ${this.supportsNativeTools} (provider: ${LLM_PROVIDER_NAME})`)
 
       // --- Phase 1: Planning ---
@@ -824,7 +806,11 @@ export class ReActLLMDuty extends LLMDuty {
     if (toolCalls && toolCalls.length > 0) {
       const firstCall = toolCalls[0]!
       const allowedToolNames = new Set(tools.map((t) => t.function.name))
-      if (!allowedToolNames.has(firstCall.function.name)) {
+      const resolvedToolName = this.resolveAllowedToolCallName(
+        firstCall.function.name,
+        allowedToolNames
+      )
+      if (!resolvedToolName) {
         LogHelper.title(this.name)
         LogHelper.warning(
           `callLLMWithTools: unexpected tool call "${firstCall.function.name}" (allowed: ${[...allowedToolNames].join(', ') || 'none'})`
@@ -847,13 +833,19 @@ export class ReActLLMDuty extends LLMDuty {
             : {})
         }
       }
+      if (resolvedToolName !== firstCall.function.name) {
+        LogHelper.title(this.name)
+        LogHelper.debug(
+          `callLLMWithTools: normalized tool call "${firstCall.function.name}" -> "${resolvedToolName}"`
+        )
+      }
       LogHelper.title(this.name)
       LogHelper.debug(
-        `callLLMWithTools: tool call received — ${firstCall.function.name}(${firstCall.function.arguments})`
+        `callLLMWithTools: tool call received — ${resolvedToolName}(${firstCall.function.arguments})`
       )
       return {
         toolCall: {
-          functionName: firstCall.function.name,
+          functionName: resolvedToolName,
           arguments: firstCall.function.arguments
         },
         usedInputTokens: completionResult.usedInputTokens,
@@ -893,6 +885,49 @@ export class ReActLLMDuty extends LLMDuty {
     } catch {
       return String(value)
     }
+  }
+
+  private resolveAllowedToolCallName(
+    requestedName: string,
+    allowedToolNames: Set<string>
+  ): string | null {
+    const normalizedRequested = String(requestedName || '').trim()
+    if (!normalizedRequested) {
+      return null
+    }
+
+    if (allowedToolNames.has(normalizedRequested)) {
+      return normalizedRequested
+    }
+
+    const allowList = [...allowedToolNames]
+    const lowerMatches = allowList.filter(
+      (toolName) => toolName.toLowerCase() === normalizedRequested.toLowerCase()
+    )
+    if (lowerMatches.length === 1) {
+      return lowerMatches[0] || null
+    }
+
+    const tailCandidate = normalizedRequested
+      .split(/[./:]/)
+      .filter(Boolean)
+      .pop()
+    if (!tailCandidate) {
+      return null
+    }
+
+    if (allowedToolNames.has(tailCandidate)) {
+      return tailCandidate
+    }
+
+    const lowerTailMatches = allowList.filter(
+      (toolName) => toolName.toLowerCase() === tailCandidate.toLowerCase()
+    )
+    if (lowerTailMatches.length === 1) {
+      return lowerTailMatches[0] || null
+    }
+
+    return null
   }
 
   private estimateTokensFromText(text: string): number {

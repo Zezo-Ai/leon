@@ -6,7 +6,7 @@
  * ~4 chars per token is a conservative estimate that works across model
  * tokenizers.
  */
-export const CATALOG_TOKEN_BUDGET = 3_200
+export const CATALOG_TOKEN_BUDGET = 2_000
 export const CHARS_PER_TOKEN = 4
 export const DUTY_NAME = 'ReAct LLM Duty'
 

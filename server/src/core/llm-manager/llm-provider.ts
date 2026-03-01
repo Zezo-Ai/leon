@@ -1805,12 +1805,22 @@ export default class LLMProvider {
           }
         }
 
+        const rawTrimmed = rawResultString.trim()
+        const looksStructuredPayload =
+          /^(\{|\[|```)/.test(rawTrimmed)
+
         LogHelper.title('LLM Provider')
-        LogHelper.warning(
-          `Failed to parse JSON output for ${completionParams.dutyType}: ${
-            lastError?.message || 'unknown parse error'
-          }`
-        )
+        if (looksStructuredPayload) {
+          LogHelper.warning(
+            `Failed to parse JSON output for ${completionParams.dutyType}: ${
+              lastError?.message || 'unknown parse error'
+            }`
+          )
+        } else {
+          LogHelper.debug(
+            `JSON parsing skipped warning for ${completionParams.dutyType}: provider returned plain text fallback`
+          )
+        }
         return rawResultString
       })(),
       data: completionParams.data,

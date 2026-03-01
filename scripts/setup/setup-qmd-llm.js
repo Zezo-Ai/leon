@@ -10,6 +10,10 @@ const QMD_MODELS_DIR_PATH = path.join(homedir(), '.cache', 'qmd', 'models')
 
 const QMD_MODELS = [
   {
+    /**
+     * We do not use it yet, but better to get it now,
+     * so it'd be ready when we enable embeddings
+     */
     url: 'https://huggingface.co/ggml-org/embeddinggemma-300M-GGUF/resolve/main/embeddinggemma-300M-Q8_0.gguf?download=true',
     filename: 'hf_ggml-org_embeddinggemma-300M-Q8_0.gguf'
   },

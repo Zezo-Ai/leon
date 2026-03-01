@@ -18,14 +18,17 @@ export function buildCatalog(): Catalog {
     )
     if (toolFunctions) {
       for (const [fnName, fnConfig] of Object.entries(toolFunctions) as [string, FunctionConfig][]) {
-        // Include parameter names so the model can reason about data flow
-        // between steps.
+        // Include only required parameter names to keep hints concise.
         const params = fnConfig.parameters
         const paramNames: string[] = []
         if (params && typeof params === 'object') {
-          const properties = (params as Record<string, unknown>)['properties']
-          if (properties && typeof properties === 'object') {
-            paramNames.push(...Object.keys(properties as Record<string, unknown>))
+          const required = (params as Record<string, unknown>)['required']
+          if (Array.isArray(required)) {
+            paramNames.push(
+              ...required.filter(
+                (value): value is string => typeof value === 'string'
+              )
+            )
           }
         }
         const paramHint = paramNames.length > 0
