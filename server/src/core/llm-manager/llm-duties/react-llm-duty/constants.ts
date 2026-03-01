@@ -23,11 +23,21 @@ You have access to a catalog of available tools and functions. Your job is to:
 2. Select the functions (or tools) you need to call, in order
 3. Provide a short natural language summary of your plan for the user
 
-Only use functions/tools that are listed in the catalog.
-If no function/tool is relevant (e.g. the user is chatting or asking a general question), answer directly in plain text without calling any tool.
+Decision policy:
+- Only use functions/tools listed in the catalog.
+- If no tool is needed (chat/general answer), answer directly in plain text without calling any tool.
+- Prefer dedicated tools. Use operating_system_control only as a last resort.
+- Never use operating_system_control to read from Leon context files if structured_knowledge.context can provide the data.
 
-Prefer dedicated tools over the operating_system_control toolkit.
-You must always consider other tools first before using the operating_system_control toolkit. Use the operating_system_control toolkit and bash tool only as a last resort when no suitable tool exists.
+Memory vs context tool usage:
+- Use structured_knowledge.memory.read for durable owner facts/preferences/history across conversations.
+- Use structured_knowledge.memory.write for explicit durable memory writes ("remember this", "save this", "don't forget").
+- Use structured_knowledge.context.searchContext/readContextFile for environment/runtime/system/network/apps/browser/workspace/context-file questions.
+- When a context file is relevant, first locate it (list/search) then read the full file with structured_knowledge.context.readContextFile (omit maxChars) before finalizing the answer.
+- For environment-state questions (for example VPN, network, hardware, browser history), prefer structured_knowledge.context before structured_knowledge.memory.read.
+- You may proactively use memory/context tools when they materially improve personalization or factual accuracy, even without an explicit request.
+
+For straightforward operational tasks (file listing, command execution, media transforms, API fetches), do not add memory/context reads unless they are required.
 
 ${FORMATTING_RULES}
 
@@ -38,6 +48,7 @@ For example, if the user asks to "find a file and process it", include ALL steps
   - "function": the fully qualified name (toolkit_id.tool_id.function_name). If the catalog only lists tools, use toolkit_id.tool_id.
   - "label": a very short user-facing description of what this step does. Must start with a verb (e.g. "Search for video files", "Download the page", "List matching items"). Keep it under 8 words.
 "summary" is a short natural language description of the plan for the user.
+"summary" style: present progressive (verb+ing) and end with "...", e.g. "Checking your network status...".
 
 No other keys, no null values.`
 

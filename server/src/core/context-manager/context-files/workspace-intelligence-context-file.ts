@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { DateHelper } from '@/helpers/date-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 import { ContextProbeHelper } from '@/core/context-manager/context-probe-helper'
 import { ContextStateStore } from '@/core/context-manager/context-state-store'
@@ -100,9 +101,9 @@ export class WorkspaceIntelligenceContextFile extends ContextFile {
       .map((entry, index) => `- ${index + 1}. ${entry.name}: ${entry.availability}`)
 
     return [
-      `> ${summary}`,
+      `> Repositories, language distribution, toolchain availability. ${summary}`,
       '# WORKSPACE_INTELLIGENCE',
-      `- Generated at: ${nowIso}`,
+      `- Generated at: ${DateHelper.getDateTime()}`,
       `- Tracking started at: ${updatedState.trackingStartedAt}`,
       `- Workspace roots scanned: ${workspaceRoots.join(', ') || 'none'}`,
       `- Repository count: ${repositorySnapshots.length}`,

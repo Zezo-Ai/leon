@@ -1,5 +1,6 @@
 import path from 'node:path'
 
+import { DateHelper } from '@/helpers/date-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 import {
   ContextProbeHelper,
@@ -127,9 +128,9 @@ export class HabitsContextFile extends ContextFile {
         : ['- No habits for this weekday yet']
 
     return [
-      `> ${summary}`,
+      `> Overall habits, time-window habits, weekday habits. ${summary}`,
       '# HABITS',
-      `- Generated at: ${nowIso}`,
+      `- Generated at: ${DateHelper.getDateTime()}`,
       `- Tracking started at: ${updatedState.trackingStartedAt}`,
       `- Current time bucket: ${currentTimeBucket}`,
       `- Current weekday bucket: ${currentDayBucket}`,

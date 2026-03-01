@@ -38,7 +38,6 @@ import {
   CHARS_PER_TOKEN,
   TOOL_CALL_WAIT_NOTICE_DELAY_MS,
   TOOL_CALL_DIAGNOSIS_DELAY_MS,
-  PLANNING_WAIT_NOTICE_DELAY_MS,
   REACT_LOCAL_PROVIDER_HISTORY_LOGS,
   REACT_REMOTE_PROVIDER_HISTORY_LOGS,
   MAX_EXECUTIONS,
@@ -49,7 +48,8 @@ import type {
   ExecutionRecord,
   TrackedPlanStep,
   PlanStepStatus,
-  LLMCaller
+  LLMCaller,
+  PromptLogSection
 } from './react-llm-duty/types'
 import { widgetId, emitPlanWidget } from './react-llm-duty/plan-widget'
 import {
@@ -71,6 +71,7 @@ export class ReActLLMDuty extends LLMDuty {
   private totalInputTokens = 0
   private totalOutputTokens = 0
   private hasStreamedTokenEmission = false
+  private hasExplicitMemoryWrite = false
 
   constructor(params: ReactLLMDutyParams) {
     super()
@@ -137,6 +138,7 @@ export class ReActLLMDuty extends LLMDuty {
     this.totalInputTokens = 0
     this.totalOutputTokens = 0
     this.hasStreamedTokenEmission = false
+    this.hasExplicitMemoryWrite = false
 
     try {
       const history =
@@ -162,38 +164,42 @@ export class ReActLLMDuty extends LLMDuty {
       const caller = this.createLLMCaller(history)
       const planWidgetIdValue = widgetId('plan')
       let hasPlanningWidget = false
-      let planningCompleted = false
-      let planningWaitTimer: NodeJS.Timeout | null = null
+      let planningUiSteps: TrackedPlanStep[] = [
+        { label: 'Thinking...', status: 'in_progress' }
+      ]
 
-      planningWaitTimer = setTimeout(() => {
-        if (planningCompleted) {
-          return
-        }
+      emitPlanWidget(
+        planningUiSteps,
+        null,
+        planWidgetIdValue,
+        false
+      )
+      hasPlanningWidget = true
 
+      const updatePlanningStage = (): void => {
+        planningUiSteps = [
+          { label: 'Thinking...', status: 'in_progress' }
+        ]
         emitPlanWidget(
-          [{ label: 'Thinking...', status: 'in_progress' }],
+          planningUiSteps,
           null,
           planWidgetIdValue,
-          false
+          true
         )
-        hasPlanningWidget = true
-      }, PLANNING_WAIT_NOTICE_DELAY_MS)
-
-      let planResult
-      try {
-        planResult = await runPlanningPhase(caller, catalog, history)
-      } finally {
-        planningCompleted = true
-        if (planningWaitTimer) {
-          clearTimeout(planningWaitTimer)
-        }
       }
+
+      const planResult = await runPlanningPhase(
+        caller,
+        catalog,
+        history,
+        updatePlanningStage
+      )
 
       if (planResult.type === 'final') {
         if (hasPlanningWidget) {
           emitPlanWidget(
-            [{ label: 'Thinking...', status: 'completed' }],
-            0,
+            planningUiSteps.map((step) => ({ ...step, status: 'completed' })),
+            null,
             planWidgetIdValue,
             true
           )
@@ -229,7 +235,7 @@ export class ReActLLMDuty extends LLMDuty {
 
       // Emit plan summary as text, then show the widget
       if (planResult.summary) {
-        await this.emitProgress(planResult.summary)
+        await this.emitProgress(this.toProgressiveMessage(planResult.summary))
       }
       emitPlanWidget(
         trackedSteps,
@@ -308,6 +314,14 @@ export class ReActLLMDuty extends LLMDuty {
 
         // Record execution
         executionHistory.push(stepResult.execution)
+
+        if (
+          stepResult.execution.status === 'success' &&
+          stepResult.execution.function ===
+            'structured_knowledge.memory.write'
+        ) {
+          this.hasExplicitMemoryWrite = true
+        }
 
         LogHelper.title(this.name)
         LogHelper.debug(
@@ -388,7 +402,9 @@ export class ReActLLMDuty extends LLMDuty {
               LogHelper.debug(
                 `Recovery plan summary: "${recoveryPlanResult.summary}"`
               )
-              await this.emitProgress(recoveryPlanResult.summary)
+              await this.emitProgress(
+                this.toProgressiveMessage(recoveryPlanResult.summary)
+              )
             }
 
             const completedSteps = trackedSteps.filter(
@@ -467,7 +483,7 @@ export class ReActLLMDuty extends LLMDuty {
       supportsNativeTools: this.supportsNativeTools,
       input: this.input,
       history,
-      getContextForToolkit: CONTEXT_MANAGER.getContextForToolkit.bind(
+      getContextFileContent: CONTEXT_MANAGER.getContextFileContent.bind(
         CONTEXT_MANAGER
       ),
       consumeProviderErrorMessage:
@@ -479,12 +495,23 @@ export class ReActLLMDuty extends LLMDuty {
     prompt: string,
     systemPrompt: string,
     schema: Record<string, unknown>,
-    history?: MessageLog[]
+    history?: MessageLog[],
+    promptSections?: PromptLogSection[]
   ): Promise<{
     output: unknown
     usedInputTokens?: number
     usedOutputTokens?: number
+    reasoning?: string
   } | null> {
+    this.logPromptDispatch({
+      channel: 'json',
+      prompt,
+      systemPrompt,
+      schema,
+      ...(promptSections ? { promptSections } : {}),
+      ...(history ? { history } : {})
+    })
+
     const completionParams = {
       dutyType: LLMDuties.ReAct,
       systemPrompt,
@@ -508,10 +535,12 @@ export class ReActLLMDuty extends LLMDuty {
     if (result) {
       this.totalInputTokens += result.usedInputTokens ?? 0
       this.totalOutputTokens += result.usedOutputTokens ?? 0
-      LogHelper.title(this.name)
-      LogHelper.debug(
-        `Tokens — input: ${result.usedInputTokens ?? 0} | output: ${result.usedOutputTokens ?? 0} | total: ${this.totalInputTokens}+${this.totalOutputTokens}=${this.totalInputTokens + this.totalOutputTokens}`
+      this.logPromptUsage(
+        'json',
+        result.usedInputTokens ?? 0,
+        result.usedOutputTokens ?? 0
       )
+      this.logPromptReasoning('json', result.reasoning)
     }
 
     return result
@@ -521,12 +550,23 @@ export class ReActLLMDuty extends LLMDuty {
     prompt: string,
     systemPrompt: string,
     history?: MessageLog[],
-    shouldStream = false
+    shouldStream = false,
+    promptSections?: PromptLogSection[]
   ): Promise<{
     output: string
     usedInputTokens?: number
     usedOutputTokens?: number
+    reasoning?: string
   } | null> {
+    this.logPromptDispatch({
+      channel: 'text',
+      prompt,
+      systemPrompt,
+      shouldStream,
+      ...(promptSections ? { promptSections } : {}),
+      ...(history ? { history } : {})
+    })
+
     const generationId = shouldStream
       ? StringHelper.random(6, { onlyLetters: true })
       : null
@@ -583,10 +623,12 @@ export class ReActLLMDuty extends LLMDuty {
 
     this.totalInputTokens += result.usedInputTokens ?? 0
     this.totalOutputTokens += result.usedOutputTokens ?? 0
-    LogHelper.title(this.name)
-    LogHelper.debug(
-      `Tokens — input: ${result.usedInputTokens ?? 0} | output: ${result.usedOutputTokens ?? 0} | total: ${this.totalInputTokens}+${this.totalOutputTokens}=${this.totalInputTokens + this.totalOutputTokens}`
+    this.logPromptUsage(
+      'text',
+      result.usedInputTokens ?? 0,
+      result.usedOutputTokens ?? 0
     )
+    this.logPromptReasoning('text', result.reasoning)
 
     return {
       output:
@@ -594,7 +636,8 @@ export class ReActLLMDuty extends LLMDuty {
           ? result.output
           : this.safeJSONStringify(result.output),
       usedInputTokens: result.usedInputTokens,
-      usedOutputTokens: result.usedOutputTokens
+      usedOutputTokens: result.usedOutputTokens,
+      ...(result.reasoning ? { reasoning: result.reasoning } : {})
     }
   }
 
@@ -609,13 +652,15 @@ export class ReActLLMDuty extends LLMDuty {
     tools: OpenAITool[],
     toolChoice: OpenAIToolChoice,
     history?: MessageLog[],
-    shouldStreamToUser = false
+    shouldStreamToUser = false,
+    promptSections?: PromptLogSection[]
   ): Promise<{
     toolCall?: { functionName: string, arguments: string }
     unexpectedToolCall?: { functionName: string, arguments: string }
     textContent?: string
     usedInputTokens?: number
     usedOutputTokens?: number
+    reasoning?: string
   } | null> {
     const effectiveToolChoice: OpenAIToolChoice | undefined =
       tools.length <= 1
@@ -637,6 +682,18 @@ export class ReActLLMDuty extends LLMDuty {
     LogHelper.debug(
       `callLLMWithTools: tools=[${toolNames}] | choice=${choiceLabel}`
     )
+    this.logPromptDispatch({
+      channel: 'tools',
+      prompt,
+      systemPrompt,
+      tools,
+      ...(effectiveToolChoice !== undefined
+        ? { toolChoice: effectiveToolChoice }
+        : {}),
+      shouldStream: shouldStreamToUser,
+      ...(promptSections ? { promptSections } : {}),
+      ...(history ? { history } : {})
+    })
 
     let completionResult: Awaited<ReturnType<typeof LLM_PROVIDER.prompt>>
     let completed = false
@@ -735,10 +792,12 @@ export class ReActLLMDuty extends LLMDuty {
 
     this.totalInputTokens += completionResult.usedInputTokens ?? 0
     this.totalOutputTokens += completionResult.usedOutputTokens ?? 0
-    LogHelper.title(this.name)
-    LogHelper.debug(
-      `Tokens — input: ${completionResult.usedInputTokens ?? 0} | output: ${completionResult.usedOutputTokens ?? 0} | total: ${this.totalInputTokens}+${this.totalOutputTokens}=${this.totalInputTokens + this.totalOutputTokens}`
+    this.logPromptUsage(
+      'tools',
+      completionResult.usedInputTokens ?? 0,
+      completionResult.usedOutputTokens ?? 0
     )
+    this.logPromptReasoning('tools', completionResult.reasoning)
 
     // Check if the model responded with tool calls
     const toolCalls = (
@@ -747,7 +806,11 @@ export class ReActLLMDuty extends LLMDuty {
     if (toolCalls && toolCalls.length > 0) {
       const firstCall = toolCalls[0]!
       const allowedToolNames = new Set(tools.map((t) => t.function.name))
-      if (!allowedToolNames.has(firstCall.function.name)) {
+      const resolvedToolName = this.resolveAllowedToolCallName(
+        firstCall.function.name,
+        allowedToolNames
+      )
+      if (!resolvedToolName) {
         LogHelper.title(this.name)
         LogHelper.warning(
           `callLLMWithTools: unexpected tool call "${firstCall.function.name}" (allowed: ${[...allowedToolNames].join(', ') || 'none'})`
@@ -764,20 +827,32 @@ export class ReActLLMDuty extends LLMDuty {
           },
           textContent: textContentFallback,
           usedInputTokens: completionResult.usedInputTokens,
-          usedOutputTokens: completionResult.usedOutputTokens
+          usedOutputTokens: completionResult.usedOutputTokens,
+          ...(completionResult.reasoning
+            ? { reasoning: completionResult.reasoning }
+            : {})
         }
+      }
+      if (resolvedToolName !== firstCall.function.name) {
+        LogHelper.title(this.name)
+        LogHelper.debug(
+          `callLLMWithTools: normalized tool call "${firstCall.function.name}" -> "${resolvedToolName}"`
+        )
       }
       LogHelper.title(this.name)
       LogHelper.debug(
-        `callLLMWithTools: tool call received — ${firstCall.function.name}(${firstCall.function.arguments})`
+        `callLLMWithTools: tool call received — ${resolvedToolName}(${firstCall.function.arguments})`
       )
       return {
         toolCall: {
-          functionName: firstCall.function.name,
+          functionName: resolvedToolName,
           arguments: firstCall.function.arguments
         },
         usedInputTokens: completionResult.usedInputTokens,
-        usedOutputTokens: completionResult.usedOutputTokens
+        usedOutputTokens: completionResult.usedOutputTokens,
+        ...(completionResult.reasoning
+          ? { reasoning: completionResult.reasoning }
+          : {})
       }
     }
 
@@ -793,7 +868,10 @@ export class ReActLLMDuty extends LLMDuty {
     return {
       textContent,
       usedInputTokens: completionResult.usedInputTokens,
-      usedOutputTokens: completionResult.usedOutputTokens
+      usedOutputTokens: completionResult.usedOutputTokens,
+      ...(completionResult.reasoning
+        ? { reasoning: completionResult.reasoning }
+        : {})
     }
   }
 
@@ -807,6 +885,49 @@ export class ReActLLMDuty extends LLMDuty {
     } catch {
       return String(value)
     }
+  }
+
+  private resolveAllowedToolCallName(
+    requestedName: string,
+    allowedToolNames: Set<string>
+  ): string | null {
+    const normalizedRequested = String(requestedName || '').trim()
+    if (!normalizedRequested) {
+      return null
+    }
+
+    if (allowedToolNames.has(normalizedRequested)) {
+      return normalizedRequested
+    }
+
+    const allowList = [...allowedToolNames]
+    const lowerMatches = allowList.filter(
+      (toolName) => toolName.toLowerCase() === normalizedRequested.toLowerCase()
+    )
+    if (lowerMatches.length === 1) {
+      return lowerMatches[0] || null
+    }
+
+    const tailCandidate = normalizedRequested
+      .split(/[./:]/)
+      .filter(Boolean)
+      .pop()
+    if (!tailCandidate) {
+      return null
+    }
+
+    if (allowedToolNames.has(tailCandidate)) {
+      return tailCandidate
+    }
+
+    const lowerTailMatches = allowList.filter(
+      (toolName) => toolName.toLowerCase() === tailCandidate.toLowerCase()
+    )
+    if (lowerTailMatches.length === 1) {
+      return lowerTailMatches[0] || null
+    }
+
+    return null
   }
 
   private estimateTokensFromText(text: string): number {
@@ -827,6 +948,143 @@ export class ReActLLMDuty extends LLMDuty {
     }, 0)
 
     return Math.ceil(historyChars / CHARS_PER_TOKEN)
+  }
+
+  private logPromptDispatch(params: {
+    channel: 'json' | 'text' | 'tools'
+    prompt: string
+    systemPrompt: string
+    history?: MessageLog[]
+    schema?: Record<string, unknown>
+    tools?: OpenAITool[]
+    toolChoice?: OpenAIToolChoice
+    shouldStream?: boolean
+    promptSections?: PromptLogSection[]
+  }): void {
+    const promptTokens = this.estimateTokensFromText(params.prompt)
+    const systemTokens = this.estimateTokensFromText(params.systemPrompt)
+    const historyTokens = this.estimateHistoryTokens(params.history)
+    const schemaTokens = params.schema
+      ? this.estimateTokensFromText(this.safeJSONStringify(params.schema))
+      : 0
+    const totalEstimated =
+      promptTokens + systemTokens + historyTokens + schemaTokens
+
+    LogHelper.title(this.name)
+    LogHelper.debug(
+      `Prompt dispatch [${params.channel}] est_tokens=${totalEstimated} (prompt=${promptTokens}, system=${systemTokens}, history=${historyTokens}${schemaTokens > 0 ? `, schema=${schemaTokens}` : ''})${
+        params.shouldStream === true ? ' | stream=true' : ''
+      }${
+        params.tools
+          ? ` | tools=${params.tools.length} | tool_choice=${
+              params.toolChoice === undefined
+                ? 'omitted'
+                : typeof params.toolChoice === 'string'
+                  ? params.toolChoice
+                  : params.toolChoice.function.name
+            }`
+          : ''
+      }`
+    )
+    const sections =
+      params.promptSections && params.promptSections.length > 0
+        ? params.promptSections
+        : this.buildDefaultPromptSections(params)
+    if (sections.length > 0) {
+      LogHelper.debug(
+        `Prompt sections [${params.channel}]:\n${sections
+          .map((section) => {
+            const sectionTokens = this.estimateTokensFromText(
+              section.content ?? ''
+            )
+            return `- ${section.name} (${this.compactSectionSourcePath(
+              section.source
+            )}) | est_tokens=${sectionTokens}`
+          })
+          .join('\n')}`
+      )
+    }
+  }
+
+  private compactSectionSourcePath(source: string): string {
+    const normalized = String(source || '').replace(/\\/g, '/')
+    const parts = normalized.split('/').filter((part) => part.length > 0)
+    if (parts.length <= 2) {
+      return parts.join('/')
+    }
+
+    return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`
+  }
+
+  private buildDefaultPromptSections(params: {
+    prompt: string
+    systemPrompt: string
+    schema?: Record<string, unknown>
+    tools?: OpenAITool[]
+    history?: MessageLog[]
+  }): PromptLogSection[] {
+    const sections: PromptLogSection[] = [
+      {
+        name: 'SYSTEM_PROMPT',
+        source: 'server/src/core/llm-manager/persona.ts',
+        content: params.systemPrompt
+      },
+      {
+        name: 'PHASE_PROMPT',
+        source: 'server/src/core/llm-manager/llm-duties/react-llm-duty/*.ts',
+        content: params.prompt
+      }
+    ]
+
+    if (params.schema) {
+      sections.push({
+        name: 'JSON_SCHEMA',
+        source: 'server/src/core/llm-manager/llm-duties/react-llm-duty/*.ts',
+        content: this.safeJSONStringify(params.schema)
+      })
+    }
+
+    if (params.tools && params.tools.length > 0) {
+      sections.push({
+        name: 'TOOLS_SCHEMA',
+        source: 'server/src/core/llm-manager/llm-duties/react-llm-duty/*.ts',
+        content: this.safeJSONStringify(params.tools)
+      })
+    }
+
+    if (params.history && params.history.length > 0) {
+      sections.push({
+        name: 'HISTORY',
+        source: 'core/conversation_logger',
+        content: params.history.map((entry) => entry.message || '').join('\n')
+      })
+    }
+
+    return sections
+  }
+
+  private logPromptUsage(
+    channel: 'json' | 'text' | 'tools',
+    usedInputTokens: number,
+    usedOutputTokens: number
+  ): void {
+    LogHelper.title(this.name)
+    LogHelper.debug(
+      `Prompt usage [${channel}] input=${usedInputTokens} output=${usedOutputTokens} | total=${this.totalInputTokens}+${this.totalOutputTokens}=${this.totalInputTokens + this.totalOutputTokens}`
+    )
+  }
+
+  private logPromptReasoning(
+    channel: 'json' | 'text' | 'tools',
+    reasoning?: string
+  ): void {
+    LogHelper.title(this.name)
+    if (reasoning && reasoning.trim()) {
+      LogHelper.debug(`Prompt reasoning [${channel}]:\n${reasoning.trim()}`)
+      return
+    }
+
+    LogHelper.debug(`Prompt reasoning [${channel}]: none`)
   }
 
   private buildLongToolCallReason(
@@ -908,6 +1166,25 @@ export class ReActLLMDuty extends LLMDuty {
     }
   }
 
+  private toProgressiveMessage(message: string): string {
+    const normalized = String(message || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (!normalized) {
+      return 'Working...'
+    }
+
+    const withEllipsis = normalized.endsWith('...')
+      ? normalized
+      : `${normalized.replace(/[.?!]+$/g, '')}...`
+
+    if (/^([A-Za-z]+ing)\b/.test(withEllipsis)) {
+      return withEllipsis
+    }
+
+    return `Working on: ${withEllipsis}`
+  }
+
   private makeDutyResult(output: string): LLMDutyResult {
     if (!this.hasStreamedTokenEmission && output?.trim()) {
       this.emitSyntheticTokenStream(output)
@@ -925,7 +1202,9 @@ export class ReActLLMDuty extends LLMDuty {
       systemPrompt: this.systemPrompt,
       input: this.input,
       output,
-      data: {}
+      data: {
+        hasExplicitMemoryWrite: this.hasExplicitMemoryWrite
+      }
     } as unknown as LLMDutyResult
   }
 

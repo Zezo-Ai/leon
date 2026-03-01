@@ -10,7 +10,8 @@ import {
 } from './constants'
 import type {
   ExecutionRecord,
-  LLMCaller
+  LLMCaller,
+  PromptLogSection
 } from './types'
 import { formatExecutionHistory, parseOutput, parseToolCallArguments } from './utils'
 
@@ -23,9 +24,37 @@ export async function runFinalAnswerPhase(
 
   const historySection = formatExecutionHistory(executionHistory)
   const systemPrompt = PERSONA.getCompactDutySystemPrompt(
-    `You are synthesizing a final answer from tool execution results. Provide a clear, helpful, and complete response to the user based on the observations collected. Always include relevant details from the tool results.\n\n${FORMATTING_RULES}`
+    `You are synthesizing a final answer from tool execution results. Provide a clear, helpful, and complete response to the user based on the observations collected. Always include relevant details from the tool results.
+
+Important:
+- The execution loop is already finished.
+- Do not promise additional actions.
+- Do not say "let me", "I will", or any future-step phrasing.
+- Return a completed answer based only on available observations.
+
+${FORMATTING_RULES}`
   )
   const prompt = `${historySection}\n\nUser Request: "${caller.input}"\n\nBased on the execution results above, provide a final answer to the user.`
+
+  const buildFinalAnswerPromptSections = (
+    currentPrompt: string,
+    currentSystemPrompt: string,
+    extras?: PromptLogSection[]
+  ): PromptLogSection[] => {
+    return [
+      {
+        name: 'PERSONA',
+        source: 'server/src/core/llm-manager/persona.ts',
+        content: currentSystemPrompt
+      },
+      {
+        name: 'FINAL_ANSWER_PROMPT',
+        source: 'server/src/core/llm-manager/llm-duties/react-llm-duty/final-answer.ts',
+        content: currentPrompt
+      },
+      ...(extras || [])
+    ]
+  }
 
   const finalAnswerRetryIncrementMs = 30_000
 
@@ -44,7 +73,8 @@ export async function runFinalAnswerPhase(
         prompt,
         systemPrompt,
         caller.history,
-        true
+        true,
+        buildFinalAnswerPromptSections(prompt, systemPrompt)
       )
 
       if (textResult?.output?.trim()) {
@@ -77,7 +107,16 @@ export async function runFinalAnswerPhase(
           systemPrompt,
           [answerTool],
           { type: 'function', function: { name: 'provide_answer' } },
-          caller.history
+          caller.history,
+          false,
+          buildFinalAnswerPromptSections(prompt, systemPrompt, [
+            {
+              name: 'TOOLS_SCHEMA',
+              source:
+                'server/src/core/llm-manager/llm-duties/react-llm-duty/final-answer.ts',
+              content: JSON.stringify([answerTool])
+            }
+          ])
         )
 
         if (result?.toolCall) {
@@ -111,7 +150,15 @@ export async function runFinalAnswerPhase(
         prompt,
         systemPrompt,
         finalSchema,
-        caller.history
+        caller.history,
+        buildFinalAnswerPromptSections(prompt, systemPrompt, [
+          {
+            name: 'FINAL_SCHEMA',
+            source:
+              'server/src/core/llm-manager/llm-duties/react-llm-duty/final-answer.ts',
+            content: JSON.stringify(finalSchema)
+          }
+        ])
       )
 
       if (completionResult?.output) {
@@ -126,6 +173,14 @@ export async function runFinalAnswerPhase(
 
     const elapsedMs = Date.now() - attemptStart
     if (!candidateAnswer) {
+      continue
+    }
+
+    if (candidateAnswer.trim().endsWith(':') && attempt < FINAL_ANSWER_MAX_RETRIES) {
+      LogHelper.title(DUTY_NAME)
+      LogHelper.warning(
+        `Final answer looked incomplete (trailing colon); retrying (${attempt + 1}/${FINAL_ANSWER_MAX_RETRIES})`
+      )
       continue
     }
 

@@ -12,7 +12,8 @@ import type {
   ExecutionRecord,
   LLMCaller,
   PlanResult,
-  PlanStep
+  PlanStep,
+  PromptLogSection
 } from './types'
 import {
   formatExecutionHistory,
@@ -30,6 +31,52 @@ import {
   PLAN_RESPONSE_SCHEMA,
   PLAN_STEP_SCHEMA
 } from './plan-contract'
+
+function buildRecoveryPromptSections(params: {
+  prompt: string
+  systemPrompt: string
+  tools?: OpenAITool[]
+  includeSchema?: boolean
+}): PromptLogSection[] {
+  const sections: PromptLogSection[] = [
+    {
+      name: 'PERSONA',
+      source: 'server/src/core/llm-manager/persona.ts',
+      content: params.systemPrompt
+    },
+    {
+      name: 'RECOVERY_PLAN_PROMPT',
+      source: 'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
+      content: RECOVERY_PLAN_SYSTEM_PROMPT
+    },
+    {
+      name: 'RECOVERY_INPUT',
+      source:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/recovery-planning.ts',
+      content: params.prompt
+    }
+  ]
+
+  if (params.tools) {
+    sections.push({
+      name: 'TOOLS_SCHEMA',
+      source:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/recovery-planning.ts',
+      content: JSON.stringify(params.tools)
+    })
+  }
+
+  if (params.includeSchema) {
+    sections.push({
+      name: 'PLAN_SCHEMA',
+      source:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/plan-contract.ts',
+      content: JSON.stringify(PLAN_RESPONSE_SCHEMA)
+    })
+  }
+
+  return sections
+}
 
 export async function runRecoveryPlanningPhase(
   caller: LLMCaller,
@@ -141,7 +188,13 @@ Create a revised plan from this point to complete the user request.`
       recoverySystemPrompt,
       planTools,
       { type: 'function', function: { name: 'create_plan' } },
-      history
+      history,
+      false,
+      buildRecoveryPromptSections({
+        prompt,
+        systemPrompt: recoverySystemPrompt,
+        tools: planTools
+      })
     )
 
     if (!toolResult) {
@@ -225,7 +278,12 @@ Create a revised plan from this point to complete the user request.`
     prompt,
     recoverySystemPrompt,
     planSchema,
-    history
+    history,
+    buildRecoveryPromptSections({
+      prompt,
+      systemPrompt: recoverySystemPrompt,
+      includeSchema: true
+    })
   )
   if (!jsonModeResult) {
     const providerError = caller.consumeProviderErrorMessage()

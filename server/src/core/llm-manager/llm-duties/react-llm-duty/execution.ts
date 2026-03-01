@@ -24,7 +24,8 @@ import type {
   ExecutionStepResult,
   ToolExecutionResult,
   LLMCaller,
-  FunctionConfig
+  FunctionConfig,
+  PromptLogSection
 } from './types'
 import {
   isToolLevel,
@@ -42,6 +43,63 @@ import {
   buildPreviouslyUsedInputsSection,
   buildToolkitContextSection
 } from './phase-helpers'
+
+async function buildExecutionMemorySection(
+  _caller: LLMCaller,
+  toolkitId: string
+): Promise<string> {
+  LogHelper.title(DUTY_NAME)
+  LogHelper.debug(
+    `Execution memory injection disabled [${toolkitId}] (use structured_knowledge.memory.read when memory is needed)`
+  )
+  return 'Execution Memory: none'
+}
+
+function buildExecutionPromptSections(params: {
+  prompt: string
+  systemPrompt: string
+  baseSystemPromptContent?: string
+  promptSource: string
+  systemPromptSource: string
+  schema?: Record<string, unknown>
+  tools?: OpenAITool[]
+}): PromptLogSection[] {
+  const sections: PromptLogSection[] = [
+    {
+      name: 'PERSONA',
+      source: 'server/src/core/llm-manager/persona.ts',
+      content: params.systemPrompt
+    },
+    {
+      name: 'EXECUTION_SYSTEM_PROMPT',
+      source: params.systemPromptSource,
+      content: params.baseSystemPromptContent ?? params.systemPrompt
+    },
+    {
+      name: 'EXECUTION_INPUT',
+      source: params.promptSource,
+      content: params.prompt
+    }
+  ]
+
+  if (params.schema) {
+    sections.push({
+      name: 'EXECUTION_SCHEMA',
+      source: params.promptSource,
+      content: JSON.stringify(params.schema)
+    })
+  }
+
+  if (params.tools) {
+    sections.push({
+      name: 'TOOLS_SCHEMA',
+      source: params.promptSource,
+      content: JSON.stringify(params.tools)
+    })
+  }
+
+  return sections
+}
 
 export async function runExecutionStep(
   caller: LLMCaller,
@@ -246,6 +304,10 @@ async function resolveToolFunctionWithNativeTools(
   executionHistory: ExecutionRecord[]
 ): Promise<ExecutionStepResult> {
   const toolkitContextSection = buildToolkitContextSection(caller, toolkitId)
+  const executionMemorySection = await buildExecutionMemorySection(
+    caller,
+    toolkitId
+  )
   const historySection = formatExecutionHistory(executionHistory)
   const resolveSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     RESOLVE_FUNCTION_SYSTEM_PROMPT
@@ -262,14 +324,25 @@ async function resolveToolFunctionWithNativeTools(
     })
   )
 
-  const prompt = `Tool: ${toolkitId}.${toolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide arguments.`
+  const prompt = `Tool: ${toolkitId}.${toolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide arguments.`
 
   const result = await caller.callLLMWithTools(
     prompt,
     resolveSystemPrompt,
     tools,
     'auto',
-    caller.history
+    caller.history,
+    false,
+    buildExecutionPromptSections({
+      prompt,
+      systemPrompt: resolveSystemPrompt,
+      baseSystemPromptContent: RESOLVE_FUNCTION_SYSTEM_PROMPT,
+      promptSource:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/execution.ts',
+      systemPromptSource:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
+      tools
+    })
   )
 
   if (!result) {
@@ -336,6 +409,37 @@ async function resolveToolFunctionWithNativeTools(
           : []
       }
     }
+    if (parsed?.['type'] === 'execute') {
+      const fnName = String(parsed['function_name'] || '')
+        .split(/[./]/)
+        .filter(Boolean)
+        .pop() || ''
+      const fnConfig = toolFunctions[fnName]
+      if (!fnConfig) {
+        return {
+          type: 'executed',
+          execution: {
+            function: `${toolkitId}.${toolId}.${fnName}`,
+            status: 'error',
+            observation: `Function "${fnName}" not found. Available: ${Object.keys(toolFunctions).join(', ')}.`
+          }
+        }
+      }
+
+      const toolInput =
+        typeof parsed['tool_input'] === 'string'
+          ? (parsed['tool_input'] as string)
+          : '{}'
+      return runToolExecution(
+        toolkitId,
+        toolId,
+        fnName,
+        toolInput,
+        fnConfig,
+        undefined,
+        stepLabel
+      )
+    }
   }
 
   return {
@@ -366,6 +470,10 @@ async function resolveToolFunctionWithJSONMode(
     caller,
     effectiveToolkitId
   )
+  const executionMemorySection = await buildExecutionMemorySection(
+    caller,
+    effectiveToolkitId
+  )
   const functionsSection = functionEntries
     .map(([fnName, fnConfig]) => {
       const params = JSON.stringify(fnConfig.parameters)
@@ -377,7 +485,7 @@ async function resolveToolFunctionWithJSONMode(
   const resolveSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     RESOLVE_FUNCTION_SYSTEM_PROMPT
   )
-  const prompt = `Tool: ${effectiveToolkitId}.${effectiveToolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\nAvailable Functions:\n${functionsSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide tool_input.`
+  const prompt = `Tool: ${effectiveToolkitId}.${effectiveToolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\nAvailable Functions:\n${functionsSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide tool_input.`
 
   const resolveSchema = {
     oneOf: [
@@ -420,7 +528,17 @@ async function resolveToolFunctionWithJSONMode(
     prompt,
     resolveSystemPrompt,
     resolveSchema,
-    caller.history
+    caller.history,
+    buildExecutionPromptSections({
+      prompt,
+      systemPrompt: resolveSystemPrompt,
+      baseSystemPromptContent: RESOLVE_FUNCTION_SYSTEM_PROMPT,
+      promptSource:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/execution.ts',
+      systemPromptSource:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
+      schema: resolveSchema
+    })
   )
   const parsed = parseOutput(completionResult?.output)
 
@@ -547,6 +665,10 @@ async function executeFunctionWithNativeTools(
     qualifiedName
   )
   const toolkitContextSection = buildToolkitContextSection(caller, toolkitId)
+  const executionMemorySection = await buildExecutionMemorySection(
+    caller,
+    toolkitId
+  )
   const historySection = formatExecutionHistory(executionHistory)
   const executeSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     EXECUTE_SYSTEM_PROMPT
@@ -567,18 +689,108 @@ async function executeFunctionWithNativeTools(
   let lastFailedToolInput: string | null = null
   const attemptedInputsInCurrentStep = new Set<string>()
 
+  const runValidatedToolInput = async (
+    toolInputRaw: string
+  ): Promise<ToolExecutionResult | { retry: true }> => {
+    const inputValidation = validateToolInput(
+      toolInputRaw,
+      functionConfig.parameters
+    )
+    if (!inputValidation.isValid) {
+      retries += 1
+      lastError = inputValidation.message || 'tool arguments do not match schema'
+      return { retry: true }
+    }
+
+    const validatedToolInput = inputValidation.repairedToolInput ?? toolInputRaw
+    const duplicateInputMatch = findDuplicateToolInputMatch(
+      executionHistory,
+      qualifiedName,
+      currentStepLabel,
+      validatedToolInput
+    )
+    if (duplicateInputMatch) {
+      retries += 1
+      const previousStepLabel = duplicateInputMatch.stepLabel
+        ? `"${duplicateInputMatch.stepLabel}"`
+        : '(no label)'
+      lastError = `tool_input duplicates Step ${duplicateInputMatch.stepNumber} ${previousStepLabel}; provide different arguments for the current step`
+      LogHelper.title(DUTY_NAME)
+      LogHelper.debug(
+        `Rejected duplicate tool_input for "${qualifiedName}" at step ${currentStepNumber}: matches step ${duplicateInputMatch.stepNumber}`
+      )
+      return { retry: true }
+    }
+    const normalizedCurrentAttempt = normalizeToolInputForComparison(
+      validatedToolInput
+    )
+    if (
+      normalizedCurrentAttempt &&
+      attemptedInputsInCurrentStep.has(normalizedCurrentAttempt)
+    ) {
+      retries += 1
+      lastError = 'tool_input duplicates a previous attempt for the current step'
+      LogHelper.title(DUTY_NAME)
+      LogHelper.debug(
+        `Rejected duplicate retry tool_input for "${qualifiedName}" at step ${currentStepNumber}`
+      )
+      return { retry: true }
+    }
+    if (normalizedCurrentAttempt) {
+      attemptedInputsInCurrentStep.add(normalizedCurrentAttempt)
+    }
+
+    const toolResult = await runToolExecution(
+      toolkitId,
+      toolId,
+      functionName,
+      validatedToolInput,
+      functionConfig,
+      inputValidation.parsedValue,
+      currentStepLabel
+    )
+
+    if (toolResult.missingSettingsMessage || toolResult.finalAnswer) {
+      return toolResult
+    }
+
+    if (toolResult.execution.status === 'error') {
+      if (toolFailureRetries < MAX_TOOL_FAILURE_RETRIES) {
+        toolFailureRetries += 1
+        lastError = extractFailureMessageFromObservation(
+          toolResult.execution.observation
+        )
+        lastFailedToolInput = validatedToolInput
+        return { retry: true }
+      }
+    }
+
+    return toolResult
+  }
+
   while (retries <= MAX_RETRIES_PER_FUNCTION) {
     const retryNote = lastError
       ? `\n\nPrevious attempt failed: ${lastError}.${lastFailedToolInput ? `\nPrevious failed tool_input: ${lastFailedToolInput}\nDo not reuse the same tool_input. Change the arguments to address the failure.` : ' Please fix the arguments.'}`
       : ''
-    const prompt = `Current Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\n\n${toolkitContextSection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}`
+    const prompt = `Current Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}`
 
     const result = await caller.callLLMWithTools(
       prompt,
       executeSystemPrompt,
       [tool],
       { type: 'function', function: { name: functionName } },
-      caller.history
+      caller.history,
+      false,
+      buildExecutionPromptSections({
+        prompt,
+        systemPrompt: executeSystemPrompt,
+        baseSystemPromptContent: EXECUTE_SYSTEM_PROMPT,
+        promptSource:
+          'server/src/core/llm-manager/llm-duties/react-llm-duty/execution.ts',
+        systemPromptSource:
+          'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
+        tools: [tool]
+      })
     )
 
     if (!result) {
@@ -617,87 +829,10 @@ async function executeFunctionWithNativeTools(
     // Model returned a tool call — extract and validate arguments
     if (result.toolCall) {
       const toolInput = result.toolCall.arguments || '{}'
-
-      const inputValidation = validateToolInput(
-        toolInput,
-        functionConfig.parameters
-      )
-      if (!inputValidation.isValid) {
-        retries += 1
-        lastError =
-          inputValidation.message || 'tool arguments do not match schema'
+      const toolResult = await runValidatedToolInput(toolInput)
+      if ('retry' in toolResult) {
         continue
       }
-
-      const validatedToolInput =
-        inputValidation.repairedToolInput ?? toolInput
-      const duplicateInputMatch = findDuplicateToolInputMatch(
-        executionHistory,
-        qualifiedName,
-        currentStepLabel,
-        validatedToolInput
-      )
-      if (duplicateInputMatch) {
-        retries += 1
-        const previousStepLabel = duplicateInputMatch.stepLabel
-          ? `"${duplicateInputMatch.stepLabel}"`
-          : '(no label)'
-        lastError = `tool_input duplicates Step ${duplicateInputMatch.stepNumber} ${previousStepLabel}; provide different arguments for the current step`
-        LogHelper.title(DUTY_NAME)
-        LogHelper.debug(
-          `Rejected duplicate tool_input for "${qualifiedName}" at step ${currentStepNumber}: matches step ${duplicateInputMatch.stepNumber}`
-        )
-        continue
-      }
-      const normalizedCurrentAttempt = normalizeToolInputForComparison(
-        validatedToolInput
-      )
-      if (
-        normalizedCurrentAttempt &&
-        attemptedInputsInCurrentStep.has(normalizedCurrentAttempt)
-      ) {
-        retries += 1
-        lastError =
-          'tool_input duplicates a previous attempt for the current step'
-        LogHelper.title(DUTY_NAME)
-        LogHelper.debug(
-          `Rejected duplicate retry tool_input for "${qualifiedName}" at step ${currentStepNumber}`
-        )
-        continue
-      }
-      if (normalizedCurrentAttempt) {
-        attemptedInputsInCurrentStep.add(normalizedCurrentAttempt)
-      }
-
-      const toolResult = await runToolExecution(
-        toolkitId,
-        toolId,
-        functionName,
-        validatedToolInput,
-        functionConfig,
-        inputValidation.parsedValue,
-        currentStepLabel
-      )
-
-      if (toolResult.missingSettingsMessage) {
-        return toolResult
-      }
-
-      if (toolResult.finalAnswer) {
-        return toolResult
-      }
-
-      if (toolResult.execution.status === 'error') {
-        if (toolFailureRetries < MAX_TOOL_FAILURE_RETRIES) {
-          toolFailureRetries += 1
-          lastError = extractFailureMessageFromObservation(
-            toolResult.execution.observation
-          )
-          lastFailedToolInput = validatedToolInput
-          continue
-        }
-      }
-
       return toolResult
     }
 
@@ -715,6 +850,34 @@ async function executeFunctionWithNativeTools(
             ? (parsed['functions'] as string[])
             : []
         }
+      }
+      if (parsed?.['type'] === 'execute') {
+        const parsedFunctionName =
+          typeof parsed['function_name'] === 'string'
+            ? (parsed['function_name'] as string).trim()
+            : ''
+        const parsedToolInput =
+          typeof parsed['tool_input'] === 'string'
+            ? (parsed['tool_input'] as string)
+            : '{}'
+
+        if (parsedFunctionName) {
+          const parsedLeaf = parsedFunctionName
+            .split(/[./]/)
+            .filter(Boolean)
+            .pop()
+          if (parsedLeaf && parsedLeaf !== functionName) {
+            retries += 1
+            lastError = `model selected unexpected function "${parsedFunctionName}" while executing "${functionName}"`
+            continue
+          }
+        }
+
+        const toolResult = await runValidatedToolInput(parsedToolInput)
+        if ('retry' in toolResult) {
+          continue
+        }
+        return toolResult
       }
     }
 
@@ -755,6 +918,10 @@ async function executeFunctionWithJSONMode(
   )
   const paramsSchema = JSON.stringify(functionConfig.parameters)
   const toolkitContextSection = buildToolkitContextSection(caller, toolkitId)
+  const executionMemorySection = await buildExecutionMemorySection(
+    caller,
+    toolkitId
+  )
   const historySection = formatExecutionHistory(executionHistory)
   const executeSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     EXECUTE_SYSTEM_PROMPT
@@ -807,13 +974,23 @@ async function executeFunctionWithJSONMode(
     const retryNote = lastError
       ? `\n\nPrevious attempt failed: ${lastError}.${lastFailedToolInput ? `\nPrevious failed tool_input: ${lastFailedToolInput}\nDo not reuse the same tool_input. Change the arguments to address the failure.` : ' Please fix the tool_input.'}`
       : ''
-    const prompt = `Function: ${qualifiedName}\nDescription: ${functionConfig.description}\nCurrent Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\nParameters: ${paramsSchema}\n\n${toolkitContextSection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}\n\nProvide the tool_input for this function.`
+    const prompt = `Function: ${qualifiedName}\nDescription: ${functionConfig.description}\nCurrent Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\nParameters: ${paramsSchema}\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}\n\nProvide the tool_input for this function.`
 
     const completionResult = await caller.callLLM(
       prompt,
       executeSystemPrompt,
       executeSchema,
-      caller.history
+      caller.history,
+      buildExecutionPromptSections({
+        prompt,
+        systemPrompt: executeSystemPrompt,
+        baseSystemPromptContent: EXECUTE_SYSTEM_PROMPT,
+        promptSource:
+          'server/src/core/llm-manager/llm-duties/react-llm-duty/execution.ts',
+        systemPromptSource:
+          'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
+        schema: executeSchema
+      })
     )
     if (!completionResult) {
       const providerFailureObservation =
@@ -1053,9 +1230,11 @@ export async function runToolExecution(
       'Tool result normalized to [error]: tool output reported success=false'
     )
   }
-  LogHelper.debug(
-    `Tool result: ${qualifiedName} [${effectiveStatus}] — ${effectiveMessage}`
-  )
+  if (effectiveStatus !== 'success') {
+    LogHelper.debug(
+      `Tool result: ${qualifiedName} [${effectiveStatus}] — ${effectiveMessage}`
+    )
+  }
   LogHelper.debug(
     `Tool output: ${JSON.stringify(toolExecutionResult.data?.output)}`
   )

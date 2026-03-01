@@ -12,6 +12,8 @@ logs/*
 core/context/*[.md, .json]
 !core/context/LEON.md
 !core/context/ARCHITECTURE.md
+core/memory/*
+!core/memory/.gitkeep
 core/config/**/*.json
 bin/coqui/*
 bin/flite/*

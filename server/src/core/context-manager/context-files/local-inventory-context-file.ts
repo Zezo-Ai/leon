@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { DateHelper } from '@/helpers/date-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 import {
@@ -113,9 +114,9 @@ export class LocalInventoryContextFile extends ContextFile {
     const summary = `Local inventory tracks ${installedApps.length} installed app entry(ies), usage signals across ${rankedByUsage.length} app(s), and peripherals (${peripherals.keyboards.length} keyboard(s), ${peripherals.pointers.length} pointer(s), ${peripherals.webcams.length} webcam(s)).`
 
     return [
-      `> ${summary}`,
+      `> Usage-ranked apps, installed apps, categories, peripherals. ${summary}`,
       '# LOCAL_INVENTORY',
-      `- Generated at: ${nowIso}`,
+      `- Generated at: ${DateHelper.getDateTime()}`,
       `- Usage sample source: ${runningSnapshot.source}`,
       `- Peripherals probe source: ${peripherals.source}`,
       `- Tracking started at: ${updatedState.trackingStartedAt}`,

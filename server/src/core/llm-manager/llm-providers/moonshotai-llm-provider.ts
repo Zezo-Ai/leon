@@ -174,6 +174,9 @@ export default class MoonshotAILLMProvider {
         if (completionParams.shouldStream === true) {
           const streamingParams: ChatCompletionCreateParamsStreaming = {
             ...baseParams,
+            stream_options: {
+              include_usage: true
+            },
             stream: true
           }
           const response = await this.client.chat.completions.create(

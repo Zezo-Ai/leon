@@ -43,7 +43,7 @@ export class GpuComputeContextFile extends ContextFile {
         : ['- GPU list: none detected']
 
     return [
-      `> ${summary}`,
+      `> GPU inventory and compute runtime versions. ${summary}`,
       '# GPU_COMPUTE',
       `- Probe status: ${gpuProbe.status}`,
       ...gpuLines,

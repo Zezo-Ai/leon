@@ -21,7 +21,7 @@ export class HomeContextFile extends ContextFile {
     const serverSourcePath = path.join(projectRoot, 'server', 'src')
 
     return [
-      `> Leon workspace rooted at ${projectRoot}. Key folders for skills, toolkits, models, logs and runtime temp are available.`,
+      `> Workspace paths and runtime directories. Leon workspace rooted at ${projectRoot}. Key folders for skills, toolkits, models, logs and runtime temp are available.`,
       '# HOME',
       `- Project root: ${projectRoot}`,
       `- Skills path: ${SKILLS_PATH}`,

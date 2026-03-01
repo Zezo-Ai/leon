@@ -15,7 +15,12 @@ import {
   type SlotFillingOutput,
   SlotFillingStatus
 } from '@/core/llm-manager/types'
-import { BRAIN, CONVERSATION_LOGGER, SOCKET_SERVER } from '@/core'
+import {
+  BRAIN,
+  CONVERSATION_LOGGER,
+  SOCKET_SERVER,
+  MEMORY_MANAGER
+} from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import Conversation from '@/core/nlp/conversation'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
@@ -675,6 +680,40 @@ export default class NLU {
     await reactDuty.init()
     const reactResult = await reactDuty.execute()
     const output = reactResult?.output as unknown as string
+    const hasExplicitMemoryWrite = Boolean(
+      reactResult?.data && reactResult.data['hasExplicitMemoryWrite'] === true
+    )
+
+    if (output) {
+      const sentAt = Date.now()
+      void MEMORY_MANAGER.observeTurn({
+        userMessage: utterance,
+        assistantMessage: String(output),
+        sentAt,
+        route: 'react'
+      }).catch((error: unknown) => {
+        LogHelper.title('NLU')
+        LogHelper.warning(`Failed to store turn memory: ${error}`)
+      })
+
+      if (!hasExplicitMemoryWrite) {
+        void MEMORY_MANAGER.savePersistentMemoryCandidatesFromTurn(
+          utterance,
+          String(output),
+          sentAt
+        ).catch((error: unknown) => {
+          LogHelper.title('NLU')
+          LogHelper.warning(
+            `Failed to save persistent memory candidates: ${error}`
+          )
+        })
+      } else {
+        LogHelper.title('NLU')
+        LogHelper.debug(
+          'Skipping automatic persistent extraction: explicit memory.write already executed in this turn'
+        )
+      }
+    }
 
     if (output && !BRAIN.isMuted) {
       await BRAIN.talk(String(output), true)

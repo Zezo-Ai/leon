@@ -202,8 +202,44 @@ export function buildToolkitContextSection(
   const injectedContextFiles = [
     ...new Set(TOOLKIT_REGISTRY.getToolkitContextFiles(toolkitId))
   ]
-  const toolkitContext = caller.getContextForToolkit(toolkitId).trim()
+  const summaryLines = injectedContextFiles
+    .map((filename) => {
+      const content = caller.getContextFileContent(filename)?.trim() || ''
+      if (!content) {
+        return null
+      }
 
+      const firstSummaryLine = content
+        .split('\n')
+        .map((line) => line.trim())
+        .find((line) => line.startsWith('>'))
+      const fallbackLine = content
+        .split('\n')
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+      const summarySource = firstSummaryLine || fallbackLine || ''
+      if (!summarySource) {
+        return null
+      }
+
+      const normalized = summarySource
+        .replace(/^>\s*/, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+      if (!normalized) {
+        return null
+      }
+
+      const clipped =
+        normalized.length > 180
+          ? `${normalized.slice(0, 177).trimEnd()}...`
+          : normalized
+
+      return `- ${filename}: ${clipped}`
+    })
+    .filter((line): line is string => Boolean(line))
+
+  const toolkitContext = summaryLines.join('\n')
   const contextCharCount = toolkitContext.length
   const estimatedContextTokens = Math.ceil(
     contextCharCount / CHARS_PER_TOKEN
@@ -214,11 +250,11 @@ export function buildToolkitContextSection(
     `Toolkit context injection [${toolkitId}] files=${injectedContextFiles.length > 0 ? injectedContextFiles.join(', ') : 'none'} | chars=${contextCharCount} | est_tokens=${estimatedContextTokens}`
   )
 
-  if (!toolkitContext) {
+  if (summaryLines.length === 0) {
     return 'Toolkit Context: none'
   }
 
-  return `Toolkit Context:\n${toolkitContext}`
+  return `Toolkit Context Summary:\n${toolkitContext}`
 }
 
 export function stripInlineToolMarkup(text: string): string {

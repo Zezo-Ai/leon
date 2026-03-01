@@ -37,6 +37,7 @@ interface CompletionResult {
   usedInputTokens: number
   usedOutputTokens: number
   temperature: number
+  reasoning?: string
   /**
    * When the model responds with tool calls (native tool calling),
    * this field contains the parsed tool_calls array.
@@ -686,12 +687,16 @@ export default class LLMProvider {
           ? (usage['prompt_tokens'] as number)
           : typeof usage['promptTokens'] === 'number'
             ? (usage['promptTokens'] as number)
+            : typeof usage['input_tokens'] === 'number'
+              ? (usage['input_tokens'] as number)
           : 0,
       usedOutputTokens:
         typeof usage['completion_tokens'] === 'number'
           ? (usage['completion_tokens'] as number)
           : typeof usage['completionTokens'] === 'number'
             ? (usage['completionTokens'] as number)
+            : typeof usage['output_tokens'] === 'number'
+              ? (usage['output_tokens'] as number)
           : 0
     }
 
@@ -1304,7 +1309,10 @@ export default class LLMProvider {
     promptOrChatHistory: PromptOrChatHistory,
     completionParams: CompletionParams
   ): Promise<CompletionResult | null> {
-    this.lastProviderErrorMessage = null
+    const trackProviderErrors = completionParams.trackProviderErrors !== false
+    if (trackProviderErrors) {
+      this.lastProviderErrorMessage = null
+    }
 
     const measureExecutionTimeLabel = `Inference time for "${completionParams.dutyType}" duty`
 
@@ -1510,8 +1518,9 @@ export default class LLMProvider {
       }
 
       if (
-        axios.isAxiosError(e) ||
-        (e && typeof e === 'object' && ('status' in e || 'statusCode' in e))
+        trackProviderErrors &&
+        (axios.isAxiosError(e) ||
+          (e && typeof e === 'object' && ('status' in e || 'statusCode' in e)))
       ) {
         const apiErrorDetails = this.buildProviderErrorDetails(e)
         const statusLike =
@@ -1529,7 +1538,7 @@ export default class LLMProvider {
 
         await this.safeTalk(brainMessage)
         this.lastProviderErrorMessage = brainMessage
-      } else if (isRetryableNonTimeoutError) {
+      } else if (trackProviderErrors && isRetryableNonTimeoutError) {
         const apiErrorDetails = this.buildProviderErrorDetails(e)
         const brainMessage = BRAIN.wernicke('llm_provider_http_error', '', {
           '{{ provider }}': LLM_PROVIDER,
@@ -1541,7 +1550,7 @@ export default class LLMProvider {
         this.lastProviderErrorMessage = brainMessage
       }
 
-      if (!this.lastProviderErrorMessage) {
+      if (trackProviderErrors && !this.lastProviderErrorMessage) {
         const apiErrorDetails = this.buildProviderErrorDetails(e)
         this.lastProviderErrorMessage = BRAIN.wernicke('llm_provider_http_error', '', {
           '{{ provider }}': LLM_PROVIDER,
@@ -1590,21 +1599,29 @@ export default class LLMProvider {
       'data' in (rawResult as Record<string, unknown>)
         ? (rawResult as AxiosResponse).data
         : null
+    const remoteStreamCandidate =
+      remoteRawData !== null ? remoteRawData : rawResult
     const providerReturnedStream =
-      isRemoteProvider && this.isReadableStream(remoteRawData)
+      isRemoteProvider && this.isReadableStream(remoteStreamCandidate)
     const shouldUseRemoteStreaming =
       isRemoteProvider && shouldStreamOutput && providerReturnedStream
 
     if (isRemoteProvider && shouldStreamOutput && !providerReturnedStream) {
       LogHelper.title('LLM Provider')
       LogHelper.debug(
-        'Streaming requested but provider returned non-stream payload; falling back to non-stream normalization'
+        `Streaming requested but provider returned non-stream payload; falling back to non-stream normalization (type=${typeof remoteStreamCandidate})`
       )
     }
 
     if (shouldUseRemoteStreaming) {
+      const streamResponse =
+        remoteRawData !== null
+          ? (rawResult as AxiosResponse)
+          : ({
+              data: remoteStreamCandidate
+            } as AxiosResponse)
       const normalized = await this.normalizeStreamingCompletionResult(
-        rawResult as AxiosResponse,
+        streamResponse,
         completionParams
       )
 
@@ -1703,17 +1720,19 @@ export default class LLMProvider {
         })
       }
 
-      const brainMessage = BRAIN.wernicke('llm_provider_http_error', '', {
-        '{{ provider }}': LLM_PROVIDER,
-        '{{ error }}':
-          'Provider returned an empty completion payload (no text, no tool call, no token usage)',
-        '{{ api_error }}': providerPayloadSnippet
-          ? `\n${providerPayloadSnippet}`
-          : ''
-      })
+      if (trackProviderErrors) {
+        const brainMessage = BRAIN.wernicke('llm_provider_http_error', '', {
+          '{{ provider }}': LLM_PROVIDER,
+          '{{ error }}':
+            'Provider returned an empty completion payload (no text, no tool call, no token usage)',
+          '{{ api_error }}': providerPayloadSnippet
+            ? `\n${providerPayloadSnippet}`
+            : ''
+        })
 
-      await this.safeTalk(brainMessage)
-      this.lastProviderErrorMessage = brainMessage
+        await this.safeTalk(brainMessage)
+        this.lastProviderErrorMessage = brainMessage
+      }
       return null
     }
 
@@ -1786,12 +1805,22 @@ export default class LLMProvider {
           }
         }
 
+        const rawTrimmed = rawResultString.trim()
+        const looksStructuredPayload =
+          /^(\{|\[|```)/.test(rawTrimmed)
+
         LogHelper.title('LLM Provider')
-        LogHelper.warning(
-          `Failed to parse JSON output for ${completionParams.dutyType}: ${
-            lastError?.message || 'unknown parse error'
-          }`
-        )
+        if (looksStructuredPayload) {
+          LogHelper.warning(
+            `Failed to parse JSON output for ${completionParams.dutyType}: ${
+              lastError?.message || 'unknown parse error'
+            }`
+          )
+        } else {
+          LogHelper.debug(
+            `JSON parsing skipped warning for ${completionParams.dutyType}: provider returned plain text fallback`
+          )
+        }
         return rawResultString
       })(),
       data: completionParams.data,
@@ -1801,6 +1830,7 @@ export default class LLMProvider {
       // Current used context size
       usedInputTokens,
       usedOutputTokens,
+      ...(reasoning ? { reasoning } : {}),
       ...(toolCalls ? { toolCalls } : {})
     }
   }

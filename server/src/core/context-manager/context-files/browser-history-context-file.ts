@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { DateHelper } from '@/helpers/date-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 import { ContextProbeHelper } from '@/core/context-manager/context-probe-helper'
@@ -18,7 +19,7 @@ interface BrowserHistoryDatabase {
 interface BrowserHistoryEntry {
   browser: string
   profile: string
-  domain: string
+  url: string
   title: string
   visitedAt: string
 }
@@ -33,6 +34,7 @@ interface BrowserHistoryProbeResult {
 
 const MAX_DATABASES_TO_QUERY = 6
 const MAX_OUTPUT_ENTRIES = 64
+const MAX_URL_CHARS = 128
 
 export class BrowserHistoryContextFile extends ContextFile {
   public readonly filename = 'BROWSER_HISTORY.md'
@@ -51,26 +53,26 @@ export class BrowserHistoryContextFile extends ContextFile {
 
     const summary =
       probeResult.entries.length > 0
-        ? `Browser activity found ${probeResult.entries.length} recent domain visit(s) from ${probeResult.selectedBrowser} (${probeResult.selectedProfile}).`
+        ? `Browser activity found ${probeResult.entries.length} recent URL visit(s) from ${probeResult.selectedBrowser} (${probeResult.selectedProfile}).`
         : `Browser activity unavailable: no readable history entries found across ${probeResult.checkedDatabasesCount} detected database(s).`
 
     const entries =
       probeResult.entries.length > 0
         ? probeResult.entries.slice(0, MAX_OUTPUT_ENTRIES).map((entry, index) => {
             const titleSuffix = entry.title ? ` | title: ${entry.title}` : ''
-            return `- ${index + 1}. ${entry.visitedAt} | ${entry.domain}${titleSuffix}`
+            return `- ${index + 1}. ${this.formatDateTimeInUserTimezone(entry.visitedAt)} | ${entry.url}${titleSuffix}`
           })
         : ['- No history entries available']
 
     return [
-      `> ${summary}`,
+      `> Recent URLs, browser/profile source, privacy scope. ${summary}`,
       '# BROWSER_HISTORY',
-      `- Generated at: ${new Date().toISOString()}`,
+      `- Generated at: ${DateHelper.getDateTime()}`,
       `- Source: ${probeResult.source}`,
       `- Databases checked: ${probeResult.checkedDatabasesCount}`,
       `- Selected browser: ${probeResult.selectedBrowser}`,
       `- Selected profile: ${probeResult.selectedProfile}`,
-      '- Privacy scope: domain-level recent history only (full URLs omitted).',
+      '- Privacy scope: full recent URLs.',
       ...entries
     ].join('\n')
   }
@@ -159,7 +161,7 @@ import path from 'node:path'
 const [dbPath = '', flavor = '', browser = '', profile = '', rawLimit = '64'] = process.argv.slice(1)
 const limit = Number(rawLimit) || 64
 
-const normalizeDomain = (rawUrl) => {
+const normalizeUrl = (rawUrl) => {
   if (typeof rawUrl !== 'string' || rawUrl.length === 0) {
     return ''
   }
@@ -170,8 +172,12 @@ const normalizeDomain = (rawUrl) => {
       return ''
     }
 
-    const normalizedHost = parsed.hostname.toLowerCase()
-    return normalizedHost.startsWith('www.') ? normalizedHost.slice(4) : normalizedHost
+    const normalized = parsed.toString()
+    if (normalized.length <= ${MAX_URL_CHARS}) {
+      return normalized
+    }
+
+    return normalized.slice(0, ${MAX_URL_CHARS} - 3) + '...'
   } catch {
     return ''
   }
@@ -189,7 +195,7 @@ const normalizeTitle = (title) => {
     .join(' ')
     .replace(/  +/g, ' ')
     .trim()
-    .slice(0, 120)
+    .slice(0, 56)
 }
 
 const toNumber = (value) => {
@@ -222,9 +228,9 @@ let db = null
 let tempDirectory = ''
 
 try {
-  const sqliteModule = await import('node:sqlite')
-  const DatabaseSync = sqliteModule.DatabaseSync
-  if (!DatabaseSync || !dbPath || !flavor) {
+  const sqliteModule = await import('better-sqlite3')
+  const Database = sqliteModule.default
+  if (!Database || !dbPath || !flavor) {
     console.log('[]')
     process.exit(0)
   }
@@ -241,7 +247,10 @@ try {
     fs.copyFileSync(shmPath, tempDatabasePath + '-shm')
   }
 
-  db = new DatabaseSync(tempDatabasePath, { readBigInts: true })
+  db = new Database(tempDatabasePath, {
+    readonly: true,
+    fileMustExist: true
+  })
 
   let rows = []
 
@@ -267,16 +276,16 @@ try {
 
   const entries = rows
     .map((row) => {
-      const domain = normalizeDomain(row.url)
+      const normalizedUrl = normalizeUrl(row.url)
 
-      if (!domain) {
+      if (!normalizedUrl) {
         return null
       }
 
       return {
         browser,
         profile,
-        domain,
+        url: normalizedUrl,
         title: normalizeTitle(row.title),
         visitedAt: toIso(row.ts)
       }
@@ -334,7 +343,7 @@ try {
             !!entry &&
             typeof entry.browser === 'string' &&
             typeof entry.profile === 'string' &&
-            typeof entry.domain === 'string' &&
+            typeof entry.url === 'string' &&
             typeof entry.title === 'string' &&
             typeof entry.visitedAt === 'string'
           )
@@ -544,6 +553,30 @@ try {
     }
 
     return databases
+  }
+
+  private formatDateTimeInUserTimezone(value: string): string {
+    if (!value) {
+      return 'unknown'
+    }
+
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) {
+      return value
+    }
+
+    const formatter = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: DateHelper.getTimeZone(),
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
+
+    return formatter.format(parsed).replace(' ', 'T')
   }
 
   private getSafariHistoryDatabases(): BrowserHistoryDatabase[] {

@@ -1,6 +1,7 @@
 import os from 'node:os'
 import dns from 'node:dns'
 
+import { DateHelper } from '@/helpers/date-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 import { ContextProbeHelper } from '@/core/context-manager/context-probe-helper'
@@ -121,9 +122,9 @@ export class NetworkEcosystemContextFile extends ContextFile {
         : ['- No strong home-service signal detected yet']
 
     return [
-      `> ${summary}`,
+      `> Environment, interfaces, discovered devices, inferred services. ${summary}`,
       '# NETWORK_ECOSYSTEM',
-      `- Generated at: ${nowIso}`,
+      `- Generated at: ${DateHelper.getDateTime()}`,
       `- Tracking started at: ${updatedState.trackingStartedAt}`,
       `- Local neighbors: ${neighbors.length}`,
       `- Inferred service signals: ${inferredServices.length}`,

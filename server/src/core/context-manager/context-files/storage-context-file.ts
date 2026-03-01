@@ -1,3 +1,4 @@
+import { DateHelper } from '@/helpers/date-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 import { ContextProbeHelper } from '@/core/context-manager/context-probe-helper'
 
@@ -15,7 +16,7 @@ export class StorageContextFile extends ContextFile {
 
   public generate(): string {
     const probeResult = this.probeHelper.probeStorage()
-    const generatedAt = new Date().toISOString()
+    const generatedAt = DateHelper.getDateTime()
 
     const summary = probeResult.summary || 'Storage snapshot unavailable.'
     const entries =
@@ -27,7 +28,7 @@ export class StorageContextFile extends ContextFile {
         : ['- No storage entries collected']
 
     return [
-      `> ${summary}`,
+      `> Filesystem totals, usage and mount points. ${summary}`,
       '# STORAGE',
       `- Generated at: ${generatedAt}`,
       `- Source: ${probeResult.source}`,

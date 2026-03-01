@@ -113,6 +113,12 @@ export interface CompletionParams {
    */
   relaxForcedToolChoice?: boolean
   /**
+   * When false, provider prompt failures are kept local to the caller:
+   * no user-facing error talk and no mutation of the global last-provider-error
+   * state. Useful for background/auxiliary inferences.
+   */
+  trackProviderErrors?: boolean
+  /**
    * OpenAI-compatible tools for remote providers that support native
    * tool/function calling. When set, the provider sends these as `tools`
    * in the API request instead of (or in addition to) JSON mode.

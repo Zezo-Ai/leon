@@ -6,11 +6,15 @@ import {
 import type { OpenAITool } from '@/core/llm-manager/types'
 import type { MessageLog } from '@/types'
 
-import { PLAN_SYSTEM_PROMPT, DUTY_NAME } from './constants'
+import {
+  PLAN_SYSTEM_PROMPT,
+  DUTY_NAME
+} from './constants'
 import type {
   Catalog,
   LLMCaller,
-  PlanResult
+  PlanResult,
+  PromptLogSection
 } from './types'
 import {
   extractPlanFromParsed,
@@ -28,10 +32,67 @@ import {
   PLAN_STEP_SCHEMA
 } from './plan-contract'
 
+function buildPlanningPromptSections(params: {
+  prompt: string
+  systemPrompt: string
+  includeTools?: boolean
+  includeSchema?: boolean
+  tools?: OpenAITool[]
+}): PromptLogSection[] {
+  const sections: PromptLogSection[] = [
+    {
+      name: 'PERSONA',
+      source: 'server/src/core/llm-manager/persona.ts',
+      content: params.systemPrompt
+    },
+    {
+      name: 'PLANNING_PROMPT',
+      source: 'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
+      content: PLAN_SYSTEM_PROMPT
+    },
+    {
+      name: 'PLANNING_INPUT',
+      source: 'server/src/core/llm-manager/llm-duties/react-llm-duty/planning.ts',
+      content: params.prompt
+    }
+  ]
+
+  if (params.includeTools && params.tools) {
+    sections.push({
+      name: 'TOOLS_SCHEMA',
+      source:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/planning.ts',
+      content: JSON.stringify(params.tools)
+    })
+  }
+
+  if (params.includeSchema) {
+    sections.push({
+      name: 'PLAN_SCHEMA',
+      source:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/plan-contract.ts',
+      content: JSON.stringify(PLAN_RESPONSE_SCHEMA)
+    })
+  }
+
+  return sections
+}
+
+function isOperatingSystemControlOnlyPlan(steps: { function: string }[]): boolean {
+  if (steps.length === 0) {
+    return false
+  }
+
+  return steps.every((step) =>
+    step.function.startsWith('operating_system_control.')
+  )
+}
+
 export async function runPlanningPhase(
   caller: LLMCaller,
   catalog: Catalog,
-  history: MessageLog[]
+  history: MessageLog[],
+  onPlanningStage?: (stage: 'thinking') => void
 ): Promise<PlanResult> {
   const catalogNote =
     catalog.mode === 'tool'
@@ -41,15 +102,9 @@ export async function runPlanningPhase(
     PLAN_SYSTEM_PROMPT
   )
   const contextManifest = CONTEXT_MANAGER.getManifest()
-  LogHelper.title(DUTY_NAME)
-  LogHelper.debug(
-    `Planning context manifest injected:\n${
-      contextManifest || '- none'
-    }`
-  )
 
   const contextManifestSection = contextManifest
-    ? `\n\nEnvironment Context Manifest:\n${contextManifest}`
+    ? `\n\nAvailable context files right now (Environment Context Manifest):\n${contextManifest}\nIf useful for the request or personalization, use structured_knowledge.context.searchContext/readContextFile before shell tools.`
     : ''
   const prompt = `${catalog.text}${catalogNote}${contextManifestSection}\n\nUser Request: "${caller.input}"`
 
@@ -57,6 +112,7 @@ export async function runPlanningPhase(
 
   // --- Remote providers: use native tool calling to force structured output ---
   if (caller.supportsNativeTools) {
+    onPlanningStage?.('thinking')
     const planTools: OpenAITool[] = [
       {
         type: 'function',
@@ -116,7 +172,14 @@ export async function runPlanningPhase(
       planSystemPrompt,
       planTools,
       { type: 'function', function: { name: 'create_plan' } },
-      history
+      history,
+      false,
+      buildPlanningPromptSections({
+        prompt,
+        systemPrompt: planSystemPrompt,
+        includeTools: true,
+        tools: planTools
+      })
     )
 
     LogHelper.title(DUTY_NAME)
@@ -146,6 +209,14 @@ export async function runPlanningPhase(
             allowLegacySummaryAsFinal: true
           })
           if (interpreted) {
+            if (
+              interpreted.type === 'plan' &&
+              isOperatingSystemControlOnlyPlan(interpreted.steps)
+            ) {
+              LogHelper.debug(
+                'Planning: operating_system_control-only plan returned; memory access should use structured_knowledge.memory.read when relevant.'
+              )
+            }
             return interpreted
           }
 
@@ -193,25 +264,18 @@ export async function runPlanningPhase(
       LogHelper.debug('Planning: no tool call returned, falling back to JSON mode')
     }
 
-    if (
-      textFallback &&
-      shouldTreatPlanningTextAsFinalAnswer(textFallback)
-    ) {
-      LogHelper.debug(
-        'Planning: using direct conversational text answer from tool-calling attempt'
-      )
-      return {
-        type: 'final',
-        answer: stripInlineToolMarkup(textFallback) || textFallback
-      }
-    }
-
     // Final fallback: JSON mode planning
+    onPlanningStage?.('thinking')
     const jsonModeResult = await caller.callLLM(
       prompt,
       planSystemPrompt,
       planSchema,
-      history
+      history,
+      buildPlanningPromptSections({
+        prompt,
+        systemPrompt: planSystemPrompt,
+        includeSchema: true
+      })
     )
     if (!jsonModeResult) {
       const providerError = caller.consumeProviderErrorMessage()
@@ -293,11 +357,17 @@ export async function runPlanningPhase(
   }
 
   // --- Local provider: use grammar-constrained JSON mode ---
+  onPlanningStage?.('thinking')
   const completionResult = await caller.callLLM(
     prompt,
     planSystemPrompt,
     planSchema,
-    history
+    history,
+    buildPlanningPromptSections({
+      prompt,
+      systemPrompt: planSystemPrompt,
+      includeSchema: true
+    })
   )
   if (!completionResult) {
     const providerError = caller.consumeProviderErrorMessage()
@@ -305,12 +375,6 @@ export async function runPlanningPhase(
       return { type: 'final', answer: providerError }
     }
   }
-
-  LogHelper.title(DUTY_NAME)
-  LogHelper.debug(`Planning prompt: "${prompt}..."`)
-  LogHelper.debug(
-    `Planning raw output: ${JSON.stringify(completionResult?.output)}`
-  )
 
   const parsed = parseOutput(completionResult?.output)
   const planResult =
