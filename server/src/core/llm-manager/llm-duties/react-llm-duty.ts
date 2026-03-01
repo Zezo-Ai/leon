@@ -72,6 +72,7 @@ export class ReActLLMDuty extends LLMDuty {
   private totalOutputTokens = 0
   private hasStreamedTokenEmission = false
   private hasExplicitMemoryWrite = false
+  private reasoningGenerationId: string | null = null
 
   constructor(params: ReactLLMDutyParams) {
     super()
@@ -139,6 +140,7 @@ export class ReActLLMDuty extends LLMDuty {
     this.totalOutputTokens = 0
     this.hasStreamedTokenEmission = false
     this.hasExplicitMemoryWrite = false
+    this.reasoningGenerationId = StringHelper.random(6, { onlyLetters: true })
 
     try {
       const history =
@@ -503,6 +505,9 @@ export class ReActLLMDuty extends LLMDuty {
     usedOutputTokens?: number
     reasoning?: string
   } | null> {
+    const reasoningGenerationId =
+      this.reasoningGenerationId || StringHelper.random(6, { onlyLetters: true })
+
     this.logPromptDispatch({
       channel: 'json',
       prompt,
@@ -519,6 +524,10 @@ export class ReActLLMDuty extends LLMDuty {
       temperature: REACT_TEMPERATURE,
       timeout: REACT_INFERENCE_TIMEOUT_MS,
       maxRetries: REACT_TIMEOUT_MAX_RETRIES,
+      shouldStream: LLM_PROVIDER_NAME !== LLMProviders.Local,
+      onReasoningToken: (reasoningChunk: string): void => {
+        this.emitReasoningToken(reasoningChunk, reasoningGenerationId)
+      },
       ...(history ? { history } : {})
     }
 
@@ -570,6 +579,10 @@ export class ReActLLMDuty extends LLMDuty {
     const generationId = shouldStream
       ? StringHelper.random(6, { onlyLetters: true })
       : null
+    const reasoningGenerationId =
+      this.reasoningGenerationId || generationId || StringHelper.random(6, {
+        onlyLetters: true
+      })
 
     const completionParams = {
       dutyType: LLMDuties.ReAct,
@@ -577,7 +590,11 @@ export class ReActLLMDuty extends LLMDuty {
       temperature: REACT_TEMPERATURE,
       timeout: REACT_INFERENCE_TIMEOUT_MS,
       maxRetries: REACT_TIMEOUT_MAX_RETRIES,
-      shouldStream,
+      shouldStream:
+        shouldStream || LLM_PROVIDER_NAME !== LLMProviders.Local,
+      onReasoningToken: (reasoningChunk: string): void => {
+        this.emitReasoningToken(reasoningChunk, reasoningGenerationId)
+      },
       ...(shouldStream
         ? {
             onToken: (chunk: unknown): void => {
@@ -677,6 +694,10 @@ export class ReActLLMDuty extends LLMDuty {
     const generationId = shouldStreamToUser
       ? StringHelper.random(6, { onlyLetters: true })
       : null
+    const reasoningGenerationId =
+      this.reasoningGenerationId || generationId || StringHelper.random(6, {
+        onlyLetters: true
+      })
 
     LogHelper.title(this.name)
     LogHelper.debug(
@@ -742,7 +763,11 @@ export class ReActLLMDuty extends LLMDuty {
         temperature: REACT_TEMPERATURE,
         timeout: REACT_INFERENCE_TIMEOUT_MS,
         maxRetries: REACT_TIMEOUT_MAX_RETRIES,
-        shouldStream: shouldStreamToUser,
+        shouldStream:
+          shouldStreamToUser || LLM_PROVIDER_NAME !== LLMProviders.Local,
+        onReasoningToken: (reasoningChunk: string): void => {
+          this.emitReasoningToken(reasoningChunk, reasoningGenerationId)
+        },
         ...(shouldStreamToUser
           ? {
               onToken: (chunk: unknown): void => {
@@ -1206,6 +1231,20 @@ export class ReActLLMDuty extends LLMDuty {
         hasExplicitMemoryWrite: this.hasExplicitMemoryWrite
       }
     } as unknown as LLMDutyResult
+  }
+
+  private emitReasoningToken(token: string, generationId: string): void {
+    if (!token || !generationId) {
+      return
+    }
+
+    const chunks = token.match(/(\s+|[^\s]+)/g) || [token]
+    for (const chunk of chunks) {
+      SOCKET_SERVER.socket?.emit('llm-reasoning-token', {
+        token: chunk,
+        generationId
+      })
+    }
   }
 
   private emitSyntheticTokenStream(output: string): void {

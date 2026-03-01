@@ -589,23 +589,20 @@ export default class LLMProvider {
     return this.truncateForLog(this.safeSerialize(details))
   }
 
-  private extractOpenAICompatibleReasoning(
+  private extractOpenAICompatibleReasoningFragments(
     message: Record<string, unknown>
-  ): string {
+  ): string[] {
     const chunks: string[] = []
     const addChunk = (value: unknown): void => {
       if (typeof value !== 'string') {
         return
       }
 
-      const trimmed = value.trim()
-      if (!trimmed) {
+      if (value.length === 0) {
         return
       }
 
-      if (!chunks.includes(trimmed)) {
-        chunks.push(trimmed)
-      }
+      chunks.push(value)
     }
 
     addChunk(message['reasoning'])
@@ -624,6 +621,7 @@ export default class LLMProvider {
       const detailObject = detail as Record<string, unknown>
       addChunk(detailObject['text'])
       addChunk(detailObject['reasoning'])
+      addChunk(detailObject['delta'])
     }
 
     const content = Array.isArray(message['content'])
@@ -635,16 +633,36 @@ export default class LLMProvider {
       }
 
       const blockObject = block as Record<string, unknown>
-      const type = typeof blockObject['type'] === 'string'
-        ? (blockObject['type'] as string)
-        : ''
+      const type =
+        typeof blockObject['type'] === 'string'
+          ? (blockObject['type'] as string)
+          : ''
       if (type.includes('reasoning')) {
         addChunk(blockObject['text'])
         addChunk(blockObject['reasoning'])
+        addChunk(blockObject['delta'])
       }
     }
 
-    return chunks.join('\n')
+    return chunks
+  }
+
+  private extractOpenAICompatibleReasoning(
+    message: Record<string, unknown>
+  ): string {
+    const uniqueChunks: string[] = []
+    for (const chunk of this.extractOpenAICompatibleReasoningFragments(message)) {
+      const trimmed = chunk.trim()
+      if (!trimmed) {
+        continue
+      }
+
+      if (!uniqueChunks.includes(trimmed)) {
+        uniqueChunks.push(trimmed)
+      }
+    }
+
+    return uniqueChunks.join('\n')
   }
 
   private normalizeCompletionResultForOpenAICompatibleProvider(
@@ -853,6 +871,133 @@ export default class LLMProvider {
     return toolCalls
   }
 
+  private extractOpenAIResponsesReasoningFromItem(
+    item: Record<string, unknown>
+  ): string[] {
+    const chunks: string[] = []
+    const addChunk = (value: unknown): void => {
+      if (typeof value !== 'string' || value.length === 0) {
+        return
+      }
+
+      chunks.push(value)
+    }
+
+    const itemType = typeof item['type'] === 'string' ? (item['type'] as string) : ''
+    if (!itemType.includes('reasoning')) {
+      return chunks
+    }
+
+    addChunk(item['text'])
+    addChunk(item['reasoning'])
+    addChunk(item['summary_text'])
+
+    const summary = Array.isArray(item['summary']) ? (item['summary'] as unknown[]) : []
+    for (const part of summary) {
+      if (!part || typeof part !== 'object') {
+        continue
+      }
+
+      const partObject = part as Record<string, unknown>
+      addChunk(partObject['text'])
+      addChunk(partObject['summary_text'])
+    }
+
+    const content = Array.isArray(item['content']) ? (item['content'] as unknown[]) : []
+    for (const block of content) {
+      if (!block || typeof block !== 'object') {
+        continue
+      }
+
+      const blockObject = block as Record<string, unknown>
+      const blockType =
+        typeof blockObject['type'] === 'string'
+          ? (blockObject['type'] as string)
+          : ''
+      if (!blockType.includes('reasoning')) {
+        continue
+      }
+
+      addChunk(blockObject['text'])
+      addChunk(blockObject['reasoning'])
+      addChunk(blockObject['summary_text'])
+      addChunk(blockObject['delta'])
+    }
+
+    return chunks
+  }
+
+  private extractOpenAIResponsesReasoningFragments(
+    parsedChunk: Record<string, unknown>,
+    eventName: string
+  ): string[] {
+    const chunks: string[] = []
+    const addChunk = (value: unknown): void => {
+      if (typeof value !== 'string' || value.length === 0) {
+        return
+      }
+
+      chunks.push(value)
+    }
+
+    const type =
+      typeof parsedChunk['type'] === 'string'
+        ? (parsedChunk['type'] as string)
+        : eventName
+    if (type.includes('reasoning')) {
+      addChunk(parsedChunk['delta'])
+      addChunk(parsedChunk['text'])
+      addChunk(parsedChunk['reasoning'])
+      addChunk(parsedChunk['summary_text'])
+    }
+
+    const item =
+      parsedChunk['item'] && typeof parsedChunk['item'] === 'object'
+        ? (parsedChunk['item'] as Record<string, unknown>)
+        : null
+    if (item) {
+      chunks.push(...this.extractOpenAIResponsesReasoningFromItem(item))
+    }
+
+    const output = Array.isArray(parsedChunk['output'])
+      ? (parsedChunk['output'] as unknown[])
+      : []
+    for (const outputItem of output) {
+      if (!outputItem || typeof outputItem !== 'object') {
+        continue
+      }
+
+      chunks.push(
+        ...this.extractOpenAIResponsesReasoningFromItem(
+          outputItem as Record<string, unknown>
+        )
+      )
+    }
+
+    const response =
+      parsedChunk['response'] && typeof parsedChunk['response'] === 'object'
+        ? (parsedChunk['response'] as Record<string, unknown>)
+        : null
+    if (response) {
+      const responseOutput = Array.isArray(response['output'])
+        ? (response['output'] as unknown[])
+        : []
+      for (const outputItem of responseOutput) {
+        if (!outputItem || typeof outputItem !== 'object') {
+          continue
+        }
+
+        chunks.push(
+          ...this.extractOpenAIResponsesReasoningFromItem(
+            outputItem as Record<string, unknown>
+          )
+        )
+      }
+    }
+
+    return chunks
+  }
+
   private normalizeCompletionResultForOpenAIResponsesProvider(
     rawResult: AxiosResponse
   ): NormalizedCompletionResult {
@@ -878,6 +1023,26 @@ export default class LLMProvider {
 
     if (toolCalls.length > 0) {
       result.toolCalls = toolCalls
+    }
+
+    const reasoningChunks = this.extractOpenAIResponsesReasoningFragments(
+      parsedCompletionResult,
+      ''
+    )
+    if (reasoningChunks.length > 0) {
+      const uniqueReasoning: string[] = []
+      for (const chunk of reasoningChunks) {
+        const trimmed = chunk.trim()
+        if (!trimmed || uniqueReasoning.includes(trimmed)) {
+          continue
+        }
+
+        uniqueReasoning.push(trimmed)
+      }
+
+      if (uniqueReasoning.length > 0) {
+        result.reasoning = uniqueReasoning.join('\n')
+      }
     }
 
     return result
@@ -908,6 +1073,7 @@ export default class LLMProvider {
     }
 
     let textOutput = ''
+    let reasoningOutput = ''
     let usedInputTokens = 0
     let usedOutputTokens = 0
     let buffer = ''
@@ -915,6 +1081,15 @@ export default class LLMProvider {
     const toolCallsByIndex: Record<number, OpenAIToolCall> = {}
     const toolCallsById: Record<string, OpenAIToolCall> = {}
     const toolCallOrder: string[] = []
+
+    const appendReasoningChunk = (reasoningChunk: string): void => {
+      if (!reasoningChunk) {
+        return
+      }
+
+      reasoningOutput += reasoningChunk
+      completionParams.onReasoningToken?.(reasoningChunk)
+    }
 
     const updateTokenUsageFromObject = (
       usage: Record<string, unknown>,
@@ -1019,6 +1194,12 @@ export default class LLMProvider {
         completionParams.onToken?.(contentDelta)
       }
 
+      for (const reasoningChunk of this.extractOpenAICompatibleReasoningFragments(
+        deltaObject
+      )) {
+        appendReasoningChunk(reasoningChunk)
+      }
+
       const toolCalls = Array.isArray(deltaObject['tool_calls'])
         ? (deltaObject['tool_calls'] as unknown[])
         : Array.isArray(deltaObject['toolCalls'])
@@ -1087,6 +1268,13 @@ export default class LLMProvider {
         typeof parsedChunk['type'] === 'string'
           ? (parsedChunk['type'] as string)
           : eventName
+
+      for (const reasoningChunk of this.extractOpenAIResponsesReasoningFragments(
+        parsedChunk,
+        eventName
+      )) {
+        appendReasoningChunk(reasoningChunk)
+      }
 
       if (type === 'response.output_text.delta') {
         const delta = parsedChunk['delta']
@@ -1282,6 +1470,9 @@ export default class LLMProvider {
       rawResult: textOutput,
       usedInputTokens,
       usedOutputTokens,
+      ...(reasoningOutput.trim().length > 0
+        ? { reasoning: reasoningOutput.trim() }
+        : {}),
       ...(toolCalls.length > 0 ? { toolCalls } : {})
     }
   }
@@ -1343,6 +1534,8 @@ export default class LLMProvider {
      * TODO: support onToken (stream) for Groq provider too
      */
     completionParams.onToken = completionParams.onToken || ((): void => {})
+    completionParams.onReasoningToken =
+      completionParams.onReasoningToken || ((): void => {})
     completionParams.shouldStream = completionParams.shouldStream ?? false
 
     const normalizedTools = this.normalizeToolSchemasForCompatibility(
@@ -1365,18 +1558,18 @@ export default class LLMProvider {
     }
 
     const isJSONMode = completionParams.data !== null
-    const shouldStreamOutput =
-      completionParams.shouldStream === true && !isJSONMode
+    const shouldStreamOutput = completionParams.shouldStream === true
 
     const abortController = new AbortController()
     let timeoutHandle: NodeJS.Timeout | null = null
     let hasStartedStreaming = false
     const userOnToken = completionParams.onToken
+    const userOnReasoningToken = completionParams.onReasoningToken
 
     type OnTokenChunk = Parameters<
       NonNullable<CompletionParams['onToken']>
     >[0]
-    const onTokenWithStreamStart = (chunk: OnTokenChunk): void => {
+    const markStreamStarted = (): void => {
       if (!hasStartedStreaming) {
         hasStartedStreaming = true
         if (timeoutHandle) {
@@ -1388,14 +1581,24 @@ export default class LLMProvider {
           )
         }
       }
+    }
+
+    const onTokenWithStreamStart = (chunk: OnTokenChunk): void => {
+      markStreamStarted()
 
       userOnToken?.(chunk)
+    }
+
+    const onReasoningTokenWithStreamStart = (reasoningChunk: string): void => {
+      markStreamStarted()
+      userOnReasoningToken?.(reasoningChunk)
     }
 
     const completionParamsWithAbort = {
       ...completionParams,
       shouldStream: shouldStreamOutput,
       onToken: onTokenWithStreamStart,
+      onReasoningToken: onReasoningTokenWithStreamStart,
       signal: abortController.signal
     }
 
@@ -1688,6 +1891,10 @@ export default class LLMProvider {
     if (reasoning && reasoning.trim()) {
       LogHelper.title('LLM Provider')
       LogHelper.debug(`Reasoning:\n${this.truncateForLog(reasoning)}`)
+
+      if (!shouldUseRemoteStreaming) {
+        completionParams.onReasoningToken?.(reasoning)
+      }
     }
 
     // Guard against silent empty provider responses which otherwise trigger

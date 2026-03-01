@@ -21,6 +21,7 @@ export default class Chatbot {
     this.noBubbleMessage = document.querySelector('#no-bubble')
     this.bubbles = localStorage.getItem('bubbles')
     this.parsedBubbles = JSON.parse(this.bubbles)
+    this.reasoningBlocks = new Map()
 
     // Initialize tool UI handler
     this.toolUIHandler = new ToolUIHandler(
@@ -288,6 +289,51 @@ export default class Chatbot {
     }
 
     return container
+  }
+
+  createOrUpdateReasoningBlock(generationId, token) {
+    if (!generationId || !token) {
+      return null
+    }
+
+    if (!this.noBubbleMessage.classList.contains('hide')) {
+      this.noBubbleMessage.classList.add('hide')
+    }
+
+    let reasoningBlock = this.reasoningBlocks.get(generationId)
+
+    if (!reasoningBlock) {
+      const container = document.createElement('div')
+      const block = document.createElement('div')
+      const header = document.createElement('div')
+      const content = document.createElement('div')
+
+      container.className = 'reasoning-block-container leon'
+      container.setAttribute('data-reasoning-id', generationId)
+      block.className = 'reasoning-block'
+      header.className = 'reasoning-header'
+      header.innerHTML = `
+        <i class="ri-brain-line reasoning-icon"></i>
+        <span class="reasoning-title">Reasoning</span>
+      `
+      content.className = 'reasoning-content'
+
+      block.appendChild(header)
+      block.appendChild(content)
+      container.appendChild(block)
+      this.feed.appendChild(container)
+
+      reasoningBlock = { container, content }
+      this.reasoningBlocks.set(generationId, reasoningBlock)
+    }
+
+    const tokenElement = document.createElement('span')
+    tokenElement.className = 'reasoning-token fade-in'
+    tokenElement.textContent = token
+
+    reasoningBlock.content.appendChild(tokenElement)
+
+    return reasoningBlock.container
   }
 
   handleToolOutput(data) {

@@ -278,6 +278,20 @@ export default class Client {
       this.chatbot.scrollDown()
     })
 
+    this.socket.on('llm-reasoning-token', (data) => {
+      if (!data?.generationId || !data?.token) {
+        return
+      }
+
+      if (this._isVoiceModeEnabled) {
+        this.voiceEnergy.status = 'processing'
+      }
+
+      this._isLeonGeneratingAnswer = true
+      this.chatbot.createOrUpdateReasoningBlock(data.generationId, data.token)
+      this.chatbot.scrollDown()
+    })
+
     this.socket.on('asr-speech', (text) => {
       if (!this._isVoiceModeEnabled) {
         this.enableVoiceMode()

@@ -101,6 +101,7 @@ export interface CompletionParams {
   data?: Record<string, unknown> | null
   history?: MessageLog[]
   onToken?: (tokens: Token[] | string) => void
+  onReasoningToken?: (reasoningChunk: string) => void
   shouldStream?: boolean
   /**
    * Optional provider hint to disable thinking/reasoning for a request.

@@ -352,6 +352,59 @@ textarea::-webkit-scrollbar-thumb {
   animation: fadeIn 2.5s forwards;
 }
 
+.reasoning-block-container {
+  padding: 6px;
+  text-align: left;
+}
+
+.reasoning-block {
+  max-width: 72%;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background-color: #111315;
+  overflow: hidden;
+  animation: fadeIn 0.2s ease-in forwards;
+}
+
+.reasoning-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.reasoning-icon {
+  color: var(--blue-color);
+  font-size: 15px;
+}
+
+.reasoning-title {
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.reasoning-content {
+  padding: 10px 12px;
+  font-family: 'Courier New', Consolas, monospace;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.82);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.reasoning-token {
+  opacity: 0;
+}
+
+.reasoning-token.fade-in {
+  animation: fadeIn 0.35s forwards;
+}
+
 .bubble-container {
   padding: 6px;
 }
