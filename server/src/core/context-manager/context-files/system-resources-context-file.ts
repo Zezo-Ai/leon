@@ -1,6 +1,7 @@
 import os from 'node:os'
 
 import { SystemHelper } from '@/helpers/system-helper'
+import { DateHelper } from '@/helpers/date-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 import { ContextProbeHelper } from '@/core/context-manager/context-probe-helper'
 
@@ -17,7 +18,7 @@ export class SystemResourcesContextFile extends ContextFile {
   }
 
   public generate(): string {
-    const generatedAt = new Date().toISOString()
+    const generatedAt = DateHelper.getDateTime()
     const totalMemoryBytes = os.totalmem()
     const freeMemoryBytes = os.freemem()
     const usedMemoryBytes = Math.max(totalMemoryBytes - freeMemoryBytes, 0)
@@ -31,7 +32,7 @@ export class SystemResourcesContextFile extends ContextFile {
       : `${load1.toFixed(2)}/${load5.toFixed(2)}/${load15.toFixed(2)}`
 
     return [
-      `> Resource snapshot: uptime ${this.probeHelper.formatUptime(os.uptime())}, RAM used ${usedMemoryPct}%, load average ${loadAverageSummary}.`,
+      `> Uptime, RAM usage and CPU load snapshot. Resource snapshot: uptime ${this.probeHelper.formatUptime(os.uptime())}, RAM used ${usedMemoryPct}%, load average ${loadAverageSummary}.`,
       '# SYSTEM_RESOURCES',
       `- Generated at: ${generatedAt}`,
       `- Uptime: ${this.probeHelper.formatUptime(os.uptime())}`,

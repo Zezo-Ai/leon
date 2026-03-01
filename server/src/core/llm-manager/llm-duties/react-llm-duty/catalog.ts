@@ -18,8 +18,8 @@ export function buildCatalog(): Catalog {
     )
     if (toolFunctions) {
       for (const [fnName, fnConfig] of Object.entries(toolFunctions) as [string, FunctionConfig][]) {
-        // Include required parameter names so the model can reason about
-        // data flow between steps (e.g. search returns a URL -> download needs a URL)
+        // Include parameter names so the model can reason about data flow
+        // between steps.
         const params = fnConfig.parameters
         const paramNames: string[] = []
         if (params && typeof params === 'object') {

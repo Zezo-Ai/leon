@@ -15,7 +15,6 @@ import {
   EXECUTE_SYSTEM_PROMPT,
   MAX_RETRIES_PER_FUNCTION,
   MAX_TOOL_FAILURE_RETRIES,
-  CHARS_PER_TOKEN,
   DUTY_NAME
 } from './constants'
 import type {
@@ -25,7 +24,8 @@ import type {
   ExecutionStepResult,
   ToolExecutionResult,
   LLMCaller,
-  FunctionConfig
+  FunctionConfig,
+  PromptLogSection
 } from './types'
 import {
   isToolLevel,
@@ -45,29 +45,60 @@ import {
 } from './phase-helpers'
 
 async function buildExecutionMemorySection(
-  caller: LLMCaller,
+  _caller: LLMCaller,
   toolkitId: string
 ): Promise<string> {
-  const toolkitContextFiles = TOOLKIT_REGISTRY.getToolkitContextFiles(toolkitId)
-  const memoryPack = await caller.getExecutionMemoryPack(
-    String(caller.input || ''),
-    toolkitId,
-    toolkitContextFiles
-  )
-
-  const charCount = memoryPack.length
-  const estimatedTokens = Math.ceil(charCount / CHARS_PER_TOKEN)
-
   LogHelper.title(DUTY_NAME)
   LogHelper.debug(
-    `Execution memory injection [${toolkitId}] chars=${charCount} | est_tokens=${estimatedTokens}`
+    `Execution memory injection disabled [${toolkitId}] (use structured_knowledge.memory.read when memory is needed)`
   )
+  return 'Execution Memory: none'
+}
 
-  if (!memoryPack) {
-    return 'Execution Memory: none'
+function buildExecutionPromptSections(params: {
+  prompt: string
+  systemPrompt: string
+  baseSystemPromptContent?: string
+  promptSource: string
+  systemPromptSource: string
+  schema?: Record<string, unknown>
+  tools?: OpenAITool[]
+}): PromptLogSection[] {
+  const sections: PromptLogSection[] = [
+    {
+      name: 'PERSONA',
+      source: 'server/src/core/llm-manager/persona.ts',
+      content: params.systemPrompt
+    },
+    {
+      name: 'EXECUTION_SYSTEM_PROMPT',
+      source: params.systemPromptSource,
+      content: params.baseSystemPromptContent ?? params.systemPrompt
+    },
+    {
+      name: 'EXECUTION_INPUT',
+      source: params.promptSource,
+      content: params.prompt
+    }
+  ]
+
+  if (params.schema) {
+    sections.push({
+      name: 'EXECUTION_SCHEMA',
+      source: params.promptSource,
+      content: JSON.stringify(params.schema)
+    })
   }
 
-  return memoryPack
+  if (params.tools) {
+    sections.push({
+      name: 'TOOLS_SCHEMA',
+      source: params.promptSource,
+      content: JSON.stringify(params.tools)
+    })
+  }
+
+  return sections
 }
 
 export async function runExecutionStep(
@@ -300,7 +331,18 @@ async function resolveToolFunctionWithNativeTools(
     resolveSystemPrompt,
     tools,
     'auto',
-    caller.history
+    caller.history,
+    false,
+    buildExecutionPromptSections({
+      prompt,
+      systemPrompt: resolveSystemPrompt,
+      baseSystemPromptContent: RESOLVE_FUNCTION_SYSTEM_PROMPT,
+      promptSource:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/execution.ts',
+      systemPromptSource:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
+      tools
+    })
   )
 
   if (!result) {
@@ -455,7 +497,17 @@ async function resolveToolFunctionWithJSONMode(
     prompt,
     resolveSystemPrompt,
     resolveSchema,
-    caller.history
+    caller.history,
+    buildExecutionPromptSections({
+      prompt,
+      systemPrompt: resolveSystemPrompt,
+      baseSystemPromptContent: RESOLVE_FUNCTION_SYSTEM_PROMPT,
+      promptSource:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/execution.ts',
+      systemPromptSource:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
+      schema: resolveSchema
+    })
   )
   const parsed = parseOutput(completionResult?.output)
 
@@ -617,7 +669,18 @@ async function executeFunctionWithNativeTools(
       executeSystemPrompt,
       [tool],
       { type: 'function', function: { name: functionName } },
-      caller.history
+      caller.history,
+      false,
+      buildExecutionPromptSections({
+        prompt,
+        systemPrompt: executeSystemPrompt,
+        baseSystemPromptContent: EXECUTE_SYSTEM_PROMPT,
+        promptSource:
+          'server/src/core/llm-manager/llm-duties/react-llm-duty/execution.ts',
+        systemPromptSource:
+          'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
+        tools: [tool]
+      })
     )
 
     if (!result) {
@@ -856,7 +919,17 @@ async function executeFunctionWithJSONMode(
       prompt,
       executeSystemPrompt,
       executeSchema,
-      caller.history
+      caller.history,
+      buildExecutionPromptSections({
+        prompt,
+        systemPrompt: executeSystemPrompt,
+        baseSystemPromptContent: EXECUTE_SYSTEM_PROMPT,
+        promptSource:
+          'server/src/core/llm-manager/llm-duties/react-llm-duty/execution.ts',
+        systemPromptSource:
+          'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
+        schema: executeSchema
+      })
     )
     if (!completionResult) {
       const providerFailureObservation =

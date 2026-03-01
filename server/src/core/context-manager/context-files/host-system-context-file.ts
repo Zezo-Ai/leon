@@ -33,7 +33,7 @@ export class HostSystemContextFile extends ContextFile {
     const bootTimeIso = new Date(Date.now() - os.uptime() * 1_000).toISOString()
 
     return [
-      `> Host system is ${operatingSystemNameVersion} (${os.platform()} ${os.release()}, ${os.arch()}), user ${username}, shell ${shell}, owner location ${ownerLocation.value}${vpnProxyStatus.behindVpnOrProxy ? ' (VPN/proxy detected).' : '.'}`,
+      `> OS/runtime identity, locale/timezone, VPN/proxy and hardware basics. Host system is ${operatingSystemNameVersion} (${os.platform()} ${os.release()}, ${os.arch()}), user ${username}, shell ${shell}, owner location ${ownerLocation.value}${vpnProxyStatus.behindVpnOrProxy ? ' (VPN/proxy detected).' : '.'}`,
       '# HOST_SYSTEM',
       `- OS name and version: ${operatingSystemNameVersion}`,
       `- Platform: ${os.platform()}`,

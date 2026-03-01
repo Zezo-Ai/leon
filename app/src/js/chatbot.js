@@ -198,7 +198,8 @@ export default class Chatbot {
       save = true,
       bubbleId,
       isCreatingFromLoadingFeed = false,
-      messageId
+      messageId,
+      beforeElement = null
     } = params
     const container = document.createElement('div')
     const bubble = document.createElement('p')
@@ -220,7 +221,12 @@ export default class Chatbot {
       container.classList.add(bubbleId)
     }
 
-    this.feed.appendChild(container).appendChild(bubble)
+    if (beforeElement && beforeElement.parentNode === this.feed) {
+      this.feed.insertBefore(container, beforeElement)
+    } else {
+      this.feed.appendChild(container)
+    }
+    container.appendChild(bubble)
 
     let widgetComponentTree = null
     let widgetSupportedEvents = null
@@ -354,6 +360,7 @@ export default class Chatbot {
     const existingBubble = document.querySelector(
       `[data-message-id="${replaceMessageId}"]`
     )
+    const nextSibling = existingBubble ? existingBubble.nextSibling : null
 
     if (existingBubble) {
       existingBubble.remove()
@@ -373,7 +380,8 @@ export default class Chatbot {
       who: 'leon',
       string: widgetString,
       save: false,
-      messageId: replaceMessageId
+      messageId: replaceMessageId,
+      beforeElement: nextSibling
     })
 
     /**

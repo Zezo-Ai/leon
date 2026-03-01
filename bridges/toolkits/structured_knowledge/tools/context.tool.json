@@ -1,0 +1,67 @@
+{
+  "$schema": "../../../../schemas/tool-schemas/tool.json",
+  "tool_id": "context",
+  "toolkit_id": "structured_knowledge",
+  "name": "Context",
+  "description": "Read and search Leon context files.",
+  "author": {
+    "name": "Louis Grenard",
+    "email": "louis@getleon.ai",
+    "url": "https://twitter.com/grenlouis"
+  },
+  "functions": {
+    "listContextFiles": {
+      "description": "List available context files with short summaries.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "limit": { "type": "number" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "readContextFile": {
+      "description": "Read a context file. By default, returns full file content.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "filename": { "type": "string" },
+          "options": {
+            "type": "object",
+            "properties": {
+              "offsetChars": { "type": "number" },
+              "maxChars": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["filename"],
+        "additionalProperties": false
+      }
+    },
+    "searchContext": {
+      "description": "Search relevant content across context files.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "options": {
+            "type": "object",
+            "properties": {
+              "filenames": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "topK": { "type": "number" },
+              "snippetChars": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
+    }
+  }
+}

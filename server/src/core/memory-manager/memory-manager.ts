@@ -82,15 +82,15 @@ function tokenizeFilenameWords(filename: string): string[] {
 function namespaceRecallWeight(namespace: RecallHit['namespace']): number {
   switch (namespace) {
     case 'context':
-      return 1
+      return 0.8
     case 'memory_persistent':
-      return 1.05
+      return 1.35
     case 'memory_daily':
-      return 0.95
+      return 0.85
     case 'memory_discussion':
-      return 0.72
+      return 0.65
     case 'conversation_daily':
-      return 0.9
+      return 0.85
     default:
       return 0.8
   }
@@ -377,6 +377,7 @@ export default class MemoryManager {
 
       let fileContent = normalizedContent
       let usedTokens = fullTokens
+      let partiallyShared = false
 
       if (fullTokens > budgetForThisFile) {
         const maxChars = budgetForThisFile * 4
@@ -385,11 +386,19 @@ export default class MemoryManager {
         }
         fileContent = `${normalizedContent.slice(0, maxChars).trimEnd()}...`
         usedTokens = Math.max(1, Math.ceil(fileContent.length / 4))
+        partiallyShared = true
       }
 
       sections.push(`### ${filename}\n${fileContent}`)
       injectedFiles.push(filename)
       remainingTokens -= usedTokens
+
+      LogHelper.title('Memory Manager')
+      LogHelper.debug(
+        `Context file ${partiallyShared ? 'partially shared' : 'fully shared'}: file="${filename}" value=${JSON.stringify(
+          fileContent
+        )}`
+      )
     }
 
     if (sections.length === 0) {
@@ -402,189 +411,6 @@ export default class MemoryManager {
     )
 
     return `Relevant Context Files (full content):\n${sections.join('\n\n')}`
-  }
-
-  private buildContextSnippet(
-    content: string,
-    queryTokens: string[]
-  ): string {
-    const normalized = normalizeContent(content)
-    if (!normalized) {
-      return ''
-    }
-
-    const lines = normalized.split('\n')
-    const relevantLines = lines.filter((line) => {
-      const lowerLine = line.toLowerCase()
-      return queryTokens.some((token) => lowerLine.includes(token))
-    })
-
-    const selected = (relevantLines.length > 0 ? relevantLines : lines.slice(0, 18))
-      .slice(0, 28)
-      .join('\n')
-
-    const maxChars = 1_800
-    if (selected.length <= maxChars) {
-      return selected
-    }
-
-    return `${selected.slice(0, maxChars).trimEnd()}...`
-  }
-
-  private async buildContextFilesystemFallbackHits(
-    query: string,
-    contextFilenames: string[] | undefined,
-    topK: number
-  ): Promise<RecallHit[]> {
-    const queryTokens = [...new Set(tokenizeWords(query))]
-    if (queryTokens.length === 0) {
-      return []
-    }
-
-    const allowedFilenames = new Set(
-      (contextFilenames || []).map((filename) => filename.toUpperCase())
-    )
-    const contextEntries = await fs.promises.readdir(CONTEXT_PATH, {
-      withFileTypes: true
-    })
-    const markdownPaths = contextEntries
-      .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
-      .filter((entry) =>
-        allowedFilenames.size === 0 ||
-        allowedFilenames.has(entry.name.toUpperCase())
-      )
-      .map((entry) => path.join(CONTEXT_PATH, entry.name))
-
-    const hits: RecallHit[] = []
-
-    for (const filePath of markdownPaths) {
-      const content = await fs.promises.readFile(filePath, 'utf8')
-      const normalized = normalizeContent(content)
-      if (!normalized) {
-        continue
-      }
-
-      const lower = normalized.toLowerCase()
-      const matchedTokens = queryTokens.filter((token) => lower.includes(token))
-      if (matchedTokens.length === 0) {
-        continue
-      }
-
-      let matchDensity = 0
-      for (const token of matchedTokens) {
-        const regex = new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')
-        matchDensity += (lower.match(regex) || []).length
-      }
-
-      const coverage = matchedTokens.length / queryTokens.length
-      const score = coverage + Math.min(1, matchDensity / 12) * 0.25
-      const snippet = this.buildContextSnippet(normalized, queryTokens)
-      if (!snippet) {
-        continue
-      }
-
-      hits.push({
-        chunkId: `context-fs:${filePath}`,
-        itemId: filePath,
-        namespace: 'context',
-        scope: null,
-        kind: null,
-        title: path.basename(filePath),
-        content: snippet,
-        bm25Score: score,
-        createdAt: Date.now(),
-        sourcePath: filePath
-      })
-    }
-
-    return hits
-      .sort((a, b) => b.bm25Score - a.bm25Score)
-      .slice(0, Math.max(topK, 1))
-  }
-
-  private async buildMemoryRepositoryFallbackHits(
-    query: string,
-    namespaces: RecallQuery['namespaces'],
-    topK: number
-  ): Promise<RecallHit[]> {
-    const queryTokens = [...new Set(tokenizeWords(query))]
-    if (queryTokens.length === 0) {
-      return []
-    }
-
-    const scopeByNamespace: Record<string, 'persistent' | 'daily' | 'discussion'> = {
-      memory_persistent: 'persistent',
-      memory_daily: 'daily',
-      memory_discussion: 'discussion',
-      conversation_daily: 'daily'
-    }
-
-    const scopes = [...new Set(
-      (namespaces || [])
-        .map((namespace) => scopeByNamespace[namespace])
-        .filter(
-          (scope): scope is 'persistent' | 'daily' | 'discussion' =>
-            Boolean(scope)
-        )
-    )]
-
-    if (scopes.length === 0) {
-      return []
-    }
-
-    const rows = this.repository.listMemoryItemsForRecall(scopes, 800)
-    const hits: RecallHit[] = []
-
-    for (const row of rows) {
-      const normalized = normalizeContent(row.content)
-      if (!normalized) {
-        continue
-      }
-
-      const lower = normalized.toLowerCase()
-      const matchedTokens = queryTokens.filter((token) => lower.includes(token))
-      if (matchedTokens.length === 0) {
-        continue
-      }
-
-      let matchDensity = 0
-      for (const token of matchedTokens) {
-        const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        const regex = new RegExp(escaped, 'g')
-        matchDensity += (lower.match(regex) || []).length
-      }
-
-      const coverage = matchedTokens.length / queryTokens.length
-      const densityBoost = Math.min(1, matchDensity / 10) * 0.3
-      const baseScore = coverage + densityBoost
-
-      const namespace =
-        row.scope === 'persistent'
-          ? 'memory_persistent'
-          : row.scope === 'daily'
-            ? 'memory_daily'
-            : 'memory_discussion'
-
-      hits.push({
-        chunkId: `memory-db:${row.id}`,
-        itemId: row.id,
-        namespace,
-        scope: row.scope,
-        kind: null,
-        title: row.title,
-        content:
-          normalized.length > 2_200
-            ? `${normalized.slice(0, 2_200).trimEnd()}...`
-            : normalized,
-        bm25Score: baseScore,
-        createdAt: row.updatedAt,
-        sourcePath: null
-      })
-    }
-
-    return hits
-      .sort((a, b) => b.bm25Score - a.bm25Score)
-      .slice(0, Math.max(topK * 2, topK))
   }
 
   public constructor() {
@@ -614,8 +440,6 @@ export default class MemoryManager {
       await this.repository.load(MEMORY_DB_PATH)
 
       await this.syncContextFiles(true)
-      await this.qmdBackend.load()
-      await this.qmdBackend.refresh(true)
 
       this._isLoaded = true
       LogHelper.title('Memory Manager')
@@ -777,61 +601,6 @@ export default class MemoryManager {
       sourcePath: hit.path || null
     }))
 
-    const requestedMemoryNamespaces = (namespaces || []).filter((namespace) =>
-      namespace === 'memory_persistent' ||
-      namespace === 'memory_daily' ||
-      namespace === 'memory_discussion' ||
-      namespace === 'conversation_daily'
-    )
-    const hasMemoryHits = hits.some((hit) =>
-      hit.namespace === 'memory_persistent' ||
-      hit.namespace === 'memory_daily' ||
-      hit.namespace === 'memory_discussion'
-    )
-
-    if (requestedMemoryNamespaces.length > 0 && !hasMemoryHits) {
-      try {
-        const memoryFallbackHits = await this.buildMemoryRepositoryFallbackHits(
-          input.query,
-          namespaces,
-          topK
-        )
-        if (memoryFallbackHits.length > 0) {
-          hits.push(...memoryFallbackHits)
-          LogHelper.title('Memory Manager')
-          LogHelper.debug(
-            `Memory lexical fallback added ${memoryFallbackHits.length} candidate(s)`
-          )
-        }
-      } catch (error) {
-        LogHelper.title('Memory Manager')
-        LogHelper.warning(`Memory lexical fallback skipped: ${error}`)
-      }
-    }
-
-    if (
-      namespaces.includes('context') &&
-      !hits.some((hit) => hit.namespace === 'context')
-    ) {
-      try {
-        const fallbackContextHits = await this.buildContextFilesystemFallbackHits(
-          input.query,
-          input.contextFilenames,
-          topK
-        )
-        if (fallbackContextHits.length > 0) {
-          hits.push(...fallbackContextHits)
-          LogHelper.title('Memory Manager')
-          LogHelper.debug(
-            `Context lexical fallback added ${fallbackContextHits.length} candidate(s)`
-          )
-        }
-      } catch (error) {
-        LogHelper.title('Memory Manager')
-        LogHelper.warning(`Context lexical fallback skipped: ${error}`)
-      }
-    }
-
     const queryTokens = new Set(tokenizeWords(input.query))
     const contextFilenameBoost = (hit: RecallHit): number => {
       if (hit.namespace !== 'context') {
@@ -872,6 +641,17 @@ export default class MemoryManager {
 
     LogHelper.title('Memory Manager')
     LogHelper.debug(`Recall candidates: ${hits.length}`)
+    if (hits.length > 0) {
+      const namespaceCounts = hits.reduce<Record<string, number>>((acc, hit) => {
+        acc[hit.namespace] = (acc[hit.namespace] || 0) + 1
+        return acc
+      }, {})
+      LogHelper.debug(
+        `Recall candidates by namespace: ${Object.entries(namespaceCounts)
+          .map(([namespace, count]) => `${namespace}=${count}`)
+          .join(', ')}`
+      )
+    }
 
     const facts = input.includeFacts
       ? this.repository.getFactsTop(8)
@@ -880,6 +660,7 @@ export default class MemoryManager {
     const selectedHits: RecallHit[] = []
     const selectedChunkIds = new Set<string>()
     const selectedContentHashes = new Set<string>()
+    const partiallySharedChunkIds = new Set<string>()
     let usedTokenEstimate = 0
     let hasSelectedContext = false
 
@@ -936,7 +717,16 @@ export default class MemoryManager {
       }
     }
 
-    const topContextCandidate = namespaces.includes('context')
+    const hasPersistentCandidates = hits.some(
+      (hit) => hit.namespace === 'memory_persistent'
+    )
+    const shouldSeedContextFirst =
+      namespaces.includes('context') &&
+      (
+        (input.contextFilenames && input.contextFilenames.length > 0) ||
+        !hasPersistentCandidates
+      )
+    const topContextCandidate = shouldSeedContextFirst
       ? hits.find((hit) => hit.namespace === 'context')
       : undefined
     if (topContextCandidate) {
@@ -956,9 +746,39 @@ export default class MemoryManager {
         usedTokenEstimate += contextSeed.tokens
         hasSelectedContext = true
         if (contextSeed.truncated) {
+          partiallySharedChunkIds.add(topContextCandidate.chunkId)
+        }
+        if (contextSeed.truncated) {
           LogHelper.title('Memory Manager')
           LogHelper.debug(
             `Recall context seed truncated: source="${topContextCandidate.sourcePath || topContextCandidate.title || topContextCandidate.namespace}" tokens=${contextSeed.tokens}`
+          )
+        }
+      }
+    }
+
+    const topPersistentCandidate = hits.find(
+      (candidate) => candidate.namespace === 'memory_persistent'
+    )
+    if (topPersistentCandidate && !selectedChunkIds.has(topPersistentCandidate.chunkId)) {
+      const remainingBudget = tokenBudget - usedTokenEstimate
+      const persistentSeed = fitHitToBudget(topPersistentCandidate, remainingBudget, true)
+      if (persistentSeed) {
+        selectedHits.push(persistentSeed.fittedHit)
+        selectedChunkIds.add(topPersistentCandidate.chunkId)
+        selectedContentHashes.add(
+          computeHash(
+            normalizeContent(persistentSeed.fittedHit.content).toLowerCase()
+          )
+        )
+        usedTokenEstimate += persistentSeed.tokens
+        if (persistentSeed.truncated) {
+          partiallySharedChunkIds.add(topPersistentCandidate.chunkId)
+        }
+        if (persistentSeed.truncated) {
+          LogHelper.title('Memory Manager')
+          LogHelper.debug(
+            `Recall persistent seed truncated: source="${topPersistentCandidate.sourcePath || topPersistentCandidate.title || topPersistentCandidate.namespace}" tokens=${persistentSeed.tokens}`
           )
         }
       }
@@ -978,7 +798,8 @@ export default class MemoryManager {
       const remainingBudget = tokenBudget - usedTokenEstimate
       const allowTruncate =
         selectedHits.length === 0 ||
-        (hit.namespace === 'context' && !hasSelectedContext)
+        (hit.namespace === 'context' && !hasSelectedContext) ||
+        hit.namespace === 'memory_persistent'
       const fitted = fitHitToBudget(hit, remainingBudget, allowTruncate)
       if (!fitted) {
         continue
@@ -989,6 +810,9 @@ export default class MemoryManager {
         computeHash(normalizeContent(fitted.fittedHit.content).toLowerCase())
       )
       usedTokenEstimate += fitted.tokens
+      if (fitted.truncated) {
+        partiallySharedChunkIds.add(hit.chunkId)
+      }
       if (fitted.fittedHit.namespace === 'context') {
         hasSelectedContext = true
       }
@@ -1015,6 +839,21 @@ export default class MemoryManager {
       LogHelper.debug(
         `Recall selected[${index + 1}] source="${sourceLabel}" namespace=${hit.namespace} score=${hit.bm25Score.toFixed(4)} weighted=${weightedScore.toFixed(4)} content=${JSON.stringify(preview)}`
       )
+      LogHelper.debug(
+        `Memory ${partiallySharedChunkIds.has(hit.chunkId) ? 'partially shared' : 'fully shared'}: source="${sourceLabel}" namespace=${hit.namespace} value=${JSON.stringify(
+          hit.content
+        )}`
+      )
+    }
+
+    if (facts.length > 0) {
+      for (const [index, fact] of facts.entries()) {
+        LogHelper.debug(
+          `Memory fully shared: source="fact:${index + 1}" namespace=fact value=${JSON.stringify(
+            fact.text
+          )}`
+        )
+      }
     }
 
     const result: RecallResult = {

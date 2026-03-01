@@ -298,8 +298,7 @@ export default class ContextManager {
         continue
       }
 
-      const contextName = definition.filename.replace('.md', '')
-      summaryLines.push(`- ${contextName}: ${summary}`)
+      summaryLines.push(`- ${definition.filename}: ${summary}`)
     }
 
     return summaryLines.join('\n')

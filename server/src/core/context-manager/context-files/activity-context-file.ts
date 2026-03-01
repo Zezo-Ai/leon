@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { CONTEXT_PATH } from '@/constants'
+import { DateHelper } from '@/helpers/date-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 import {
@@ -93,9 +94,9 @@ export class ActivityContextFile extends ContextFile {
         : ['- No recent app log files detected in common user log locations']
 
     return [
-      `> ${summary}`,
+      `> Active apps, observed app time, recent app logs. ${summary}`,
       '# ACTIVITY',
-      `- Generated at: ${now.toISOString()}`,
+      `- Generated at: ${DateHelper.getDateTime()}`,
       `- Process probe source: ${processSnapshot.source}`,
       `- Process sample time: ${processSnapshot.sampledAt}`,
       `- Running processes sampled: ${processSnapshot.entries.length}`,

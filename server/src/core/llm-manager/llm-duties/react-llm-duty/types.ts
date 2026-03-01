@@ -61,6 +61,12 @@ export interface ToolExecutionResult {
   missingSettingsMessage?: string
 }
 
+export interface PromptLogSection {
+  name: string
+  source: string
+  content?: string
+}
+
 /**
  * Callback interface for LLM calls from phase functions.
  * This decouples the phase logic from the duty class instance.
@@ -70,22 +76,26 @@ export interface LLMCaller {
     prompt: string,
     systemPrompt: string,
     schema: Record<string, unknown>,
-    history?: MessageLog[]
+    history?: MessageLog[],
+    promptSections?: PromptLogSection[]
   ): Promise<{
     output: unknown
     usedInputTokens?: number
     usedOutputTokens?: number
+    reasoning?: string
   } | null>
 
   callLLMText(
     prompt: string,
     systemPrompt: string,
     history?: MessageLog[],
-    shouldStream?: boolean
+    shouldStream?: boolean,
+    promptSections?: PromptLogSection[]
   ): Promise<{
     output: string
     usedInputTokens?: number
     usedOutputTokens?: number
+    reasoning?: string
   } | null>
 
   callLLMWithTools(
@@ -94,26 +104,20 @@ export interface LLMCaller {
     tools: OpenAITool[],
     toolChoice: OpenAIToolChoice,
     history?: MessageLog[],
-    shouldStreamToUser?: boolean
+    shouldStreamToUser?: boolean,
+    promptSections?: PromptLogSection[]
   ): Promise<{
     toolCall?: { functionName: string, arguments: string }
     unexpectedToolCall?: { functionName: string, arguments: string }
     textContent?: string
     usedInputTokens?: number
     usedOutputTokens?: number
+    reasoning?: string
   } | null>
 
   readonly supportsNativeTools: boolean
   readonly input: string | object | null
   readonly history: MessageLog[]
   getContextFileContent(filename: string): string | null
-  getPlanningMemoryPack(query: string, tokenBudget?: number): Promise<string>
-  shouldRecallPlanningMemory(query: string): boolean
-  getExecutionMemoryPack(
-    query: string,
-    toolkitId: string,
-    contextFiles?: string[],
-    tokenBudget?: number
-  ): Promise<string>
   consumeProviderErrorMessage(): string | null
 }

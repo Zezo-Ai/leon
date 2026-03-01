@@ -680,6 +680,9 @@ export default class NLU {
     await reactDuty.init()
     const reactResult = await reactDuty.execute()
     const output = reactResult?.output as unknown as string
+    const hasExplicitMemoryWrite = Boolean(
+      reactResult?.data && reactResult.data['hasExplicitMemoryWrite'] === true
+    )
 
     if (output) {
       const sentAt = Date.now()
@@ -693,16 +696,23 @@ export default class NLU {
         LogHelper.warning(`Failed to store turn memory: ${error}`)
       })
 
-      void MEMORY_MANAGER.savePersistentMemoryCandidatesFromTurn(
-        utterance,
-        String(output),
-        sentAt
-      ).catch((error: unknown) => {
+      if (!hasExplicitMemoryWrite) {
+        void MEMORY_MANAGER.savePersistentMemoryCandidatesFromTurn(
+          utterance,
+          String(output),
+          sentAt
+        ).catch((error: unknown) => {
+          LogHelper.title('NLU')
+          LogHelper.warning(
+            `Failed to save persistent memory candidates: ${error}`
+          )
+        })
+      } else {
         LogHelper.title('NLU')
-        LogHelper.warning(
-          `Failed to save persistent memory candidates: ${error}`
+        LogHelper.debug(
+          'Skipping automatic persistent extraction: explicit memory.write already executed in this turn'
         )
-      })
+      }
     }
 
     if (output && !BRAIN.isMuted) {

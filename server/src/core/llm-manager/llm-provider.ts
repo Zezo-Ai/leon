@@ -37,6 +37,7 @@ interface CompletionResult {
   usedInputTokens: number
   usedOutputTokens: number
   temperature: number
+  reasoning?: string
   /**
    * When the model responds with tool calls (native tool calling),
    * this field contains the parsed tool_calls array.
@@ -686,12 +687,16 @@ export default class LLMProvider {
           ? (usage['prompt_tokens'] as number)
           : typeof usage['promptTokens'] === 'number'
             ? (usage['promptTokens'] as number)
+            : typeof usage['input_tokens'] === 'number'
+              ? (usage['input_tokens'] as number)
           : 0,
       usedOutputTokens:
         typeof usage['completion_tokens'] === 'number'
           ? (usage['completion_tokens'] as number)
           : typeof usage['completionTokens'] === 'number'
             ? (usage['completionTokens'] as number)
+            : typeof usage['output_tokens'] === 'number'
+              ? (usage['output_tokens'] as number)
           : 0
     }
 
@@ -1594,21 +1599,29 @@ export default class LLMProvider {
       'data' in (rawResult as Record<string, unknown>)
         ? (rawResult as AxiosResponse).data
         : null
+    const remoteStreamCandidate =
+      remoteRawData !== null ? remoteRawData : rawResult
     const providerReturnedStream =
-      isRemoteProvider && this.isReadableStream(remoteRawData)
+      isRemoteProvider && this.isReadableStream(remoteStreamCandidate)
     const shouldUseRemoteStreaming =
       isRemoteProvider && shouldStreamOutput && providerReturnedStream
 
     if (isRemoteProvider && shouldStreamOutput && !providerReturnedStream) {
       LogHelper.title('LLM Provider')
       LogHelper.debug(
-        'Streaming requested but provider returned non-stream payload; falling back to non-stream normalization'
+        `Streaming requested but provider returned non-stream payload; falling back to non-stream normalization (type=${typeof remoteStreamCandidate})`
       )
     }
 
     if (shouldUseRemoteStreaming) {
+      const streamResponse =
+        remoteRawData !== null
+          ? (rawResult as AxiosResponse)
+          : ({
+              data: remoteStreamCandidate
+            } as AxiosResponse)
       const normalized = await this.normalizeStreamingCompletionResult(
-        rawResult as AxiosResponse,
+        streamResponse,
         completionParams
       )
 
@@ -1807,6 +1820,7 @@ export default class LLMProvider {
       // Current used context size
       usedInputTokens,
       usedOutputTokens,
+      ...(reasoning ? { reasoning } : {}),
       ...(toolCalls ? { toolCalls } : {})
     }
   }

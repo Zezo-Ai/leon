@@ -10,7 +10,8 @@ import {
 } from './constants'
 import type {
   ExecutionRecord,
-  LLMCaller
+  LLMCaller,
+  PromptLogSection
 } from './types'
 import { formatExecutionHistory, parseOutput, parseToolCallArguments } from './utils'
 
@@ -35,6 +36,26 @@ ${FORMATTING_RULES}`
   )
   const prompt = `${historySection}\n\nUser Request: "${caller.input}"\n\nBased on the execution results above, provide a final answer to the user.`
 
+  const buildFinalAnswerPromptSections = (
+    currentPrompt: string,
+    currentSystemPrompt: string,
+    extras?: PromptLogSection[]
+  ): PromptLogSection[] => {
+    return [
+      {
+        name: 'PERSONA',
+        source: 'server/src/core/llm-manager/persona.ts',
+        content: currentSystemPrompt
+      },
+      {
+        name: 'FINAL_ANSWER_PROMPT',
+        source: 'server/src/core/llm-manager/llm-duties/react-llm-duty/final-answer.ts',
+        content: currentPrompt
+      },
+      ...(extras || [])
+    ]
+  }
+
   const finalAnswerRetryIncrementMs = 30_000
 
   for (
@@ -52,7 +73,8 @@ ${FORMATTING_RULES}`
         prompt,
         systemPrompt,
         caller.history,
-        true
+        true,
+        buildFinalAnswerPromptSections(prompt, systemPrompt)
       )
 
       if (textResult?.output?.trim()) {
@@ -85,7 +107,16 @@ ${FORMATTING_RULES}`
           systemPrompt,
           [answerTool],
           { type: 'function', function: { name: 'provide_answer' } },
-          caller.history
+          caller.history,
+          false,
+          buildFinalAnswerPromptSections(prompt, systemPrompt, [
+            {
+              name: 'TOOLS_SCHEMA',
+              source:
+                'server/src/core/llm-manager/llm-duties/react-llm-duty/final-answer.ts',
+              content: JSON.stringify([answerTool])
+            }
+          ])
         )
 
         if (result?.toolCall) {
@@ -119,7 +150,15 @@ ${FORMATTING_RULES}`
         prompt,
         systemPrompt,
         finalSchema,
-        caller.history
+        caller.history,
+        buildFinalAnswerPromptSections(prompt, systemPrompt, [
+          {
+            name: 'FINAL_SCHEMA',
+            source:
+              'server/src/core/llm-manager/llm-duties/react-llm-duty/final-answer.ts',
+            content: JSON.stringify(finalSchema)
+          }
+        ])
       )
 
       if (completionResult?.output) {
