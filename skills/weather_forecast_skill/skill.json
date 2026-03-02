@@ -16,13 +16,21 @@
           "type": "string",
           "description": "The city, region, or place to check."
         },
+        "start_date": {
+          "type": "string",
+          "description": "Start date in YYYY-MM-DD format."
+        },
+        "end_date": {
+          "type": "string",
+          "description": "End date in YYYY-MM-DD format."
+        },
         "units": {
           "type": "string",
           "enum": ["metric", "imperial"],
           "description": "Measurement system for temperature and wind."
         }
       },
-      "optional_parameters": ["units"]
+      "optional_parameters": ["start_date", "end_date", "units"]
     }
   }
 }

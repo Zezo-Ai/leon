@@ -11,11 +11,19 @@
   },
   "functions": {
     "getCurrentConditions": {
-      "description": "Get current weather conditions for a location.",
+      "description": "Get weather conditions for a location with an optional date range.",
       "parameters": {
         "type": "object",
         "properties": {
-          "location": { "type": "string" }
+          "location": { "type": "string" },
+          "start_date": {
+            "type": "string",
+            "description": "Start date in YYYY-MM-DD format."
+          },
+          "end_date": {
+            "type": "string",
+            "description": "End date in YYYY-MM-DD format."
+          }
         },
         "required": ["location"]
       }

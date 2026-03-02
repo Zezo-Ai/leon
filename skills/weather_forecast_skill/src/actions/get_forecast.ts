@@ -23,6 +23,12 @@ export const run: ActionFunction = async function (
   paramsHelper: ParamsHelper
 ) {
   const location = paramsHelper.getActionArgument('location') as string
+  const startDate = paramsHelper.getActionArgument('start_date') as
+    | string
+    | undefined
+  const endDate = paramsHelper.getActionArgument('end_date') as
+    | string
+    | undefined
   const units =
     ((paramsHelper.getActionArgument('units') as Units) || 'metric') ===
     'imperial'
@@ -42,7 +48,11 @@ export const run: ActionFunction = async function (
 
   try {
     const weatherTool = await ToolManager.initTool(OpenMeteoTool)
-    const result = await weatherTool.getCurrentConditions(location)
+    const result = await weatherTool.getCurrentConditions(
+      location,
+      startDate,
+      endDate
+    )
 
     if (!result.success || !result.data) {
       const errorMessage = result.error || 'Unknown weather service error.'

@@ -72,6 +72,49 @@ def _get_weather_description(code: int) -> str:
     return WMO_CODE_DESCRIPTIONS.get(code, "Unknown")
 
 
+def _map_hourly_to_current(hourly: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    times = hourly.get("time")
+    if not isinstance(times, list) or not times:
+        return None
+
+    time_values = [str(time) for time in times]
+    index = 0
+
+    def value_at(key: str) -> Any:
+        values = hourly.get(key)
+        if not isinstance(values, list) or index >= len(values):
+            return None
+        return values[index]
+
+    temperature = value_at("temperature_2m")
+    humidity = value_at("relative_humidity_2m")
+    apparent_temperature = value_at("apparent_temperature")
+    weather_code = value_at("weather_code")
+    wind_speed = value_at("wind_speed_10m")
+    wind_direction = value_at("wind_direction_10m")
+
+    if (
+        temperature is None
+        or humidity is None
+        or apparent_temperature is None
+        or weather_code is None
+        or wind_speed is None
+        or wind_direction is None
+        or index >= len(time_values)
+    ):
+        return None
+
+    return {
+        "temperature_2m": temperature,
+        "relative_humidity_2m": humidity,
+        "apparent_temperature": apparent_temperature,
+        "weather_code": weather_code,
+        "wind_speed_10m": wind_speed,
+        "wind_direction_10m": wind_direction,
+        "time": time_values[index],
+    }
+
+
 class OpenMeteoTool(BaseTool):
     TOOLKIT = "weather"
 
@@ -100,7 +143,12 @@ class OpenMeteoTool(BaseTool):
     def description(self) -> str:
         return self.config.get("description", "")
 
-    def get_current_conditions(self, location: str) -> Dict[str, Any]:
+    def get_current_conditions(
+        self,
+        location: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> Dict[str, Any]:
         if not location or not location.strip():
             return {"success": False, "error": "Location is required."}
 
@@ -112,6 +160,8 @@ class OpenMeteoTool(BaseTool):
             weather = self._fetch_weather(
                 geocoding_result["latitude"],
                 geocoding_result["longitude"],
+                start_date,
+                end_date,
             )
 
             current = weather.get("current")
@@ -193,19 +243,37 @@ class OpenMeteoTool(BaseTool):
             "display_name": ", ".join(parts) if parts else location,
         }
 
-    def _fetch_weather(self, latitude: float, longitude: float) -> Dict[str, Any]:
+    def _fetch_weather(
+        self,
+        latitude: float,
+        longitude: float,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> Dict[str, Any]:
         from urllib.parse import urlencode
 
-        query_params = urlencode(
-            {
-                "latitude": str(latitude),
-                "longitude": str(longitude),
-                "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m",
-                "temperature_unit": "celsius",
-                "wind_speed_unit": "kmh",
-                "timezone": "auto",
-            }
-        )
+        query_params_object = {
+            "latitude": str(latitude),
+            "longitude": str(longitude),
+            "temperature_unit": "celsius",
+            "wind_speed_unit": "kmh",
+            "timezone": "auto",
+        }
+
+        if start_date or end_date:
+            query_params_object["hourly"] = (
+                "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m"
+            )
+            if start_date:
+                query_params_object["start_date"] = start_date
+            if end_date:
+                query_params_object["end_date"] = end_date
+        else:
+            query_params_object["current"] = (
+                "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m"
+            )
+
+        query_params = urlencode(query_params_object)
 
         response = self.weather_network.request(
             {
@@ -214,4 +282,10 @@ class OpenMeteoTool(BaseTool):
             }
         )
 
-        return response.get("data", {})
+        weather_data = response.get("data", {})
+        if not weather_data.get("current") and isinstance(weather_data.get("hourly"), dict):
+            current = _map_hourly_to_current(weather_data.get("hourly", {}))
+            if current:
+                weather_data["current"] = current
+
+        return weather_data

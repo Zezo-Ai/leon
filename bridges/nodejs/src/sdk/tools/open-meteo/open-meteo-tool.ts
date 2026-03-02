@@ -28,10 +28,21 @@ interface CurrentWeather {
   time: string
 }
 
+interface HourlyWeather {
+  time: string[]
+  temperature_2m: number[]
+  relative_humidity_2m: number[]
+  apparent_temperature: number[]
+  weather_code: number[]
+  wind_speed_10m: number[]
+  wind_direction_10m: number[]
+}
+
 interface WeatherResponse {
   latitude: number
   longitude: number
   current?: CurrentWeather
+  hourly?: HourlyWeather
   current_units?: {
     temperature_2m: string
     relative_humidity_2m: string
@@ -126,6 +137,44 @@ function getWeatherDescription(code: number): string {
   return WMO_CODE_DESCRIPTIONS[code] || 'Unknown'
 }
 
+function mapHourlyToCurrent(hourly: HourlyWeather): CurrentWeather | null {
+  if (!hourly.time || hourly.time.length === 0) {
+    return null
+  }
+
+  const index = 0
+
+  const temperature = hourly.temperature_2m?.[index]
+  const humidity = hourly.relative_humidity_2m?.[index]
+  const apparentTemperature = hourly.apparent_temperature?.[index]
+  const weatherCode = hourly.weather_code?.[index]
+  const windSpeed = hourly.wind_speed_10m?.[index]
+  const windDirection = hourly.wind_direction_10m?.[index]
+  const time = hourly.time[index]
+
+  if (
+    temperature === undefined ||
+    humidity === undefined ||
+    apparentTemperature === undefined ||
+    weatherCode === undefined ||
+    windSpeed === undefined ||
+    windDirection === undefined ||
+    !time
+  ) {
+    return null
+  }
+
+  return {
+    temperature_2m: temperature,
+    relative_humidity_2m: humidity,
+    apparent_temperature: apparentTemperature,
+    weather_code: weatherCode,
+    wind_speed_10m: windSpeed,
+    wind_direction_10m: windDirection,
+    time
+  }
+}
+
 export default class OpenMeteoTool extends Tool {
   private static readonly TOOLKIT = 'weather'
   private readonly config: ReturnType<typeof ToolkitConfig.load>
@@ -161,7 +210,11 @@ export default class OpenMeteoTool extends Tool {
     return this.config['description']
   }
 
-  async getCurrentConditions(location: string): Promise<WeatherResponseResult> {
+  async getCurrentConditions(
+    location: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<WeatherResponseResult> {
     if (!location || !location.trim()) {
       return {
         success: false,
@@ -180,7 +233,9 @@ export default class OpenMeteoTool extends Tool {
 
       const weather = await this.fetchWeather(
         geocodingResult.latitude,
-        geocodingResult.longitude
+        geocodingResult.longitude,
+        startDate,
+        endDate
       )
 
       if (!weather.current) {
@@ -258,23 +313,49 @@ export default class OpenMeteoTool extends Tool {
 
   private async fetchWeather(
     latitude: number,
-    longitude: number
+    longitude: number,
+    startDate?: string,
+    endDate?: string
   ): Promise<WeatherResponse> {
     const queryParams = new URLSearchParams({
       latitude: latitude.toString(),
       longitude: longitude.toString(),
-      current:
-        'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m',
       temperature_unit: 'celsius',
       wind_speed_unit: 'kmh',
       timezone: 'auto'
-    }).toString()
+    })
+
+    if (startDate || endDate) {
+      queryParams.set(
+        'hourly',
+        'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m'
+      )
+      if (startDate) {
+        queryParams.set('start_date', startDate)
+      }
+      if (endDate) {
+        queryParams.set('end_date', endDate)
+      }
+    } else {
+      queryParams.set(
+        'current',
+        'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m'
+      )
+    }
 
     const response = await this.weatherNetwork.request<WeatherResponse>({
-      url: `/v1/forecast?${queryParams}`,
+      url: `/v1/forecast?${queryParams.toString()}`,
       method: 'GET'
     })
 
-    return response.data
+    const weatherData = response.data
+    if (!weatherData.current && weatherData.hourly) {
+      const mappedCurrent = mapHourlyToCurrent(weatherData.hourly)
+      if (mappedCurrent) {
+        weatherData.current = mappedCurrent
+      }
+    }
+
+    return weatherData
   }
 }
