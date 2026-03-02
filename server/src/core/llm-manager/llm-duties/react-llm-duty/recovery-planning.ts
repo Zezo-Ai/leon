@@ -91,7 +91,11 @@ export async function runRecoveryPlanningPhase(
       ? '\nNote: The catalog lists tools, not individual functions. Use the format toolkit_id.tool_id in your plan steps.'
       : ''
   const recoverySystemPrompt = PERSONA.getCompactDutySystemPrompt(
-    RECOVERY_PLAN_SYSTEM_PROMPT
+    RECOVERY_PLAN_SYSTEM_PROMPT,
+    {
+      includePersonality: true,
+      includeMood: true
+    }
   )
   const contextManifest = CONTEXT_MANAGER.getManifest()
   const failedExecution = executionHistory[executionHistory.length - 1]

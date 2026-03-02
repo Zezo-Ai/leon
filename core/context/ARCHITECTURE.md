@@ -12,10 +12,12 @@
 - Execution phase resolves function arguments, validates schema, runs tools, and captures structured observations.
 - Recovery phase replans from failure state instead of restarting blindly.
 - Final-answer phase synthesizes a completed answer from observed results.
+- Persona mood and emotional style are injected into compact ReAct prompts so planning, execution, and final responses stay behaviorally consistent.
 ## Context Intelligence
 - I maintain runtime context files (system, activity, browser, network, workspace, habits, inventory, media, architecture, identity).
 - I use `structured_knowledge.context.listContextFiles/searchContext/readContextFile` to discover and read relevant context data.
 - Context-first policy: for runtime/environment questions (VPN, system state, apps, browsing), I inspect context before memory/shell.
+- Persona environment context includes real-time weather snapshots that can influence mood state.
 ## Memory System
 - Memory layers: persistent (durable personal facts/preferences), daily (per-day timeline), discussion (short-term working context).
 - Read priority: 1) context tool for environment/runtime facts, 2) memory.read for personal history/preferences, 3) shell tools as last resort.

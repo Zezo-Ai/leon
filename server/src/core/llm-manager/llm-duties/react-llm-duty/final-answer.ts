@@ -32,7 +32,11 @@ Important:
 - Do not say "let me", "I will", or any future-step phrasing.
 - Return a completed answer based only on available observations.
 
-${FORMATTING_RULES}`
+${FORMATTING_RULES}`,
+    {
+      includePersonality: true,
+      includeMood: true
+    }
   )
   const prompt = `${historySection}\n\nUser Request: "${caller.input}"\n\nBased on the execution results above, provide a final answer to the user.`
 

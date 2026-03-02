@@ -85,7 +85,10 @@ export class ReActLLMDuty extends LLMDuty {
     }
 
     this.input = params.input
-    this.systemPrompt = PERSONA.getCompactDutySystemPrompt(PLAN_SYSTEM_PROMPT)
+    this.systemPrompt = PERSONA.getCompactDutySystemPrompt(PLAN_SYSTEM_PROMPT, {
+      includePersonality: true,
+      includeMood: true
+    })
   }
 
   public async init(

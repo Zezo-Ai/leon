@@ -310,7 +310,11 @@ async function resolveToolFunctionWithNativeTools(
   )
   const historySection = formatExecutionHistory(executionHistory)
   const resolveSystemPrompt = PERSONA.getCompactDutySystemPrompt(
-    RESOLVE_FUNCTION_SYSTEM_PROMPT
+    RESOLVE_FUNCTION_SYSTEM_PROMPT,
+    {
+      includePersonality: false,
+      includeMood: false
+    }
   )
 
   const tools: OpenAITool[] = Object.entries(toolFunctions).map(
@@ -483,7 +487,11 @@ async function resolveToolFunctionWithJSONMode(
 
   const historySection = formatExecutionHistory(executionHistory)
   const resolveSystemPrompt = PERSONA.getCompactDutySystemPrompt(
-    RESOLVE_FUNCTION_SYSTEM_PROMPT
+    RESOLVE_FUNCTION_SYSTEM_PROMPT,
+    {
+      includePersonality: false,
+      includeMood: false
+    }
   )
   const prompt = `Tool: ${effectiveToolkitId}.${effectiveToolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\nAvailable Functions:\n${functionsSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide tool_input.`
 
@@ -671,7 +679,11 @@ async function executeFunctionWithNativeTools(
   )
   const historySection = formatExecutionHistory(executionHistory)
   const executeSystemPrompt = PERSONA.getCompactDutySystemPrompt(
-    EXECUTE_SYSTEM_PROMPT
+    EXECUTE_SYSTEM_PROMPT,
+    {
+      includePersonality: true,
+      includeMood: true
+    }
   )
 
   const tool: OpenAITool = {
@@ -924,7 +936,11 @@ async function executeFunctionWithJSONMode(
   )
   const historySection = formatExecutionHistory(executionHistory)
   const executeSystemPrompt = PERSONA.getCompactDutySystemPrompt(
-    EXECUTE_SYSTEM_PROMPT
+    EXECUTE_SYSTEM_PROMPT,
+    {
+      includePersonality: true,
+      includeMood: true
+    }
   )
 
   const executeSchema = {

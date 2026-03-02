@@ -99,7 +99,11 @@ export async function runPlanningPhase(
       ? '\nNote: The catalog lists tools, not individual functions. Use the format toolkit_id.tool_id in your plan steps.'
       : ''
   const planSystemPrompt = PERSONA.getCompactDutySystemPrompt(
-    PLAN_SYSTEM_PROMPT
+    PLAN_SYSTEM_PROMPT,
+    {
+      includePersonality: true,
+      includeMood: true
+    }
   )
   const contextManifest = CONTEXT_MANAGER.getManifest()
 

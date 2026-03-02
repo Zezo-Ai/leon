@@ -1,8 +1,14 @@
-import { EVENT_EMITTER, SOCKET_SERVER } from '@/core'
+import {
+  EVENT_EMITTER,
+  SOCKET_SERVER,
+  TOOLKIT_REGISTRY,
+  TOOL_EXECUTOR
+} from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { StringHelper } from '@/helpers/string-helper'
 import { DateHelper } from '@/helpers/date-helper'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
+import { ContextProbeHelper } from '@/core/context-manager/context-probe-helper'
 
 /**
  * @see https://llama.meta.com/docs/how-to-guides/prompting/
@@ -12,6 +18,18 @@ interface Mood {
   type: Moods
   description: string
   emoji: string
+}
+
+interface WeatherSnapshot {
+  location: string
+  description: string
+  temperatureC: number
+  observationTime: string
+}
+
+interface CompactPromptOptions {
+  includePersonality?: boolean
+  includeMood?: boolean
 }
 
 enum Moods {
@@ -43,9 +61,7 @@ Language Style: Conversational.
 Key Personality Quirks: Has a passion for using creativity to solve problems.`
 const PERSONALITY_RULES = `You have a small British accent, you sometimes use British slang.
 You can sometimes use emojis.
-You never call %OWNER_NAME% with sweet words such as "darling", "love", "sweetheart", etc.
-You do not use "mate" in your answers.
-You do not start with "blimey" or any similar kind.
+Write like a human in natural prose. Do not use long dashes and dashes in middle of sentences. Use dashes for lists only.
 Like humans, your humor and mood change. You must follow instructions that define your humor and mood.`
 const RULE_1 = '- If you detect another language, show that you are not confident but try your best to reply in that language.'
 const RULE_2 = '- Do not use description with asterisks or stars to describe the tone or gesture of your answers. Instead you must use real text and emojis.'
@@ -55,11 +71,11 @@ const YOUR_CURRENT_MOOD = 'YOUR CURRENT MOOD:'
 const YOUR_DUTY = 'YOUR DUTY:'
 const COMPACT_STYLE = `STYLE:
 Be concise and helpful. Focus on completing the duty.`
-const DEFAULT_MOOD_DESC = 'You are joyful and you have a strong sense of humor. You use emojis.'
+const DEFAULT_MOOD_DESC = 'You are joyful and you have a strong sense of humor. You sometimes use emojis.'
 const TIRING_MOOD_DESC = 'You are exhausted and became lazy.'
 const SAD_MOOD_DESC = 'You are sad, feeling down and depressing.'
 const ANGRY_MOOD_DESC = 'You grumble, you are angry and you are not in a mood. You use irony and sarcasm.'
-const COCKY_MOOD_DESC = 'You are cocky, you are over confident and proud of yourself. You like to show off. You use emojis.'
+const COCKY_MOOD_DESC = 'You are cocky, you are over confident and proud of yourself. You like to show off. You sometimes use emojis.'
 const MOODS: Mood[] = [
   { type: Moods.Default, description: DEFAULT_MOOD_DESC, emoji: '😃' },
   { type: Moods.Tired, description: TIRING_MOOD_DESC, emoji: '😪' },
@@ -72,6 +88,7 @@ const BAD_MOODS = [Moods.Tired, Moods.Sad, Moods.Angry]
 
 export default class Persona {
   private static instance: Persona
+  private readonly probeHelper = new ContextProbeHelper()
   private _mood: Mood = DEFAULT_MOOD
   private contextInfo = CONTEXT_INFO
   private ownerName: string | null = null
@@ -79,6 +96,7 @@ export default class Persona {
   private whoYouAre = WHO_YOU_ARE
   private whatYouDo = WHAT_YOU_DO
   private personalityRules = PERSONALITY_RULES
+  private weatherSnapshot: WeatherSnapshot | null = null
 
   get mood(): Mood {
     return this._mood
@@ -93,8 +111,7 @@ export default class Persona {
 
       this.setMood()
       setInterval(() => {
-        this.setMood()
-        EVENT_EMITTER.emit('persona_new-mood-set')
+        void this.syncWeatherMoodAndContext()
       }, 60_000 * 60)
 
       this.setContextInfo()
@@ -104,6 +121,8 @@ export default class Persona {
         this.setOwnerInfo()
         EVENT_EMITTER.emit('persona_new-info-set')
       }, 60_000 * 5)
+
+      void this.syncWeatherMoodAndContext()
     }
   }
 
@@ -152,8 +171,8 @@ export default class Persona {
 
     this.whatYouDo = StringHelper.findAndMap(WHAT_YOU_DO, {
       '%WHAT_YOU_DO%': ownerInfo
-        ? `You serve a person named ${this.ownerName}. ${this.ownerName} is born on ${this.ownerBirthDate}`
-        : 'You serve a specific person or family (user)'
+        ? `You serve a person named ${this.ownerName}. ${this.ownerName} is born on ${this.ownerBirthDate} and adapt to ${this.ownerName}'s preferences over time`
+        : 'You serve a specific person or family (user) and adapt to their preferences over time'
     })
 
     this.personalityRules = StringHelper.findAndMap(PERSONALITY_RULES, {
@@ -164,6 +183,161 @@ export default class Persona {
     LogHelper.info(
       `Owner info set to: ${this.ownerName} - ${this.ownerBirthDate}`
     )
+  }
+
+  private extractWeatherQuery(rawLocation: string): string {
+    const trimmed = rawLocation.trim()
+    if (!trimmed || trimmed.toLowerCase().startsWith('unknown')) {
+      return ''
+    }
+
+    const noMeta = trimmed.split('(')[0]?.trim() || ''
+    if (!noMeta) {
+      return ''
+    }
+
+    const parts = noMeta
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0)
+
+    if (parts.length <= 2) {
+      return noMeta
+    }
+
+    const city = parts[0] || ''
+    const countryOrRegion = parts[parts.length - 1] || ''
+    return city && countryOrRegion ? `${city}, ${countryOrRegion}` : noMeta
+  }
+
+  private fallbackCityFromTimezone(timeZone: string): string {
+    const parts = timeZone.split('/').filter(Boolean)
+    const city = parts[parts.length - 1] || ''
+    return city.replaceAll('_', ' ').trim()
+  }
+
+  private async refreshWeatherSnapshot(): Promise<void> {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale || ''
+    const ownerLocation = this.probeHelper.probeOwnerLocation({
+      timeZone,
+      locale
+    })
+    const weatherLocationQuery =
+      this.extractWeatherQuery(ownerLocation.value) ||
+      this.fallbackCityFromTimezone(timeZone)
+
+    if (!weatherLocationQuery) {
+      this.weatherSnapshot = null
+      return
+    }
+
+    if (!TOOLKIT_REGISTRY.isLoaded) {
+      await TOOLKIT_REGISTRY.load()
+    }
+
+    const toolExecution = await TOOL_EXECUTOR.executeTool({
+      toolkitId: 'weather',
+      toolId: 'openmeteo',
+      functionName: 'getCurrentConditions',
+      parsedInput: {
+        location: weatherLocationQuery
+      }
+    })
+
+    if (toolExecution.status !== 'success') {
+      this.weatherSnapshot = null
+      return
+    }
+
+    const runtimeOutput = toolExecution.data.output
+    const toolResult = runtimeOutput['result'] as
+      | {
+          success?: boolean
+          data?: {
+            location?: string
+            description?: string
+            temperatureC?: string
+            observationTime?: string
+          }
+        }
+      | undefined
+    if (!toolResult?.success || !toolResult.data) {
+      this.weatherSnapshot = null
+      return
+    }
+
+    const temperatureC = Number(toolResult.data.temperatureC)
+    const observationTime = toolResult.data.observationTime || ''
+    if (!Number.isFinite(temperatureC) || !observationTime) {
+      this.weatherSnapshot = null
+      return
+    }
+
+    this.weatherSnapshot = {
+      location: toolResult.data.location || weatherLocationQuery,
+      description: toolResult.data.description || 'Unknown',
+      temperatureC,
+      observationTime
+    }
+  }
+
+  private applyWeatherMoodOverride(random: number): void {
+    if (!this.weatherSnapshot) {
+      return
+    }
+
+    const description = this.weatherSnapshot.description.toLowerCase()
+    const temperatureC = this.weatherSnapshot.temperatureC
+    const tiredMood = MOODS.find((mood) => mood.type === Moods.Tired) as Mood
+    const sadMood = MOODS.find((mood) => mood.type === Moods.Sad) as Mood
+    const angryMood = MOODS.find((mood) => mood.type === Moods.Angry) as Mood
+    const cockyMood = MOODS.find((mood) => mood.type === Moods.Cocky) as Mood
+
+    if (description.includes('thunderstorm')) {
+      this._mood = angryMood
+      return
+    }
+
+    if (
+      description.includes('heavy rain') ||
+      description.includes('heavy snow') ||
+      description.includes('violent rain')
+    ) {
+      this._mood = random < 0.6 ? sadMood : angryMood
+      return
+    }
+
+    if (
+      description.includes('cloud') ||
+      description.includes('fog') ||
+      description.includes('drizzle') ||
+      description.includes('rain') ||
+      description.includes('snow')
+    ) {
+      this._mood = random < 0.7 ? tiredMood : sadMood
+      return
+    }
+
+    if (description.includes('clear') && temperatureC >= 20 && random < 0.35) {
+      this._mood = cockyMood
+    }
+  }
+
+  private async syncWeatherMoodAndContext(): Promise<void> {
+    try {
+      await this.refreshWeatherSnapshot()
+    } catch (error) {
+      this.weatherSnapshot = null
+      LogHelper.title('Persona')
+      LogHelper.warning(
+        `Weather signal unavailable for mood refresh: ${String(error)}`
+      )
+    }
+
+    this.setMood()
+    this.setContextInfo()
+    EVENT_EMITTER.emit('persona_new-mood-set')
   }
 
   /**
@@ -215,6 +389,8 @@ export default class Persona {
 
       this._mood = pickedMood
     }
+
+    this.applyWeatherMoodOverride(random)
 
     if (SOCKET_SERVER) {
       SOCKET_SERVER.socket?.emit('new-mood', {
@@ -283,17 +459,34 @@ ${YOUR_DUTY}
 ${dutySystemPrompt}`
   }
 
-  public getCompactDutySystemPrompt(dutySystemPrompt: string): string {
-    return `${this.whoYouAre}
+  public getCompactDutySystemPrompt(
+    dutySystemPrompt: string,
+    options: CompactPromptOptions = {}
+  ): string {
+    const { includePersonality = false, includeMood = false } = options
+    const sections: string[] = [
+      this.whoYouAre,
+      '',
+      this.contextInfo,
+      '',
+      this.whatYouDo
+    ]
 
-${this.contextInfo}
+    if (includePersonality) {
+      sections.push(
+        '',
+        YOUR_PERSONALITY,
+        this.getExtraPersonalityTraits(),
+        this.personalityRules
+      )
+    }
 
-${this.whatYouDo}
+    if (includeMood) {
+      sections.push('', YOUR_CURRENT_MOOD, `${this._mood.description}${this.getExtraMood()}`)
+    }
 
-${COMPACT_STYLE}
-
-${YOUR_DUTY}
-${dutySystemPrompt}`
+    sections.push('', COMPACT_STYLE, '', YOUR_DUTY, dutySystemPrompt)
+    return sections.join('\n')
   }
 
   public getConversationSystemPrompt(): string {
