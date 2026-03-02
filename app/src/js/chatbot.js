@@ -10,6 +10,7 @@ import ToolUIHandler from './tool-ui-handler'
 const WIDGETS_TO_FETCH = []
 const WIDGETS_FETCH_CACHE = new Map()
 const REPLACED_MESSAGES = new Set()
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 24
 
 export default class Chatbot {
   constructor(socket, serverURL) {
@@ -22,6 +23,8 @@ export default class Chatbot {
     this.bubbles = localStorage.getItem('bubbles')
     this.parsedBubbles = JSON.parse(this.bubbles)
     this.reasoningBlocks = new Map()
+    this.feedAutoScrollEnabled = true
+    this.isProgrammaticFeedScroll = false
 
     // Initialize tool UI handler
     this.toolUIHandler = new ToolUIHandler(
@@ -58,6 +61,14 @@ export default class Chatbot {
         }
       }
     })
+
+    this.feed.addEventListener(
+      'scroll',
+      () => {
+        this.handleFeedScroll()
+      },
+      { passive: true }
+    )
   }
 
   sendTo(who, string) {
@@ -94,8 +105,95 @@ export default class Chatbot {
     }
   }
 
-  scrollDown() {
+  isElementNearBottom(element) {
+    if (!element) {
+      return true
+    }
+
+    const remainingScrollableDistance =
+      element.scrollHeight - (element.scrollTop + element.clientHeight)
+
+    return remainingScrollableDistance <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX
+  }
+
+  handleFeedScroll() {
+    if (!this.feed || this.isProgrammaticFeedScroll) {
+      return
+    }
+
+    this.feedAutoScrollEnabled = this.isElementNearBottom(this.feed)
+  }
+
+  scrollDown(options = {}) {
+    if (!this.feed) {
+      return
+    }
+
+    const { force = false } = options
+
+    if (!force && !this.feedAutoScrollEnabled) {
+      return
+    }
+
+    this.isProgrammaticFeedScroll = true
     this.feed.scrollTo(0, this.feed.scrollHeight)
+
+    requestAnimationFrame(() => {
+      this.isProgrammaticFeedScroll = false
+      this.feedAutoScrollEnabled = this.isElementNearBottom(this.feed)
+    })
+  }
+
+  scrollReasoningContentToBottom(reasoningBlock) {
+    if (!reasoningBlock?.content || !reasoningBlock.isAutoScrollEnabled) {
+      return
+    }
+
+    reasoningBlock.isProgrammaticScroll = true
+    reasoningBlock.content.scrollTop = reasoningBlock.content.scrollHeight
+
+    requestAnimationFrame(() => {
+      reasoningBlock.isProgrammaticScroll = false
+      reasoningBlock.isAutoScrollEnabled = this.isElementNearBottom(
+        reasoningBlock.content
+      )
+    })
+  }
+
+  getWidgetPayload(formattedString) {
+    if (
+      typeof formattedString !== 'string' ||
+      !formattedString.includes('"component":"WidgetWrapper"')
+    ) {
+      return null
+    }
+
+    try {
+      return JSON.parse(formattedString)
+    } catch {
+      return null
+    }
+  }
+
+  getPlanWidgetInsertionPoint(widgetPayload) {
+    if (!widgetPayload || widgetPayload.widget !== 'PlanWidget') {
+      return null
+    }
+
+    const reasoningBlocks = this.feed?.querySelectorAll(
+      '.reasoning-block-container'
+    )
+    if (!reasoningBlocks || reasoningBlocks.length === 0) {
+      return null
+    }
+
+    const isThinkingPhase = JSON.stringify(widgetPayload).includes('Thinking...')
+    if (isThinkingPhase) {
+      return reasoningBlocks[0]
+    }
+
+    const lastReasoningBlock = reasoningBlocks[reasoningBlocks.length - 1]
+    return lastReasoningBlock?.nextSibling || null
   }
 
   loadFeed() {
@@ -215,6 +313,9 @@ export default class Chatbot {
     // Store original string before formatting
     const originalString = string
     const formattedString = this.formatMessage(string)
+    const widgetPayload = this.getWidgetPayload(formattedString)
+    const autoPlanInsertionPoint = this.getPlanWidgetInsertionPoint(widgetPayload)
+    const resolvedBeforeElement = beforeElement || autoPlanInsertionPoint
 
     bubble.innerHTML = formattedString
 
@@ -222,8 +323,8 @@ export default class Chatbot {
       container.classList.add(bubbleId)
     }
 
-    if (beforeElement && beforeElement.parentNode === this.feed) {
-      this.feed.insertBefore(container, beforeElement)
+    if (resolvedBeforeElement && resolvedBeforeElement.parentNode === this.feed) {
+      this.feed.insertBefore(container, resolvedBeforeElement)
     } else {
       this.feed.appendChild(container)
     }
@@ -239,7 +340,7 @@ export default class Chatbot {
       formattedString.includes &&
       formattedString.includes('"component":"WidgetWrapper"')
     ) {
-      const parsedWidget = JSON.parse(formattedString)
+      const parsedWidget = widgetPayload || JSON.parse(formattedString)
       container.setAttribute('data-widget-id', parsedWidget.id)
 
       /**
@@ -323,7 +424,23 @@ export default class Chatbot {
       container.appendChild(block)
       this.feed.appendChild(container)
 
-      reasoningBlock = { container, content }
+      reasoningBlock = {
+        container,
+        content,
+        isAutoScrollEnabled: true,
+        isProgrammaticScroll: false
+      }
+      content.addEventListener(
+        'scroll',
+        () => {
+          if (reasoningBlock.isProgrammaticScroll) {
+            return
+          }
+
+          reasoningBlock.isAutoScrollEnabled = this.isElementNearBottom(content)
+        },
+        { passive: true }
+      )
       this.reasoningBlocks.set(generationId, reasoningBlock)
     }
 
@@ -332,6 +449,7 @@ export default class Chatbot {
     tokenElement.textContent = token
 
     reasoningBlock.content.appendChild(tokenElement)
+    this.scrollReasoningContentToBottom(reasoningBlock)
 
     return reasoningBlock.container
   }
@@ -427,7 +545,10 @@ export default class Chatbot {
       string: widgetString,
       save: false,
       messageId: replaceMessageId,
-      beforeElement: nextSibling
+      beforeElement:
+        newData?.widget === 'PlanWidget'
+          ? null
+          : nextSibling
     })
 
     /**

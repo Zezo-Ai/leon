@@ -199,6 +199,7 @@ export default class Client {
       } else {
         this.chatbot.receivedFrom('leon', data)
       }
+      this.chatbot.scrollDown({ force: true })
 
       this._activeStreamGenerationId = null
       this._answerGenerationId = 'xxx'
@@ -415,6 +416,7 @@ export default class Client {
         value: this._input.value.trim()
       })
       this.chatbot.sendTo('leon', this._input.value)
+      this.chatbot.scrollDown({ force: true })
 
       this._suggestions.forEach((suggestion) => {
         // Remove all event listeners of the suggestion

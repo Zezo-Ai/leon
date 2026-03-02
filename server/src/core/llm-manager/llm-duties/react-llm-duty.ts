@@ -169,7 +169,6 @@ export class ReActLLMDuty extends LLMDuty {
       let planningUiSteps: TrackedPlanStep[] = [
         { label: 'Thinking...', status: 'in_progress' }
       ]
-
       emitPlanWidget(
         planningUiSteps,
         null,
@@ -182,12 +181,14 @@ export class ReActLLMDuty extends LLMDuty {
         planningUiSteps = [
           { label: 'Thinking...', status: 'in_progress' }
         ]
-        emitPlanWidget(
-          planningUiSteps,
-          null,
-          planWidgetIdValue,
-          true
-        )
+        if (hasPlanningWidget) {
+          emitPlanWidget(
+            planningUiSteps,
+            null,
+            planWidgetIdValue,
+            true
+          )
+        }
       }
 
       const planResult = await runPlanningPhase(
@@ -245,6 +246,7 @@ export class ReActLLMDuty extends LLMDuty {
         planWidgetIdValue,
         hasPlanningWidget
       )
+      hasPlanningWidget = true
 
       // --- Phase 2: Execution loop ---
       LogHelper.title(this.name)
