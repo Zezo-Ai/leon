@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { CONTEXT_PATH, LEON_DISABLED_CONTEXT_FILES } from '@/constants'
 import { TOOLKIT_REGISTRY, LLM_PROVIDER } from '@/core'
@@ -27,6 +28,14 @@ interface ContextFileMetadata {
 }
 
 const CONTEXT_REFRESH_TTL_MS = 10 * 60 * 1_000
+const CONTEXT_FILES_SOURCE_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'context-files'
+)
+const SOURCE_AWARE_STATIC_CONTEXT_FILES = new Set([
+  'LEON.md',
+  'ARCHITECTURE.md'
+])
 const RETIRED_CONTEXT_FILES = [
   'LOCAL_ECOSYSTEM.md',
   'NETWORK.md',
@@ -217,6 +226,23 @@ export default class ContextManager {
       return true
     }
 
+    let generatedFileMtimeMs = 0
+    try {
+      generatedFileMtimeMs = fs.statSync(filePath).mtimeMs
+    } catch {
+      return true
+    }
+
+    if (SOURCE_AWARE_STATIC_CONTEXT_FILES.has(definition.filename)) {
+      const sourceUpdatedAt = this.getContextSourceUpdatedAt(definition)
+      if (
+        typeof sourceUpdatedAt === 'number' &&
+        sourceUpdatedAt > generatedFileMtimeMs
+      ) {
+        return true
+      }
+    }
+
     if (definition.ttlMs === null) {
       return false
     }
@@ -225,11 +251,7 @@ export default class ContextManager {
     let lastGeneratedAt = fileMetadata?.lastGeneratedAt
 
     if (!lastGeneratedAt) {
-      try {
-        lastGeneratedAt = fs.statSync(filePath).mtimeMs
-      } catch {
-        return true
-      }
+      lastGeneratedAt = generatedFileMtimeMs
       this.metadata.set(definition.filename, {
         lastGeneratedAt
       })
@@ -238,6 +260,38 @@ export default class ContextManager {
     const effectiveTtlMs = definition.ttlMs
 
     return Date.now() - lastGeneratedAt >= effectiveTtlMs
+  }
+
+  private getContextSourceUpdatedAt(definition: ContextFile): number | null {
+    const sourceFilePath = this.resolveContextSourcePath(definition)
+    if (!sourceFilePath) {
+      return null
+    }
+
+    try {
+      return fs.statSync(sourceFilePath).mtimeMs
+    } catch {
+      return null
+    }
+  }
+
+  private resolveContextSourcePath(definition: ContextFile): string | null {
+    const sourceBasename = this.getContextSourceBasename(definition.filename)
+    const tsPath = path.join(CONTEXT_FILES_SOURCE_DIR, `${sourceBasename}.ts`)
+    if (fs.existsSync(tsPath)) {
+      return tsPath
+    }
+
+    const jsPath = path.join(CONTEXT_FILES_SOURCE_DIR, `${sourceBasename}.js`)
+    if (fs.existsSync(jsPath)) {
+      return jsPath
+    }
+
+    return null
+  }
+
+  private getContextSourceBasename(filename: string): string {
+    return `${path.basename(filename, '.md').toLowerCase().replaceAll('_', '-')}-context-file`
   }
 
   private refreshContextFile(definition: ContextFile, force = false): void {
