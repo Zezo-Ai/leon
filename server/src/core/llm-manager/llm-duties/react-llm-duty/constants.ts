@@ -36,6 +36,7 @@ Memory vs context tool usage:
 - When a context file is relevant, first locate it (list/search) then read the full file with structured_knowledge.context.readContextFile (omit maxChars) before finalizing the answer.
 - For environment-state questions (for example VPN, network, hardware, browser history), prefer structured_knowledge.context before structured_knowledge.memory.read.
 - You may proactively use memory/context tools when they materially improve personalization or factual accuracy, even without an explicit request.
+- Use structured_knowledge.memory.read to personalize answers when necessary.
 
 For straightforward operational tasks (file listing, command execution, media transforms, API fetches), do not add memory/context reads unless they are required.
 

@@ -13,6 +13,7 @@ const QMD_INDEX_NAME = 'leon-memory'
 const DEFAULT_TOP_K = 12
 const DEFAULT_TOKEN_BUDGET = 320
 const CONTEXT_FULL_CONTENT_CAP = 8_000
+const INDEX_UPDATE_MIN_INTERVAL_MS = 10_000
 
 type MemoryScope = 'persistent' | 'daily' | 'discussion'
 type MemoryKind =
@@ -86,6 +87,8 @@ const MEMORY_SCHEMA_PATH = path.join(
   'schema.sql'
 )
 
+type QMDSearchMode = 'query' | 'search'
+
 const COLLECTIONS: Record<KnowledgeNamespace, { name: string, dir: string }> = {
   context: {
     name: 'context',
@@ -133,9 +136,18 @@ function normalizePath(value: string): string {
 }
 
 function tokenizeQuery(value: string): string[] {
-  return (value.toLowerCase().match(/[a-z0-9_]+/g) || [])
+  return (
+    value
+      .normalize('NFKC')
+      .toLowerCase()
+      .match(/\p{L}[\p{L}\p{M}\p{N}_-]*|\p{N}+/gu) || []
+  )
     .map((token) => token.trim())
-    .filter((token) => token.length >= 2)
+    .filter(Boolean)
+}
+
+function tokenLength(token: string): number {
+  return [...token].length
 }
 
 function buildQueryVariants(query: string): string[] {
@@ -148,13 +160,101 @@ function buildQueryVariants(query: string): string[] {
   const tokens = tokenizeQuery(normalized)
   if (tokens.length > 0) {
     variants.push(tokens.join(' '))
-    if (tokens.length >= 2) {
-      variants.push(tokens.slice(-2).join(' '))
+
+    const informativeTokens = [...new Set(tokens)].filter(
+      (token) => tokenLength(token) >= 3
+    )
+    if (informativeTokens.length > 0) {
+      variants.push(informativeTokens.join(' '))
     }
-    variants.push(tokens[tokens.length - 1] || '')
+
+    const maxWindowSize = Math.min(3, tokens.length)
+    for (let windowSize = maxWindowSize; windowSize >= 1; windowSize -= 1) {
+      variants.push(tokens.slice(-windowSize).join(' '))
+    }
+
+    const longestTokens = [...new Set(tokens)]
+      .filter((token) => tokenLength(token) >= 3)
+      .sort((a, b) => tokenLength(b) - tokenLength(a))
+      .slice(0, 6)
+    variants.push(...longestTokens)
   }
 
   return [...new Set(variants.map((value) => value.trim()).filter(Boolean))]
+    .slice(0, 12)
+}
+
+function namespaceRecallWeight(namespace: KnowledgeNamespace): number {
+  switch (namespace) {
+    case 'memory_persistent':
+      return 1.35
+    case 'memory_daily':
+      return 0.85
+    case 'memory_discussion':
+      return 0.65
+    case 'conversation_daily':
+      return 0.85
+    case 'context':
+      return 0.8
+    default:
+      return 0.8
+  }
+}
+
+function computeLexicalBoost(queryTokens: Set<string>, hit: QMDHit): number {
+  if (queryTokens.size === 0) {
+    return 0
+  }
+
+  const hitText = `${hit.title} ${path.basename(hit.path || '')} ${hit.content.slice(0, 1_000)}`
+  const hitTokens = new Set(tokenizeQuery(hitText))
+  if (hitTokens.size === 0) {
+    return 0
+  }
+
+  let overlapCount = 0
+  for (const token of queryTokens) {
+    if (hitTokens.has(token)) {
+      overlapCount += 1
+    }
+  }
+
+  if (overlapCount === 0) {
+    return 0
+  }
+
+  const coverage = overlapCount / queryTokens.size
+  const density = overlapCount / Math.max(8, Math.min(32, hitTokens.size))
+  return coverage * 1.4 + density * 0.4
+}
+
+function computeRankingScore(
+  hit: QMDHit,
+  queryTokens: Set<string>
+): number {
+  const weightedBase = hit.score * namespaceRecallWeight(hit.namespace)
+  const lexicalBoost = computeLexicalBoost(queryTokens, hit)
+
+  return weightedBase + lexicalBoost
+}
+
+function parsePersistentMemoryItemId(hit: QMDHit): string | null {
+  if (hit.namespace !== 'memory_persistent') {
+    return null
+  }
+
+  const directPrefix = 'memory-db://'
+  if (hit.path.startsWith(directPrefix)) {
+    const parsed = hit.path.slice(directPrefix.length).trim()
+    return parsed || null
+  }
+
+  const basename = path.basename(hit.path || '', '.md').trim()
+  if (!basename) {
+    return null
+  }
+
+  return basename
 }
 
 function pickStringDeep(
@@ -389,6 +489,7 @@ export default class MemoryTool extends Tool {
   private static db: SQLiteDatabase | null = null
   private static storageReady = false
   private static collectionsReady = false
+  private static lastIndexUpdateAt = 0
 
   private readonly config: ReturnType<typeof ToolkitConfig.load>
 
@@ -450,6 +551,16 @@ export default class MemoryTool extends Tool {
     const rawHits: QMDHit[] = []
     const perNamespaceLimit = Math.max(topK * 3, topK)
     const queryVariants = buildQueryVariants(normalizedQuery)
+    const rawQueryTokens = tokenizeQuery(normalizedQuery)
+    const informativeQueryTokens = rawQueryTokens.filter(
+      (token) => tokenLength(token) >= 3
+    )
+    const queryTokens = new Set(
+      informativeQueryTokens.length > 0
+        ? informativeQueryTokens
+        : rawQueryTokens
+    )
+    const searchModes: QMDSearchMode[] = ['search', 'query']
 
     for (const namespace of namespaces) {
       const collection = COLLECTIONS[namespace]
@@ -458,61 +569,75 @@ export default class MemoryTool extends Tool {
       }
 
       const namespaceHitsStart = rawHits.length
-      for (const variant of queryVariants) {
-        const rows = await this.runSearch(variant, collection.name, perNamespaceLimit)
-        if (rows.length === 0) {
+      const rows = await this.collectNamespaceRows(
+        collection.name,
+        queryVariants,
+        perNamespaceLimit,
+        searchModes
+      )
+      for (const row of rows) {
+        const sourcePath = normalizePath(
+          pickStringDeep(row, [
+            'filepath',
+            'path',
+            'file',
+            'source',
+            'doc_path',
+            'document_path',
+            'docPath',
+            'uri'
+          ])
+        )
+        const title =
+          pickStringDeep(row, ['title', 'name']) ||
+          (sourcePath ? path.basename(sourcePath) : '')
+        const content = extractContent(row)
+        const id =
+          pickStringDeep(row, ['docid', 'id']) ||
+          sourcePath ||
+          title
+
+        if (!id || !content) {
           continue
         }
 
-        for (const row of rows) {
-          const sourcePath = normalizePath(
-            pickStringDeep(row, [
-              'filepath',
-              'path',
-              'file',
-              'source',
-              'doc_path',
-              'document_path',
-              'docPath',
-              'uri'
-            ])
-          )
-          const title =
-            pickStringDeep(row, ['title', 'name']) ||
-            (sourcePath ? path.basename(sourcePath) : '')
-          const content = extractContent(row)
-          const id =
-            pickStringDeep(row, ['docid', 'id']) ||
-            sourcePath ||
-            title
-
-          if (!id || !content) {
+        if (namespace === 'context' && allowedContextFilenames.size > 0) {
+          const allowed =
+            allowedContextFilenames.has(normalizeFilename(sourcePath)) ||
+            allowedContextFilenames.has(normalizeFilename(title))
+          if (!allowed) {
             continue
           }
-
-          if (namespace === 'context' && allowedContextFilenames.size > 0) {
-            const allowed =
-              allowedContextFilenames.has(normalizeFilename(sourcePath)) ||
-              allowedContextFilenames.has(normalizeFilename(title))
-            if (!allowed) {
-              continue
-            }
-          }
-
-          rawHits.push({
-            id,
-            path: sourcePath,
-            title,
-            content,
-            score: extractScore(row),
-            namespace
-          })
         }
 
-        if (rawHits.length > namespaceHitsStart) {
-          break
+        rawHits.push({
+          id,
+          path: sourcePath,
+          title,
+          content,
+          score: extractScore(row),
+          namespace
+        })
+      }
+
+      if (namespace === 'memory_persistent' && rawHits.length === namespaceHitsStart) {
+        const fallbackHits = this.readPersistentFallback(
+          normalizedQuery,
+          [...queryTokens],
+          perNamespaceLimit
+        )
+        for (const fallbackHit of fallbackHits) {
+          rawHits.push(fallbackHit)
         }
       }
+    }
+
+    const relatedPersistentHits = this.readRelatedPersistentFallback(
+      rawHits,
+      Math.max(topK, 8)
+    )
+    for (const relatedHit of relatedPersistentHits) {
+      rawHits.push(relatedHit)
     }
 
     const deduped = new Map<string, QMDHit>()
@@ -524,7 +649,16 @@ export default class MemoryTool extends Tool {
       }
     }
 
-    const ordered = [...deduped.values()].sort((a, b) => b.score - a.score)
+    const rankedHits = [...deduped.values()]
+      .map((hit) => ({
+        hit,
+        rankingScore: computeRankingScore(
+          hit,
+          queryTokens
+        )
+      }))
+      .sort((a, b) => b.rankingScore - a.rankingScore)
+
     const selected: Array<{
       namespace: KnowledgeNamespace
       title: string | null
@@ -532,19 +666,31 @@ export default class MemoryTool extends Tool {
       score: number
       sourcePath: string | null
     }> = []
+    const selectedKeys = new Set<string>()
     let usedTokenEstimate = 0
 
-    for (const hit of ordered) {
+    const addHit = (hit: QMDHit, rankingScore: number): boolean => {
       if (selected.length >= topK || usedTokenEstimate >= tokenBudget) {
-        break
+        return false
       }
+
+      const hitKey = `${hit.namespace}|${hit.path}|${hit.content}`
+      if (selectedKeys.has(hitKey)) {
+        return false
+      }
+
+      const remainingBudget = tokenBudget - usedTokenEstimate
+      const perHitBudget =
+        selected.length === 0
+          ? Math.max(96, Math.floor(tokenBudget * 0.6))
+          : remainingBudget
 
       const clipped = clipWithTokenBudget(
         normalizeContent(hit.content),
-        tokenBudget - usedTokenEstimate
+        Math.min(remainingBudget, perHitBudget)
       )
       if (!clipped) {
-        break
+        return false
       }
 
       selected.push({
@@ -554,10 +700,20 @@ export default class MemoryTool extends Tool {
           hit.namespace === 'context'
             ? clipped.content.slice(0, CONTEXT_FULL_CONTENT_CAP)
             : clipped.content,
-        score: hit.score,
+        score: rankingScore,
         sourcePath: hit.path || null
       })
+      selectedKeys.add(hitKey)
       usedTokenEstimate += clipped.tokens
+      return true
+    }
+
+    for (const rankedHit of rankedHits) {
+      if (selected.length >= topK || usedTokenEstimate >= tokenBudget) {
+        break
+      }
+
+      addHit(rankedHit.hit, rankedHit.rankingScore)
     }
 
     const facts = includeFacts ? this.readFacts(8) : []
@@ -855,10 +1011,223 @@ export default class MemoryTool extends Tool {
   }
 
   private async updateIndex(): Promise<void> {
+    const now = Date.now()
+    if (
+      MemoryTool.lastIndexUpdateAt > 0 &&
+      now - MemoryTool.lastIndexUpdateAt < INDEX_UPDATE_MIN_INTERVAL_MS
+    ) {
+      return
+    }
+
     await this.runQMD(['--index', QMD_INDEX_NAME, 'update'])
+    MemoryTool.lastIndexUpdateAt = now
   }
 
-  private async runSearch(
+  private async collectNamespaceRows(
+    collectionName: string,
+    queryVariants: string[],
+    limit: number,
+    searchModes: QMDSearchMode[]
+  ): Promise<Array<Record<string, unknown>>> {
+    const primaryVariant = queryVariants[0] || ''
+    const secondaryVariants = queryVariants.slice(1)
+    const rows: Array<Record<string, unknown>> = []
+    const maxSecondarySearchVariants = 2
+    const minRowsToStopExpansion = Math.min(3, limit)
+
+    const addRows = (nextRows: Array<Record<string, unknown>>): void => {
+      for (const row of nextRows) {
+        rows.push(row)
+      }
+    }
+
+    if (primaryVariant && searchModes.includes('search')) {
+      addRows(await this.runSearchMode('search', primaryVariant, collectionName, limit))
+    }
+
+    if (
+      rows.length < minRowsToStopExpansion &&
+      searchModes.includes('search')
+    ) {
+      for (const variant of secondaryVariants.slice(0, maxSecondarySearchVariants)) {
+        addRows(await this.runSearchMode('search', variant, collectionName, limit))
+        if (rows.length >= minRowsToStopExpansion) {
+          break
+        }
+      }
+    }
+
+    if (rows.length === 0 && searchModes.includes('query')) {
+      const queryFallbackVariants = [
+        primaryVariant,
+        ...secondaryVariants.slice(0, 1)
+      ].filter(Boolean)
+
+      for (const variant of queryFallbackVariants) {
+        addRows(await this.runSearchMode('query', variant, collectionName, limit))
+        if (rows.length > 0) {
+          break
+        }
+      }
+    }
+
+    return rows
+  }
+
+  private readPersistentFallback(
+    query: string,
+    queryTokens: string[],
+    limit: number
+  ): QMDHit[] {
+    const normalizedQuery = query.trim().toLowerCase()
+    const terms = [
+      ...new Set([
+        ...queryTokens.filter((token) => tokenLength(token) >= 3),
+        ...tokenizeQuery(normalizedQuery).filter(
+          (token) => tokenLength(token) >= 3
+        )
+      ])
+    ]
+      .slice(0, 10)
+
+    if (terms.length === 0) {
+      return []
+    }
+
+    const whereClause = terms
+      .map(() => 'LOWER(content_text) LIKE ?')
+      .join(' OR ')
+    const params = terms.map((term) => `%${term}%`)
+
+    const rows = this.getDb()
+      .prepare(
+        `SELECT id, title, content_text, importance
+         FROM memory_items
+         WHERE scope = 'persistent'
+           AND is_deleted = 0
+           AND (${whereClause})
+         ORDER BY importance DESC, updated_at DESC
+         LIMIT ?`
+      )
+      .all(...params, limit) as Array<Record<string, unknown>>
+
+    return rows
+      .map((row) => {
+        const id = typeof row['id'] === 'string' ? row['id'] : ''
+        const content =
+          typeof row['content_text'] === 'string' ? row['content_text'] : ''
+        if (!id || !content) {
+          return null
+        }
+
+        const title = typeof row['title'] === 'string'
+          ? row['title']
+          : 'Persistent memory'
+        const importance = Number(row['importance'])
+
+        return {
+          id,
+          path: `memory-db://${id}`,
+          title,
+          content,
+          score: Number.isFinite(importance) ? 0.2 + importance : 0.2,
+          namespace: 'memory_persistent' as const
+        }
+      })
+      .filter((hit): hit is QMDHit => hit !== null)
+  }
+
+  private readRelatedPersistentFallback(
+    seedHits: QMDHit[],
+    limit: number
+  ): QMDHit[] {
+    const anchorIds = [
+      ...new Set(
+        seedHits
+          .map((hit) => parsePersistentMemoryItemId(hit))
+          .filter((id): id is string => Boolean(id))
+      )
+    ].slice(0, 2)
+
+    if (anchorIds.length === 0) {
+      return []
+    }
+
+    const db = this.getDb()
+    const anchorPlaceholders = anchorIds.map(() => '?').join(', ')
+    const anchors = db.prepare(
+      `SELECT id, day_key, source_ref
+       FROM memory_items
+       WHERE scope = 'persistent'
+         AND is_deleted = 0
+         AND id IN (${anchorPlaceholders})`
+    ).all(...anchorIds) as Array<Record<string, unknown>>
+
+    if (anchors.length === 0) {
+      return []
+    }
+
+    const relatedConditions: string[] = []
+    const relatedParams: string[] = []
+    for (const anchor of anchors) {
+      const dayKey =
+        typeof anchor['day_key'] === 'string' ? anchor['day_key'] : ''
+      const sourceRef =
+        typeof anchor['source_ref'] === 'string' ? anchor['source_ref'] : ''
+
+      if (dayKey) {
+        relatedConditions.push('day_key = ?')
+        relatedParams.push(dayKey)
+      }
+      if (sourceRef) {
+        relatedConditions.push('source_ref = ?')
+        relatedParams.push(sourceRef)
+      }
+    }
+
+    if (relatedConditions.length === 0) {
+      return []
+    }
+
+    const excludedAnchorPlaceholders = anchorIds.map(() => '?').join(', ')
+    const rows = db.prepare(
+      `SELECT id, title, content_text, importance
+       FROM memory_items
+       WHERE scope = 'persistent'
+         AND is_deleted = 0
+         AND id NOT IN (${excludedAnchorPlaceholders})
+         AND (${relatedConditions.join(' OR ')})
+       ORDER BY importance DESC, updated_at DESC
+       LIMIT ?`
+    ).all(...anchorIds, ...relatedParams, limit) as Array<Record<string, unknown>>
+
+    return rows
+      .map((row) => {
+        const id = typeof row['id'] === 'string' ? row['id'] : ''
+        const content =
+          typeof row['content_text'] === 'string' ? row['content_text'] : ''
+        if (!id || !content) {
+          return null
+        }
+
+        const title =
+          typeof row['title'] === 'string' ? row['title'] : 'Persistent memory'
+        const importance = Number(row['importance'])
+
+        return {
+          id,
+          path: `memory-db://${id}`,
+          title,
+          content,
+          score: Number.isFinite(importance) ? 0.1 + importance * 0.75 : 0.1,
+          namespace: 'memory_persistent' as const
+        }
+      })
+      .filter((hit): hit is QMDHit => hit !== null)
+  }
+
+  private async runSearchMode(
+    mode: QMDSearchMode,
     query: string,
     collectionName: string,
     limit: number
@@ -868,7 +1237,7 @@ export default class MemoryTool extends Tool {
     }
 
     const args = [
-      'search',
+      mode,
       query,
       '--index',
       QMD_INDEX_NAME,
@@ -885,7 +1254,13 @@ export default class MemoryTool extends Tool {
     } catch (error) {
       const message = String(error).toLowerCase()
       if (message.includes('unknown') && message.includes('full')) {
-        payload = await this.runQMD(args)
+        try {
+          payload = await this.runQMD(args)
+        } catch {
+          return []
+        }
+      } else if (mode === 'query' && message.includes('not found')) {
+        return this.runSearchMode('search', query, collectionName, limit)
       } else {
         return []
       }
