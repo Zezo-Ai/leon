@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -36,6 +37,19 @@ const SOURCE_AWARE_STATIC_CONTEXT_FILES = new Set([
   'LEON.md',
   'ARCHITECTURE.md'
 ])
+const BOOT_REFRESH_MIN_DELAY_MS = 6_000
+const BOOT_REFRESH_MAX_DELAY_MS = 20_000
+const BOOT_REFRESH_RETRY_DELAY_MS = 4_000
+const BOOT_REFRESH_MAX_DEFERRAL_MS = 60_000
+const BOOT_REFRESH_DEFER_LOAD_RATIO = 0.85
+const BOOT_REFRESH_PRIORITY_FILENAMES = [
+  'LEON_RUNTIME.md',
+  'GPU_COMPUTE.md',
+  'HOME.md',
+  'HOST_SYSTEM.md'
+]
+const BOOT_REFRESH_TIMER_LABEL = 'Context files boot refresh total'
+const PERIODIC_REFRESH_TIMER_LABEL = 'Context files periodic refresh total'
 const RETIRED_CONTEXT_FILES = [
   'LOCAL_ECOSYSTEM.md',
   'NETWORK.md',
@@ -43,6 +57,10 @@ const RETIRED_CONTEXT_FILES = [
   'MEDIA_TASTES.md'
 ]
 const RETIRED_STATE_FILES = ['.media-tastes-state.json']
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
 
 export default class ContextManager {
   private static instance: ContextManager
@@ -124,19 +142,70 @@ export default class ContextManager {
     }
 
     this.isBootRefreshInProgress = true
+    const bootRefreshStartedAt = Date.now()
 
-    setImmediate(() => {
-      try {
-        // Keep startup fast while still regenerating context files at boot.
-        for (const definition of this.contextFiles) {
-          this.refreshContextFile(definition, true)
+    const runBootRefreshQueue = (): void => {
+      LogHelper.time(BOOT_REFRESH_TIMER_LABEL)
+      const definitions = [...this.contextFiles].sort((definitionA, definitionB) => {
+        const priorityA = this.getBootRefreshPriority(definitionA.filename)
+        const priorityB = this.getBootRefreshPriority(definitionB.filename)
+        if (priorityA !== priorityB) {
+          return priorityA - priorityB
         }
 
-        this.manifest = this.buildManifest()
-      } finally {
-        this.isBootRefreshInProgress = false
+        return definitionA.filename.localeCompare(definitionB.filename)
+      })
+      const updatedFilenames: string[] = []
+
+      let index = 0
+      const refreshNext = (): void => {
+        if (index >= definitions.length) {
+          try {
+            this.logContextFilesUpdated('boot', updatedFilenames)
+            this.manifest = this.buildManifest()
+          } finally {
+            LogHelper.title('Context Manager')
+            LogHelper.timeEnd(BOOT_REFRESH_TIMER_LABEL)
+            this.isBootRefreshInProgress = false
+          }
+          return
+        }
+
+        const definition = definitions[index]
+        if (!definition) {
+          LogHelper.title('Context Manager')
+          LogHelper.timeEnd(BOOT_REFRESH_TIMER_LABEL)
+          this.isBootRefreshInProgress = false
+          return
+        }
+
+        if (this.refreshContextFile(definition)) {
+          updatedFilenames.push(definition.filename)
+        }
+        index += 1
+        setTimeout(refreshNext, 0)
       }
-    })
+
+      refreshNext()
+    }
+
+    const scheduleBootRefresh = (delayMs: number): void => {
+      const bootRefreshTimer = setTimeout(() => {
+        const elapsedMs = Date.now() - bootRefreshStartedAt
+        if (this.shouldDeferBootRefresh(elapsedMs)) {
+          scheduleBootRefresh(this.getAdaptiveBootRetryDelayMs())
+          return
+        }
+
+        runBootRefreshQueue()
+      }, delayMs)
+
+      if (typeof bootRefreshTimer.unref === 'function') {
+        bootRefreshTimer.unref()
+      }
+    }
+
+    scheduleBootRefresh(this.getAdaptiveBootInitialDelayMs())
   }
 
   public getManifest(): string {
@@ -315,6 +384,60 @@ export default class ContextManager {
     return `${path.basename(filename, '.md').toLowerCase().replaceAll('_', '-')}-context-file`
   }
 
+  private getBootRefreshPriority(filename: string): number {
+    const index = BOOT_REFRESH_PRIORITY_FILENAMES.indexOf(filename)
+    if (index === -1) {
+      return BOOT_REFRESH_PRIORITY_FILENAMES.length
+    }
+
+    return index
+  }
+
+  private getNormalizedLoadRatio(): number {
+    const cpuCount = Math.max(1, os.cpus().length || 1)
+    const load1m = os.loadavg()[0] || 0
+    return Math.max(0, load1m / cpuCount)
+  }
+
+  private getAdaptiveBootInitialDelayMs(): number {
+    const cpuCount = Math.max(1, os.cpus().length || 1)
+    const loadRatio = this.getNormalizedLoadRatio()
+    const cpuPenaltyMs = cpuCount <= 4 ? 5_000 : cpuCount <= 8 ? 2_500 : 0
+    const loadPenaltyMs = Math.round(Math.min(1.8, loadRatio) * 4_000)
+
+    return clamp(
+      BOOT_REFRESH_MIN_DELAY_MS + cpuPenaltyMs + loadPenaltyMs,
+      BOOT_REFRESH_MIN_DELAY_MS,
+      BOOT_REFRESH_MAX_DELAY_MS
+    )
+  }
+
+  private getAdaptiveBootRetryDelayMs(): number {
+    const loadRatio = this.getNormalizedLoadRatio()
+    const loadPenaltyMs = Math.round(Math.min(1.5, loadRatio) * 2_000)
+    return BOOT_REFRESH_RETRY_DELAY_MS + loadPenaltyMs
+  }
+
+  private shouldDeferBootRefresh(elapsedMs: number): boolean {
+    if (elapsedMs >= BOOT_REFRESH_MAX_DEFERRAL_MS) {
+      return false
+    }
+
+    return this.getNormalizedLoadRatio() >= BOOT_REFRESH_DEFER_LOAD_RATIO
+  }
+
+  private logContextFilesUpdated(reason: string, filenames: string[]): void {
+    const uniqueFilenames = [...new Set(filenames)]
+    if (uniqueFilenames.length === 0) {
+      return
+    }
+
+    LogHelper.title('Context Manager')
+    LogHelper.info(
+      `Updated ${uniqueFilenames.length} context file(s) during ${reason} refresh: ${uniqueFilenames.join(', ')}`
+    )
+  }
+
   private async syncContextReadFilenameEnum(): Promise<void> {
     try {
       if (!TOOLKIT_REGISTRY.isLoaded) {
@@ -347,9 +470,9 @@ export default class ContextManager {
     }
   }
 
-  private refreshContextFile(definition: ContextFile, force = false): void {
+  private refreshContextFile(definition: ContextFile, force = false): boolean {
     if (!force && !this.isContextFileStale(definition)) {
-      return
+      return false
     }
 
     const filePath = this.getContextFilePath(definition.filename)
@@ -361,11 +484,13 @@ export default class ContextManager {
       this.metadata.set(definition.filename, {
         lastGeneratedAt: Date.now()
       })
+      return true
     } catch (e) {
       LogHelper.title('Context Manager')
       LogHelper.error(
         `Failed to refresh context file "${definition.filename}": ${String(e)}`
       )
+      return false
     }
   }
 
@@ -418,11 +543,18 @@ export default class ContextManager {
 
     this.refreshIntervalId = setInterval(
       () => {
+        LogHelper.time(PERIODIC_REFRESH_TIMER_LABEL)
+        const updatedFilenames: string[] = []
         for (const definition of this.contextFiles) {
-          this.refreshContextFile(definition)
+          if (this.refreshContextFile(definition)) {
+            updatedFilenames.push(definition.filename)
+          }
         }
 
+        this.logContextFilesUpdated('periodic', updatedFilenames)
         this.manifest = this.buildManifest()
+        LogHelper.title('Context Manager')
+        LogHelper.timeEnd(PERIODIC_REFRESH_TIMER_LABEL)
       },
       CONTEXT_REFRESH_TTL_MS
     )

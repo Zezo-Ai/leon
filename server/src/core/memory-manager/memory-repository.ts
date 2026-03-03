@@ -249,6 +249,70 @@ export default class MemoryRepository {
     return Number(result.changes || 0)
   }
 
+  public softDeleteDiscussionOlderThan(cutoffTs: number, nowTs: number): number {
+    const db = this.ensureDb()
+    const result = db
+      .prepare(
+        `UPDATE memory_items
+         SET is_deleted = 1, updated_at = ?
+         WHERE scope = 'discussion'
+           AND is_deleted = 0
+           AND is_pinned = 0
+           AND created_at <= ?`
+      )
+      .run(nowTs, cutoffTs)
+
+    return Number(result.changes || 0)
+  }
+
+  public softDeleteDailyNonSummaryOlderThan(
+    cutoffTs: number,
+    nowTs: number
+  ): number {
+    const db = this.ensureDb()
+    const result = db
+      .prepare(
+        `UPDATE memory_items
+         SET is_deleted = 1, updated_at = ?
+         WHERE scope = 'daily'
+           AND kind != 'summary'
+           AND is_deleted = 0
+           AND is_pinned = 0
+           AND created_at <= ?`
+      )
+      .run(nowTs, cutoffTs)
+
+    return Number(result.changes || 0)
+  }
+
+  public listSoftDeletedPersistentEntries(
+    olderThanTs: number,
+    limit = 2_000
+  ): Array<{ id: string, createdAt: number }> {
+    const db = this.ensureDb()
+    return db
+      .prepare(
+        `SELECT id, created_at
+         FROM memory_items
+         WHERE scope = 'persistent'
+           AND is_deleted = 1
+           AND updated_at <= ?
+         ORDER BY updated_at ASC
+         LIMIT ?`
+      )
+      .all(olderThanTs, limit)
+      .map((row) => ({
+        id: String(row['id'] || ''),
+        createdAt: Number(row['created_at'] || 0)
+      }))
+      .filter(
+        (entry) =>
+          entry.id.length > 0 &&
+          Number.isFinite(entry.createdAt) &&
+          entry.createdAt > 0
+      )
+  }
+
   public purgeSoftDeleted(olderThanTs: number): number {
     const db = this.ensureDb()
 

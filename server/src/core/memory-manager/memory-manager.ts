@@ -1,6 +1,8 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
+import { gzipSync } from 'node:zlib'
 
 import {
   CONTEXT_PATH,
@@ -35,6 +37,10 @@ const PERSISTENT_EXTRACTION_MAX_USER_CHARS = 1_600
 const PERSISTENT_EXTRACTION_MAX_ASSISTANT_CHARS = 1_200
 const STORAGE_MAINTENANCE_INTERVAL_MS = 6 * 60 * 60 * 1_000
 const SOFT_DELETED_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000
+const DISCUSSION_ACTIVE_RETENTION_DAYS = 30
+const DISCUSSION_COLD_ARCHIVE_AFTER_DAYS = 180
+const DAILY_FULL_RETENTION_DAYS = 90
+const QMD_INDEX_NAME = 'leon-memory'
 const DAILY_SUMMARY_QUEUE_STALE_MS = 2 * 60 * 1_000
 const PERSISTENT_SIMILARITY_JACCARD_THRESHOLD = 0.84
 const PERSISTENT_SIMILARITY_CONTAINMENT_MIN_CHARS = 40
@@ -43,6 +49,9 @@ const MIN_TRUNCATED_RECALL_TOKENS = 48
 const TRUNCATED_RECALL_BUDGET_RATIO = 0.6
 const PERSISTENT_SIMILARITY_LOOKBACK = 300
 const DISCUSSION_TTL_MS = LEON_MEMORY_DISCUSSION_TTL_DAYS * 24 * 60 * 60 * 1_000
+const DAY_MS = 24 * 60 * 60 * 1_000
+const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const MAINTENANCE_REPORTS_DIRNAME = 'reports'
 const EXTRACT_PERSISTENT_MEMORY_SCHEMA = {
   type: 'object',
   properties: {
@@ -101,6 +110,26 @@ function computeHash(value: string): string {
 
 function toDayKey(timestamp: number): string {
   return new Date(timestamp).toISOString().slice(0, 10)
+}
+
+function parseDayKeyFromFilename(filename: string): string | null {
+  const dayKey = filename.replace(/\.md(?:\.gz)?$/i, '')
+  return DAY_KEY_PATTERN.test(dayKey) ? dayKey : null
+}
+
+function dayKeyToTs(dayKey: string): number | null {
+  const parsed = Date.parse(`${dayKey}T00:00:00.000Z`)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+interface StorageSnapshot {
+  memoryDbBytes: number
+  qmdDbBytes: number
+  persistentBytes: number
+  dailyBytes: number
+  discussionBytes: number
+  discussionWarmArchiveBytes: number
+  discussionColdArchiveBytes: number
 }
 
 function renderRecallPrompt(result: RecallResult): string {
@@ -178,12 +207,32 @@ export default class MemoryManager {
   private _isLoaded = false
   private lastContextSyncAt = 0
   private lastStorageMaintenanceAt = 0
+  private isStorageMaintenanceRunning = false
+  private storageMaintenanceQueued = false
   private readonly repository = new MemoryRepository()
   private readonly qmdBackend = new QMDBackend()
   private readonly contextChecksums = new Map<string, string>()
   private readonly persistentPath = path.join(MEMORY_PATH, 'persistent')
   private readonly dailyPath = path.join(MEMORY_PATH, 'daily')
   private readonly discussionPath = path.join(MEMORY_PATH, 'discussion')
+  private readonly archivePath = path.join(MEMORY_PATH, 'archive')
+  private readonly reportsPath = path.join(MEMORY_PATH, MAINTENANCE_REPORTS_DIRNAME)
+  private readonly discussionWarmArchivePath = path.join(
+    this.archivePath,
+    'discussion',
+    'warm'
+  )
+  private readonly discussionColdArchivePath = path.join(
+    this.archivePath,
+    'discussion',
+    'cold'
+  )
+  private readonly qmdIndexPath = path.join(
+    process.env['XDG_CACHE_HOME']
+      ? path.join(process.env['XDG_CACHE_HOME'], 'qmd')
+      : path.join(os.homedir(), '.cache', 'qmd'),
+    `${QMD_INDEX_NAME}.sqlite`
+  )
   private readonly dailySummaryQueue = new Map<
     string,
     { promise: Promise<void>, startedAt: number }
@@ -438,9 +487,9 @@ export default class MemoryManager {
 
       await this.repository.load(MEMORY_DB_PATH)
 
-      await this.syncContextFiles(true)
-
       this._isLoaded = true
+      this.scheduleContextSyncAtBoot()
+      this.requestStorageMaintenance(Date.now())
       LogHelper.title('Memory Manager')
       LogHelper.success('Loaded')
     } catch (e) {
@@ -953,6 +1002,8 @@ export default class MemoryManager {
     if (!this._isLoaded) {
       await this.load()
     }
+
+    this.qmdBackend.enableHybridRetrieval()
 
     const userMessage = normalizeContent(input.userMessage)
     const assistantMessage = normalizeContent(input.assistantMessage)
@@ -1469,8 +1520,40 @@ No markdown. No explanation.`
     }
 
     const deleted = this.repository.markDiscussionExpired(nowTs)
-    await this.runStorageMaintenance(nowTs)
+    this.requestStorageMaintenance(nowTs)
     return deleted
+  }
+
+  private scheduleContextSyncAtBoot(): void {
+    setImmediate(() => {
+      this.syncContextFiles(true).catch((error) => {
+        LogHelper.title('Memory Manager')
+        LogHelper.warning(`Background context sync failed: ${error}`)
+      })
+    })
+  }
+
+  private requestStorageMaintenance(nowTs = Date.now()): void {
+    if (this.isStorageMaintenanceRunning) {
+      this.storageMaintenanceQueued = true
+      return
+    }
+
+    this.isStorageMaintenanceRunning = true
+    setImmediate(() => {
+      this.runStorageMaintenance(nowTs)
+        .catch((error) => {
+          LogHelper.title('Memory Manager')
+          LogHelper.warning(`Background storage maintenance failed: ${error}`)
+        })
+        .finally(() => {
+          this.isStorageMaintenanceRunning = false
+          if (this.storageMaintenanceQueued) {
+            this.storageMaintenanceQueued = false
+            this.requestStorageMaintenance(Date.now())
+          }
+        })
+    })
   }
 
   public async syncContextFiles(force = false): Promise<void> {
@@ -1526,25 +1609,378 @@ No markdown. No explanation.`
     }
   }
 
+  private async getPathSize(targetPath: string): Promise<number> {
+    try {
+      const stats = await fs.promises.stat(targetPath)
+      if (stats.isFile()) {
+        return stats.size
+      }
+      if (!stats.isDirectory()) {
+        return 0
+      }
+    } catch {
+      return 0
+    }
+
+    let total = 0
+    const pendingDirs = [targetPath]
+
+    while (pendingDirs.length > 0) {
+      const currentDir = pendingDirs.pop()
+      if (!currentDir) {
+        continue
+      }
+
+      let entries: fs.Dirent[] = []
+      try {
+        entries = await fs.promises.readdir(currentDir, { withFileTypes: true })
+      } catch {
+        continue
+      }
+
+      for (const entry of entries) {
+        const entryPath = path.join(currentDir, entry.name)
+        if (entry.isDirectory()) {
+          pendingDirs.push(entryPath)
+          continue
+        }
+        if (!entry.isFile()) {
+          continue
+        }
+        try {
+          total += (await fs.promises.stat(entryPath)).size
+        } catch {
+          // Ignore file-level stat errors during maintenance snapshots.
+        }
+      }
+    }
+
+    return total
+  }
+
+  private async captureStorageSnapshot(): Promise<StorageSnapshot> {
+    const [
+      memoryDbBytes,
+      qmdDbBytes,
+      persistentBytes,
+      dailyBytes,
+      discussionBytes,
+      discussionWarmArchiveBytes,
+      discussionColdArchiveBytes
+    ] = await Promise.all([
+      this.getPathSize(MEMORY_DB_PATH),
+      this.getPathSize(this.qmdIndexPath),
+      this.getPathSize(this.persistentPath),
+      this.getPathSize(this.dailyPath),
+      this.getPathSize(this.discussionPath),
+      this.getPathSize(this.discussionWarmArchivePath),
+      this.getPathSize(this.discussionColdArchivePath)
+    ])
+
+    return {
+      memoryDbBytes,
+      qmdDbBytes,
+      persistentBytes,
+      dailyBytes,
+      discussionBytes,
+      discussionWarmArchiveBytes,
+      discussionColdArchiveBytes
+    }
+  }
+
+  private async writeMonthlyMaintenanceReport(input: {
+    nowTs: number
+    before: StorageSnapshot
+    after: StorageSnapshot
+    discussionRetentionDeleted: number
+    dailyRetentionDeleted: number
+    warmArchived: number
+    coldArchived: number
+    warmCompactedToCold: number
+    removedPersistentMirrorFiles: number
+    purgedRows: number
+  }): Promise<void> {
+    const reportDate = new Date(input.nowTs)
+    const monthKey = reportDate.toISOString().slice(0, 7)
+    const reportPath = path.join(this.reportsPath, `maintenance-${monthKey}.jsonl`)
+    await fs.promises.mkdir(this.reportsPath, { recursive: true })
+
+    const payload = {
+      at: reportDate.toISOString(),
+      before: input.before,
+      after: input.after,
+      delta: {
+        memoryDbBytes: input.after.memoryDbBytes - input.before.memoryDbBytes,
+        qmdDbBytes: input.after.qmdDbBytes - input.before.qmdDbBytes,
+        persistentBytes: input.after.persistentBytes - input.before.persistentBytes,
+        dailyBytes: input.after.dailyBytes - input.before.dailyBytes,
+        discussionBytes: input.after.discussionBytes - input.before.discussionBytes,
+        discussionWarmArchiveBytes:
+          input.after.discussionWarmArchiveBytes -
+          input.before.discussionWarmArchiveBytes,
+        discussionColdArchiveBytes:
+          input.after.discussionColdArchiveBytes -
+          input.before.discussionColdArchiveBytes
+      },
+      maintenance: {
+        discussionRetentionDeleted: input.discussionRetentionDeleted,
+        dailyRetentionDeleted: input.dailyRetentionDeleted,
+        discussionArchivedWarm: input.warmArchived,
+        discussionArchivedCold: input.coldArchived,
+        discussionWarmCompactedToCold: input.warmCompactedToCold,
+        persistentMirrorFilesRemoved: input.removedPersistentMirrorFiles,
+        purgedRows: input.purgedRows
+      }
+    }
+
+    await fs.promises.appendFile(reportPath, `${JSON.stringify(payload)}\n`, 'utf8')
+  }
+
   private async runStorageMaintenance(nowTs: number): Promise<void> {
     if (nowTs - this.lastStorageMaintenanceAt < STORAGE_MAINTENANCE_INTERVAL_MS) {
       return
     }
 
     try {
-      const purged = this.repository.purgeSoftDeleted(
-        nowTs - SOFT_DELETED_RETENTION_MS
+      const beforeSnapshot = await this.captureStorageSnapshot()
+      const discussionRetentionCutoffTs =
+        nowTs - DISCUSSION_ACTIVE_RETENTION_DAYS * DAY_MS
+      const discussionColdArchiveCutoffTs =
+        nowTs - DISCUSSION_COLD_ARCHIVE_AFTER_DAYS * DAY_MS
+      const dailyRetentionCutoffTs = nowTs - DAILY_FULL_RETENTION_DAYS * DAY_MS
+      const softDeleteRetentionCutoffTs = nowTs - SOFT_DELETED_RETENTION_MS
+
+      const discussionRetentionDeleted = this.repository.softDeleteDiscussionOlderThan(
+        discussionRetentionCutoffTs,
+        nowTs
       )
+      const dailyRetentionDeleted = this.repository.softDeleteDailyNonSummaryOlderThan(
+        dailyRetentionCutoffTs,
+        nowTs
+      )
+      const discussionArchiveStats = await this.rotateDiscussionMarkdownFiles(
+        discussionRetentionCutoffTs,
+        discussionColdArchiveCutoffTs
+      )
+      const persistentMirrorCleanupCandidates =
+        this.repository.listSoftDeletedPersistentEntries(
+          softDeleteRetentionCutoffTs
+        )
+      const purged = this.repository.purgeSoftDeleted(
+        softDeleteRetentionCutoffTs
+      )
+      const removedPersistentMirrorFiles = await this.removePersistentMirrorFiles(
+        persistentMirrorCleanupCandidates
+      )
+
+      if (
+        discussionRetentionDeleted > 0 ||
+        discussionArchiveStats.warmArchived > 0 ||
+        discussionArchiveStats.coldArchived > 0 ||
+        discussionArchiveStats.warmCompactedToCold > 0
+      ) {
+        this.qmdBackend.markDirty('memory_discussion')
+      }
+
+      if (dailyRetentionDeleted > 0) {
+        this.qmdBackend.markDirty('memory_daily')
+      }
+
+      if (removedPersistentMirrorFiles > 0) {
+        this.qmdBackend.markDirty('memory_persistent')
+      }
+
       this.repository.optimizeStorage()
+      const afterSnapshot = await this.captureStorageSnapshot()
+      await this.writeMonthlyMaintenanceReport({
+        nowTs,
+        before: beforeSnapshot,
+        after: afterSnapshot,
+        discussionRetentionDeleted,
+        dailyRetentionDeleted,
+        warmArchived: discussionArchiveStats.warmArchived,
+        coldArchived: discussionArchiveStats.coldArchived,
+        warmCompactedToCold: discussionArchiveStats.warmCompactedToCold,
+        removedPersistentMirrorFiles,
+        purgedRows: purged
+      })
       this.lastStorageMaintenanceAt = nowTs
 
       LogHelper.title('Memory Manager')
       LogHelper.debug(
-        `Storage maintenance completed: purged=${purged}`
+        `Storage maintenance completed: discussion_deleted=${discussionRetentionDeleted} daily_deleted=${dailyRetentionDeleted} discussion_archived_warm=${discussionArchiveStats.warmArchived} discussion_archived_cold=${discussionArchiveStats.coldArchived} discussion_warm_compacted=${discussionArchiveStats.warmCompactedToCold} persistent_files_removed=${removedPersistentMirrorFiles} purged=${purged} memory_db_before=${beforeSnapshot.memoryDbBytes} memory_db_after=${afterSnapshot.memoryDbBytes} qmd_db_before=${beforeSnapshot.qmdDbBytes} qmd_db_after=${afterSnapshot.qmdDbBytes}`
       )
     } catch (error) {
       LogHelper.title('Memory Manager')
       LogHelper.warning(`Storage maintenance skipped: ${error}`)
     }
+  }
+
+  private async rotateDiscussionMarkdownFiles(
+    activeRetentionCutoffTs: number,
+    coldArchiveCutoffTs: number
+  ): Promise<{
+      warmArchived: number
+      coldArchived: number
+      warmCompactedToCold: number
+    }> {
+    await Promise.all([
+      fs.promises.mkdir(this.discussionWarmArchivePath, { recursive: true }),
+      fs.promises.mkdir(this.discussionColdArchivePath, { recursive: true })
+    ])
+
+    let warmArchived = 0
+    let coldArchived = 0
+    let warmCompactedToCold = 0
+
+    const moveFile = async (sourcePath: string, destinationPath: string): Promise<void> => {
+      await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true })
+
+      try {
+        await fs.promises.rename(sourcePath, destinationPath)
+      } catch (error) {
+        const message = String(error)
+        if (!message.includes('EXDEV')) {
+          throw error
+        }
+        await fs.promises.copyFile(sourcePath, destinationPath)
+        await fs.promises.unlink(sourcePath)
+      }
+    }
+
+    const archiveAsGzip = async (
+      sourcePath: string,
+      destinationPath: string
+    ): Promise<void> => {
+      await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true })
+
+      if (fs.existsSync(destinationPath)) {
+        await fs.promises.unlink(sourcePath)
+        return
+      }
+
+      const sourceBuffer = await fs.promises.readFile(sourcePath)
+      const compressed = gzipSync(sourceBuffer)
+      await fs.promises.writeFile(destinationPath, compressed)
+      await fs.promises.unlink(sourcePath)
+    }
+
+    const discussionEntries = await fs.promises.readdir(this.discussionPath, {
+      withFileTypes: true
+    })
+
+    for (const entry of discussionEntries) {
+      if (!entry.isFile() || !entry.name.endsWith('.md')) {
+        continue
+      }
+
+      const dayKey = parseDayKeyFromFilename(entry.name)
+      if (!dayKey) {
+        continue
+      }
+
+      const dayTs = dayKeyToTs(dayKey)
+      if (dayTs === null || dayTs > activeRetentionCutoffTs) {
+        continue
+      }
+
+      const sourcePath = path.join(this.discussionPath, entry.name)
+      const year = dayKey.slice(0, 4)
+      const month = dayKey.slice(5, 7)
+
+      if (dayTs > coldArchiveCutoffTs) {
+        const warmDestinationPath = path.join(
+          this.discussionWarmArchivePath,
+          year,
+          month,
+          `${dayKey}.md`
+        )
+        if (fs.existsSync(warmDestinationPath)) {
+          await fs.promises.unlink(sourcePath)
+        } else {
+          await moveFile(sourcePath, warmDestinationPath)
+        }
+        warmArchived += 1
+        continue
+      }
+
+      const coldDestinationPath = path.join(
+        this.discussionColdArchivePath,
+        year,
+        month,
+        `${dayKey}.md.gz`
+      )
+      await archiveAsGzip(sourcePath, coldDestinationPath)
+      coldArchived += 1
+    }
+
+    const compactWarmArchiveDirectory = async (directoryPath: string): Promise<void> => {
+      const entries = await fs.promises.readdir(directoryPath, { withFileTypes: true })
+      for (const entry of entries) {
+        const entryPath = path.join(directoryPath, entry.name)
+        if (entry.isDirectory()) {
+          await compactWarmArchiveDirectory(entryPath)
+          const nested = await fs.promises.readdir(entryPath)
+          if (nested.length === 0) {
+            await fs.promises.rmdir(entryPath)
+          }
+          continue
+        }
+
+        if (!entry.isFile() || !entry.name.endsWith('.md')) {
+          continue
+        }
+
+        const dayKey = parseDayKeyFromFilename(entry.name)
+        if (!dayKey) {
+          continue
+        }
+
+        const dayTs = dayKeyToTs(dayKey)
+        if (dayTs === null || dayTs > coldArchiveCutoffTs) {
+          continue
+        }
+
+        const year = dayKey.slice(0, 4)
+        const month = dayKey.slice(5, 7)
+        const coldDestinationPath = path.join(
+          this.discussionColdArchivePath,
+          year,
+          month,
+          `${dayKey}.md.gz`
+        )
+        await archiveAsGzip(entryPath, coldDestinationPath)
+        warmCompactedToCold += 1
+      }
+    }
+
+    await compactWarmArchiveDirectory(this.discussionWarmArchivePath)
+
+    return {
+      warmArchived,
+      coldArchived,
+      warmCompactedToCold
+    }
+  }
+
+  private async removePersistentMirrorFiles(
+    entries: Array<{ id: string, createdAt: number }>
+  ): Promise<number> {
+    let removed = 0
+
+    for (const entry of entries) {
+      const filePath = this.getPersistentEntryFilePath(entry.id, entry.createdAt)
+      try {
+        await fs.promises.unlink(filePath)
+        removed += 1
+      } catch (error) {
+        const message = String(error)
+        if (!message.includes('ENOENT')) {
+          throw error
+        }
+      }
+    }
+
+    return removed
   }
 }

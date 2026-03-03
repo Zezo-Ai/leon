@@ -292,6 +292,7 @@ function isContextFilenameAllowed(
 export default class QMDBackend {
   private loaded = false
   private lastUpdateAt = 0
+  private hybridRetrievalEnabled = false
   private readonly dirtyNamespaces = new Set<KnowledgeNamespace>()
 
   public markDirty(namespace: KnowledgeNamespace): void {
@@ -309,6 +310,16 @@ export default class QMDBackend {
 
     LogHelper.title('Memory Manager')
     LogHelper.success(`QMD backend loaded (index=${QMD_INDEX_NAME})`)
+  }
+
+  public enableHybridRetrieval(): void {
+    if (this.hybridRetrievalEnabled) {
+      return
+    }
+
+    this.hybridRetrievalEnabled = true
+    LogHelper.title('Memory Manager')
+    LogHelper.debug('QMD hybrid retrieval enabled after first observed turn')
   }
 
   public async refresh(force = false): Promise<void> {
@@ -378,25 +389,30 @@ export default class QMDBackend {
     let rows: Array<Record<string, unknown>> = []
     let modeUsed: QMDSearchMode | null = null
 
-    try {
-      rows = parseRows(
-        await this.runQMDSearchMode(
-          'query',
-          input.query,
-          collectionNames,
-          globalLimit
+    if (this.hybridRetrievalEnabled) {
+      try {
+        rows = parseRows(
+          await this.runQMDSearchMode(
+            'query',
+            input.query,
+            collectionNames,
+            globalLimit
+          )
         )
-      )
-      modeUsed = 'query'
+        modeUsed = 'query'
+        LogHelper.title('Memory Manager')
+        LogHelper.debug(
+          `QMD query collections=${collectionNames.join(', ')} rows=${rows.length} query=${JSON.stringify(input.query)}`
+        )
+      } catch (error) {
+        LogHelper.title('Memory Manager')
+        LogHelper.warning(
+          `QMD query failed for collections=${collectionNames.join(', ')}: ${String(error)}`
+        )
+      }
+    } else {
       LogHelper.title('Memory Manager')
-      LogHelper.debug(
-        `QMD query collections=${collectionNames.join(', ')} rows=${rows.length} query=${JSON.stringify(input.query)}`
-      )
-    } catch (error) {
-      LogHelper.title('Memory Manager')
-      LogHelper.warning(
-        `QMD query failed for collections=${collectionNames.join(', ')}: ${String(error)}`
-      )
+      LogHelper.debug('QMD cold-start retrieval mode: search-only (hybrid deferred)')
     }
 
     if (rows.length === 0) {

@@ -1,4 +1,5 @@
 import { ContextFile } from '@/core/context-manager/context-file'
+import { DateHelper } from '@/helpers/date-helper'
 
 export class ArchitectureContextFile extends ContextFile {
   public readonly filename = 'ARCHITECTURE.md'
@@ -8,6 +9,7 @@ export class ArchitectureContextFile extends ContextFile {
     return [
       '> Brain and routing, tool execution, context intelligence, memory layers, reliability loops. I am layered as Skills -> Actions -> Tools -> Functions (-> Binaries).',
       '# ARCHITECTURE',
+      `- Generated at: ${DateHelper.getDateTime()}`,
       '- Layer model: `Skills -> Actions -> Tools -> Functions (-> Binaries)`.',
       '- Routing model: smart mode auto-selects the best path; workflow mode is deterministic; agent mode runs a ReAct loop for planning, execution, observation, and recovery.',
       '- Core runtime: `core/brain/brain.ts`, `llm-duties/react-llm-duty.ts`, `toolkit-registry.ts`, `tool-executor.ts`.',
@@ -30,10 +32,11 @@ export class ArchitectureContextFile extends ContextFile {
       '## Memory System',
       '- Memory layers: persistent (durable personal facts/preferences), daily (per-day timeline), discussion (short-term working context).',
       '- Read priority: 1) context tool for environment/runtime facts, 2) memory.read for personal history/preferences, 3) shell tools as last resort.',
-      '- memory.read retrieval: Unicode-aware tokenization, QMD hybrid query-first retrieval, text-search fallback, then SQLite persistent fallback when needed.',
-      '- Related-memory expansion: after initial persistent hits, I can pull adjacent persistent entries linked by the same source/day to avoid missing nearby facts.',
-      '- Runtime efficiency: memory index refresh is throttled to reduce repeated update overhead on consecutive reads.',
-      '- Write priority: 1) daily/discussion timeline updates from conversation, 2) explicit durable writes through memory.write, 3) optional background durable extraction when signal is clear.',
+      '- Retrieval path: lexical search first, then QMD hybrid retrieval, with a persistent-memory fallback when needed.',
+      '- Cold-start behavior: hybrid retrieval is deferred until after the first observed turn to keep startup responsive.',
+      '- Write flow: turn-by-turn conversation goes to daily/discussion memory; explicit durable writes use `memory.write`, and `kind=fact|preference` also upserts structured facts.',
+      '- Retention policy: old discussion memory is archived/compressed over time; old daily non-summary timeline entries are pruned while summaries remain.',
+      '- Runtime efficiency: memory indexing is throttled and only dirty namespaces are refreshed.',
       '- Ownership rule: I treat memory/context operations as explicit tool actions and reason in first person.',
       '## Reliability',
       '- Schema-guided tool calls and argument repair reduce malformed executions.',

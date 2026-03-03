@@ -116,6 +116,15 @@ function normalizeContent(content: string): string {
   return content.replace(/\r\n/g, '\n').trim()
 }
 
+function toFactKeySegment(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
 function normalizeFilename(filePath: string): string {
   return path.basename(filePath).toUpperCase()
 }
@@ -895,6 +904,17 @@ export default class MemoryTool extends Tool {
       )
     }
 
+    if (scope === 'persistent' && (kind === 'fact' || kind === 'preference')) {
+      const factRecord = this.buildStructuredFactRecord({
+        kind,
+        title: options.title || null,
+        content: normalizedContent,
+        metadata: options.metadata || {},
+        sourceItemId: itemId
+      })
+      this.upsertFact(factRecord)
+    }
+
     await this.writeMarkdownMirror({
       id: itemId,
       scope,
@@ -965,6 +985,45 @@ export default class MemoryTool extends Tool {
     return allowed.has(value as MemorySourceType)
       ? (value as MemorySourceType)
       : 'explicit_user'
+  }
+
+  private buildStructuredFactRecord(input: {
+    kind: MemoryKind
+    title: string | null
+    content: string
+    metadata: Record<string, unknown>
+    sourceItemId: string
+  }): {
+    key: string
+    value: unknown
+    text: string
+    priority: number
+    sourceItemId: string
+  } {
+    const metadataFactKey = input.metadata['factKey']
+    const explicitFactKey =
+      typeof metadataFactKey === 'string' ? toFactKeySegment(metadataFactKey) : ''
+    const titleKey = input.title ? toFactKeySegment(input.title) : ''
+    const fallbackKey = createHash('sha256')
+      .update(`${input.kind}|${input.content.toLowerCase()}`)
+      .digest('hex')
+      .slice(0, 24)
+    const key = explicitFactKey || `owner.${input.kind}.${titleKey || fallbackKey}`
+    const text = input.title
+      ? `${input.title}: ${input.content}`
+      : input.content
+
+    return {
+      key,
+      value: {
+        kind: input.kind,
+        title: input.title,
+        content: input.content
+      },
+      text,
+      priority: input.kind === 'fact' ? 90 : 80,
+      sourceItemId: input.sourceItemId
+    }
   }
 
   private normalizeScore(value: unknown, fallback: number): number {
@@ -1309,6 +1368,64 @@ export default class MemoryTool extends Tool {
       key: String(row['fact_key'] || ''),
       text: String(row['canonical_text'] || '')
     }))
+  }
+
+  private upsertFact(input: {
+    key: string
+    value: unknown
+    text: string
+    priority: number
+    sourceItemId: string
+  }): void {
+    const db = this.getDb()
+    const now = Date.now()
+    const existing = db
+      .prepare(
+        `SELECT id
+         FROM memory_facts
+         WHERE fact_key = ? AND is_deleted = 0
+         LIMIT 1`
+      )
+      .get(input.key) as Record<string, unknown> | undefined
+
+    if (existing?.['id']) {
+      db.prepare(
+        `UPDATE memory_facts
+         SET fact_value_json = ?,
+             canonical_text = ?,
+             source_item_id = ?,
+             priority = ?,
+             updated_at = ?,
+             last_seen_at = ?
+         WHERE id = ?`
+      ).run(
+        JSON.stringify(input.value),
+        input.text,
+        input.sourceItemId,
+        input.priority,
+        now,
+        now,
+        String(existing['id'])
+      )
+      return
+    }
+
+    db.prepare(
+      `INSERT INTO memory_facts (
+         id, fact_key, fact_value_json, canonical_text, priority,
+         source_item_id, created_at, updated_at, last_seen_at, is_pinned, is_deleted
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`
+    ).run(
+      randomUUID(),
+      input.key,
+      JSON.stringify(input.value),
+      input.text,
+      input.priority,
+      input.sourceItemId,
+      now,
+      now,
+      now
+    )
   }
 
   private async writeMarkdownMirror(input: {
