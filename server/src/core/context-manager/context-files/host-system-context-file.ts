@@ -1,14 +1,19 @@
 import os from 'node:os'
 
+import { DateHelper } from '@/helpers/date-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 import { ContextProbeHelper } from '@/core/context-manager/context-probe-helper'
 
 export class HostSystemContextFile extends ContextFile {
   public readonly filename = 'HOST_SYSTEM.md'
-  public readonly ttlMs = null
+  public readonly ttlMs: number
 
-  public constructor(private readonly probeHelper: ContextProbeHelper) {
+  public constructor(
+    private readonly probeHelper: ContextProbeHelper,
+    ttlMs: number
+  ) {
     super()
+    this.ttlMs = ttlMs
   }
 
   public generate(): string {
@@ -35,6 +40,7 @@ export class HostSystemContextFile extends ContextFile {
     return [
       `> OS/runtime identity, locale/timezone, VPN/proxy and hardware basics. Host system is ${operatingSystemNameVersion} (${os.platform()} ${os.release()}, ${os.arch()}), user ${username}, shell ${shell}, owner location ${ownerLocation.value}${vpnProxyStatus.behindVpnOrProxy ? ' (VPN/proxy detected).' : '.'}`,
       '# HOST_SYSTEM',
+      `- Generated at: ${DateHelper.getDateTime()}`,
       `- OS name and version: ${operatingSystemNameVersion}`,
       `- Platform: ${os.platform()}`,
       `- OS type: ${os.type()}`,

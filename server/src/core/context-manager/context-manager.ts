@@ -50,12 +50,13 @@ export default class ContextManager {
   private _isLoaded = false
   private manifest = ''
   private refreshIntervalId: NodeJS.Timeout | null = null
+  private isBootRefreshInProgress = false
   private readonly metadata = new Map<string, ContextFileMetadata>()
   private readonly probeHelper = new ContextProbeHelper()
   private readonly allContextFiles: ContextFile[] = [
-    new HomeContextFile(),
-    new HostSystemContextFile(this.probeHelper),
-    new GpuComputeContextFile(this.probeHelper),
+    new HomeContextFile(CONTEXT_REFRESH_TTL_MS),
+    new HostSystemContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
+    new GpuComputeContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
     new StorageContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
     new SystemResourcesContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
     new BrowserHistoryContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
@@ -70,7 +71,7 @@ export default class ContextManager {
     new LeonRuntimeContextFile(this.probeHelper, {
       getAgentLLMName: () => LLM_PROVIDER.agentLLMName,
       getLocalLLMName: () => LLM_PROVIDER.localLLMName
-    })
+    }, CONTEXT_REFRESH_TTL_MS)
   ]
   private readonly disabledContextFiles = this.parseContextFileList(
     LEON_DISABLED_CONTEXT_FILES
@@ -101,10 +102,7 @@ export default class ContextManager {
       await fs.promises.mkdir(CONTEXT_PATH, { recursive: true })
       this.cleanupDisabledContextFiles()
       this.cleanupRetiredContextFiles()
-
-      for (const definition of this.contextFiles) {
-        this.refreshContextFile(definition)
-      }
+      this.refreshContextFilesAtBootInBackground()
 
       await this.syncContextReadFilenameEnum()
 
@@ -118,6 +116,27 @@ export default class ContextManager {
       LogHelper.title('Context Manager')
       LogHelper.error(`Failed to load context files: ${e}`)
     }
+  }
+
+  private refreshContextFilesAtBootInBackground(): void {
+    if (this.isBootRefreshInProgress) {
+      return
+    }
+
+    this.isBootRefreshInProgress = true
+
+    setImmediate(() => {
+      try {
+        // Keep startup fast while still regenerating context files at boot.
+        for (const definition of this.contextFiles) {
+          this.refreshContextFile(definition, true)
+        }
+
+        this.manifest = this.buildManifest()
+      } finally {
+        this.isBootRefreshInProgress = false
+      }
+    })
   }
 
   public getManifest(): string {

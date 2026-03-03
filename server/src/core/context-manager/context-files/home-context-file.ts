@@ -10,11 +10,17 @@ import {
   TMP_PATH,
   TOOLKITS_PATH
 } from '@/constants'
+import { DateHelper } from '@/helpers/date-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 
 export class HomeContextFile extends ContextFile {
   public readonly filename = 'HOME.md'
-  public readonly ttlMs = null
+  public readonly ttlMs: number
+
+  public constructor(ttlMs: number) {
+    super()
+    this.ttlMs = ttlMs
+  }
 
   public generate(): string {
     const projectRoot = process.cwd()
@@ -23,6 +29,7 @@ export class HomeContextFile extends ContextFile {
     return [
       `> Workspace paths and runtime directories. Leon workspace rooted at ${projectRoot}. Key folders for skills, toolkits, models, logs and runtime temp are available.`,
       '# HOME',
+      `- Generated at: ${DateHelper.getDateTime()}`,
       `- Project root: ${projectRoot}`,
       `- Skills path: ${SKILLS_PATH}`,
       `- Toolkits path: ${TOOLKITS_PATH}`,

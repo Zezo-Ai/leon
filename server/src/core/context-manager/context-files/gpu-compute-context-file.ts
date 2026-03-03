@@ -13,15 +13,20 @@ import {
   PYTORCH_TORCH_PATH,
   PYTORCH_VERSION
 } from '@/constants'
+import { DateHelper } from '@/helpers/date-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 import { ContextProbeHelper } from '@/core/context-manager/context-probe-helper'
 
 export class GpuComputeContextFile extends ContextFile {
   public readonly filename = 'GPU_COMPUTE.md'
-  public readonly ttlMs = null
+  public readonly ttlMs: number
 
-  public constructor(private readonly probeHelper: ContextProbeHelper) {
+  public constructor(
+    private readonly probeHelper: ContextProbeHelper,
+    ttlMs: number
+  ) {
     super()
+    this.ttlMs = ttlMs
   }
 
   public generate(): string {
@@ -45,6 +50,7 @@ export class GpuComputeContextFile extends ContextFile {
     return [
       `> GPU inventory and compute runtime versions. ${summary}`,
       '# GPU_COMPUTE',
+      `- Generated at: ${DateHelper.getDateTime()}`,
       `- Probe status: ${gpuProbe.status}`,
       ...gpuLines,
       `- CUDA version: ${NVIDIA_CUDA_VERSION}`,
