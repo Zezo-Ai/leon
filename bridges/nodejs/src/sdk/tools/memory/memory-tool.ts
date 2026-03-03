@@ -150,40 +150,6 @@ function tokenLength(token: string): number {
   return [...token].length
 }
 
-function buildQueryVariants(query: string): string[] {
-  const variants: string[] = []
-  const normalized = query.trim()
-  if (normalized) {
-    variants.push(normalized)
-  }
-
-  const tokens = tokenizeQuery(normalized)
-  if (tokens.length > 0) {
-    variants.push(tokens.join(' '))
-
-    const informativeTokens = [...new Set(tokens)].filter(
-      (token) => tokenLength(token) >= 3
-    )
-    if (informativeTokens.length > 0) {
-      variants.push(informativeTokens.join(' '))
-    }
-
-    const maxWindowSize = Math.min(3, tokens.length)
-    for (let windowSize = maxWindowSize; windowSize >= 1; windowSize -= 1) {
-      variants.push(tokens.slice(-windowSize).join(' '))
-    }
-
-    const longestTokens = [...new Set(tokens)]
-      .filter((token) => tokenLength(token) >= 3)
-      .sort((a, b) => tokenLength(b) - tokenLength(a))
-      .slice(0, 6)
-    variants.push(...longestTokens)
-  }
-
-  return [...new Set(variants.map((value) => value.trim()).filter(Boolean))]
-    .slice(0, 12)
-}
-
 function namespaceRecallWeight(namespace: KnowledgeNamespace): number {
   switch (namespace) {
     case 'memory_persistent':
@@ -236,6 +202,47 @@ function computeRankingScore(
   const lexicalBoost = computeLexicalBoost(queryTokens, hit)
 
   return weightedBase + lexicalBoost
+}
+
+function buildAdaptiveQueryTokenSet(
+  queryTokens: Set<string>,
+  hits: QMDHit[]
+): Set<string> {
+  if (queryTokens.size === 0 || hits.length === 0) {
+    return queryTokens
+  }
+
+  const hitCount = hits.length
+  const tokenDocumentFrequency = new Map<string, number>()
+  for (const token of queryTokens) {
+    tokenDocumentFrequency.set(token, 0)
+  }
+
+  for (const hit of hits) {
+    const hitText = `${hit.title} ${path.basename(hit.path || '')} ${hit.content.slice(0, 1_000)}`
+    const hitTokens = new Set(tokenizeQuery(hitText))
+    for (const token of queryTokens) {
+      if (hitTokens.has(token)) {
+        tokenDocumentFrequency.set(
+          token,
+          (tokenDocumentFrequency.get(token) || 0) + 1
+        )
+      }
+    }
+  }
+
+  const adaptiveTokens = new Set<string>()
+  for (const token of queryTokens) {
+    const frequency = tokenDocumentFrequency.get(token) || 0
+    const ratio = frequency / hitCount
+    // Drop near-global query terms that mostly add noise to lexical overlap.
+    if (ratio >= 0.85) {
+      continue
+    }
+    adaptiveTokens.add(token)
+  }
+
+  return adaptiveTokens.size > 0 ? adaptiveTokens : queryTokens
 }
 
 function parsePersistentMemoryItemId(hit: QMDHit): string | null {
@@ -550,7 +557,6 @@ export default class MemoryTool extends Tool {
 
     const rawHits: QMDHit[] = []
     const perNamespaceLimit = Math.max(topK * 3, topK)
-    const queryVariants = buildQueryVariants(normalizedQuery)
     const rawQueryTokens = tokenizeQuery(normalizedQuery)
     const informativeQueryTokens = rawQueryTokens.filter(
       (token) => tokenLength(token) >= 3
@@ -560,75 +566,132 @@ export default class MemoryTool extends Tool {
         ? informativeQueryTokens
         : rawQueryTokens
     )
-    const searchModes: QMDSearchMode[] = ['search', 'query']
+    const collectionNames = [
+      ...new Set(
+        namespaces
+          .map((namespace) => COLLECTIONS[namespace]?.name)
+          .filter((name): name is string => Boolean(name))
+      )
+    ]
+    const namespaceByCollection = new Map<string, KnowledgeNamespace[]>(
+      collectionNames.map((collectionName) => {
+        const mappedNamespaces = namespaces.filter(
+          (namespace) => COLLECTIONS[namespace]?.name === collectionName
+        )
+        return [collectionName, mappedNamespaces]
+      })
+    )
+    const collectionPathByName = new Map<string, string>(
+      collectionNames.map((collectionName) => {
+        const collection = Object.values(COLLECTIONS).find(
+          (item) => item.name === collectionName
+        )
+        return [collectionName, collection?.dir || '']
+      })
+    )
+    const globalLimit = Math.max(
+      topK,
+      perNamespaceLimit * Math.max(1, collectionNames.length)
+    )
 
-    for (const namespace of namespaces) {
-      const collection = COLLECTIONS[namespace]
-      if (!collection) {
+    let rows = await this.runSearchMode(
+      'query',
+      normalizedQuery,
+      collectionNames,
+      globalLimit
+    )
+    let modeUsed: QMDSearchMode = 'query'
+    if (rows.length === 0) {
+      rows = await this.runSearchMode(
+        'search',
+        normalizedQuery,
+        collectionNames,
+        globalLimit
+      )
+      modeUsed = 'search'
+    }
+
+    for (const row of rows) {
+      const sourcePath = normalizePath(
+        pickStringDeep(row, [
+          'filepath',
+          'path',
+          'file',
+          'source',
+          'doc_path',
+          'document_path',
+          'docPath',
+          'uri'
+        ])
+      )
+      const title =
+        pickStringDeep(row, ['title', 'name']) ||
+        (sourcePath ? path.basename(sourcePath) : '')
+      const content = extractContent(row)
+      const id =
+        pickStringDeep(row, ['docid', 'id']) ||
+        sourcePath ||
+        title
+
+      if (!id || !content) {
         continue
       }
 
-      const namespaceHitsStart = rawHits.length
-      const rows = await this.collectNamespaceRows(
-        collection.name,
-        queryVariants,
-        perNamespaceLimit,
-        searchModes
-      )
-      for (const row of rows) {
-        const sourcePath = normalizePath(
-          pickStringDeep(row, [
-            'filepath',
-            'path',
-            'file',
-            'source',
-            'doc_path',
-            'document_path',
-            'docPath',
-            'uri'
-          ])
-        )
-        const title =
-          pickStringDeep(row, ['title', 'name']) ||
-          (sourcePath ? path.basename(sourcePath) : '')
-        const content = extractContent(row)
-        const id =
-          pickStringDeep(row, ['docid', 'id']) ||
-          sourcePath ||
-          title
-
-        if (!id || !content) {
-          continue
+      const explicitCollection = pickStringDeep(row, [
+        'collection',
+        'collection_name',
+        'collectionName'
+      ])
+      const collectionFromQmdPathMatch = sourcePath.match(/^qmd:\/\/([^/]+)\//i)
+      const collectionFromQmdPath = collectionFromQmdPathMatch?.[1] || ''
+      const collectionFromAbsolutePath = collectionNames.find((collectionName) => {
+        const collectionPath = collectionPathByName.get(collectionName)
+        if (!collectionPath || !sourcePath) {
+          return false
         }
 
-        if (namespace === 'context' && allowedContextFilenames.size > 0) {
-          const allowed =
-            allowedContextFilenames.has(normalizeFilename(sourcePath)) ||
-            allowedContextFilenames.has(normalizeFilename(title))
-          if (!allowed) {
-            continue
-          }
-        }
-
-        rawHits.push({
-          id,
-          path: sourcePath,
-          title,
-          content,
-          score: extractScore(row),
-          namespace
-        })
+        return sourcePath.startsWith(collectionPath)
+      })
+      const resolvedCollectionName =
+        explicitCollection ||
+        collectionFromQmdPath ||
+        collectionFromAbsolutePath ||
+        (collectionNames.length === 1 ? collectionNames[0] : '')
+      const mappedNamespaces = namespaceByCollection.get(resolvedCollectionName) || []
+      const namespace =
+        namespaces.find((candidate) => mappedNamespaces.includes(candidate)) ||
+        (namespaces.length === 1 ? namespaces[0] : null)
+      if (!namespace) {
+        continue
       }
 
-      if (namespace === 'memory_persistent' && rawHits.length === namespaceHitsStart) {
-        const fallbackHits = this.readPersistentFallback(
-          normalizedQuery,
-          [...queryTokens],
-          perNamespaceLimit
-        )
-        for (const fallbackHit of fallbackHits) {
-          rawHits.push(fallbackHit)
+      if (namespace === 'context' && allowedContextFilenames.size > 0) {
+        const allowed =
+          allowedContextFilenames.has(normalizeFilename(sourcePath)) ||
+          allowedContextFilenames.has(normalizeFilename(title))
+        if (!allowed) {
+          continue
         }
+      }
+
+      rawHits.push({
+        id,
+        path: sourcePath,
+        title,
+        content,
+        score: extractScore(row) + (modeUsed === 'query' ? 0.03 : 0.01),
+        namespace
+      })
+    }
+
+    if (!rawHits.some((hit) => hit.namespace === 'memory_persistent')) {
+      const fallbackHits = this.readPersistentFallback(
+        normalizedQuery,
+        [...queryTokens],
+        perNamespaceLimit
+      )
+      for (const fallbackHit of fallbackHits) {
+        rawHits.push(fallbackHit)
       }
     }
 
@@ -649,12 +712,15 @@ export default class MemoryTool extends Tool {
       }
     }
 
-    const rankedHits = [...deduped.values()]
+    const dedupedHits = [...deduped.values()]
+    const adaptiveQueryTokens = buildAdaptiveQueryTokenSet(queryTokens, dedupedHits)
+
+    const rankedHits = dedupedHits
       .map((hit) => ({
         hit,
         rankingScore: computeRankingScore(
           hit,
-          queryTokens
+          adaptiveQueryTokens
         )
       }))
       .sort((a, b) => b.rankingScore - a.rankingScore)
@@ -1023,57 +1089,6 @@ export default class MemoryTool extends Tool {
     MemoryTool.lastIndexUpdateAt = now
   }
 
-  private async collectNamespaceRows(
-    collectionName: string,
-    queryVariants: string[],
-    limit: number,
-    searchModes: QMDSearchMode[]
-  ): Promise<Array<Record<string, unknown>>> {
-    const primaryVariant = queryVariants[0] || ''
-    const secondaryVariants = queryVariants.slice(1)
-    const rows: Array<Record<string, unknown>> = []
-    const maxSecondarySearchVariants = 2
-    const minRowsToStopExpansion = Math.min(3, limit)
-
-    const addRows = (nextRows: Array<Record<string, unknown>>): void => {
-      for (const row of nextRows) {
-        rows.push(row)
-      }
-    }
-
-    if (primaryVariant && searchModes.includes('search')) {
-      addRows(await this.runSearchMode('search', primaryVariant, collectionName, limit))
-    }
-
-    if (
-      rows.length < minRowsToStopExpansion &&
-      searchModes.includes('search')
-    ) {
-      for (const variant of secondaryVariants.slice(0, maxSecondarySearchVariants)) {
-        addRows(await this.runSearchMode('search', variant, collectionName, limit))
-        if (rows.length >= minRowsToStopExpansion) {
-          break
-        }
-      }
-    }
-
-    if (rows.length === 0 && searchModes.includes('query')) {
-      const queryFallbackVariants = [
-        primaryVariant,
-        ...secondaryVariants.slice(0, 1)
-      ].filter(Boolean)
-
-      for (const variant of queryFallbackVariants) {
-        addRows(await this.runSearchMode('query', variant, collectionName, limit))
-        if (rows.length > 0) {
-          break
-        }
-      }
-    }
-
-    return rows
-  }
-
   private readPersistentFallback(
     query: string,
     queryTokens: string[],
@@ -1229,7 +1244,7 @@ export default class MemoryTool extends Tool {
   private async runSearchMode(
     mode: QMDSearchMode,
     query: string,
-    collectionName: string,
+    collectionNames: string[],
     limit: number
   ): Promise<Array<Record<string, unknown>>> {
     if (!query.trim()) {
@@ -1244,8 +1259,7 @@ export default class MemoryTool extends Tool {
       '--json',
       '-n',
       String(limit),
-      '-c',
-      collectionName
+      ...collectionNames.flatMap((collectionName) => ['-c', collectionName])
     ]
 
     let payload = ''
@@ -1260,7 +1274,7 @@ export default class MemoryTool extends Tool {
           return []
         }
       } else if (mode === 'query' && message.includes('not found')) {
-        return this.runSearchMode('search', query, collectionName, limit)
+        return this.runSearchMode('search', query, collectionNames, limit)
       } else {
         return []
       }

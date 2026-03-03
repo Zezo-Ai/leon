@@ -22,7 +22,7 @@ export class LeonContextFile extends ContextFile {
       '- Daily memory: day-level conversation timeline.',
       '- Discussion memory: short-term recent conversation context.',
       '- Read priority: context tool first for environment/runtime questions; memory.read for personal history/questions.',
-      '- memory.read uses language-agnostic (Unicode-aware) token matching with query/search fallback for robust recall.',
+      '- memory.read uses language-agnostic (Unicode-aware) token matching with QMD hybrid query-first retrieval and text-search fallback for robust recall.',
       '- When useful, I expand from matched persistent memories to related entries from the same source/day to recover nearby facts.',
       '- Write priority: daily/discussion timeline by default; memory.write for explicit durable notes; optional background durable extraction when clear.',
       '## Operating Modes',

@@ -22,7 +22,7 @@
 ## Memory System
 - Memory layers: persistent (durable personal facts/preferences), daily (per-day timeline), discussion (short-term working context).
 - Read priority: 1) context tool for environment/runtime facts, 2) memory.read for personal history/preferences, 3) shell tools as last resort.
-- memory.read retrieval: Unicode-aware tokenization, compact query variants, text search with query fallback, then SQLite persistent fallback when needed.
+- memory.read retrieval: Unicode-aware tokenization, QMD hybrid query-first retrieval, text-search fallback, then SQLite persistent fallback when needed.
 - Related-memory expansion: after initial persistent hits, I can pull adjacent persistent entries linked by the same source/day to avoid missing nearby facts.
 - Runtime efficiency: memory index refresh is throttled to reduce repeated update overhead on consecutive reads.
 - Write priority: 1) daily/discussion timeline updates from conversation, 2) explicit durable writes through memory.write, 3) optional background durable extraction when signal is clear.

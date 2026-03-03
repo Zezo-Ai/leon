@@ -1,8 +1,6 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 
-import Database from 'better-sqlite3'
 import execa from 'execa'
 
 import {
@@ -15,8 +13,6 @@ import type { KnowledgeNamespace } from './types'
 
 const QMD_INDEX_NAME = 'leon-memory'
 const QMD_UPDATE_MIN_INTERVAL_MS = 5_000
-const QMD_VSEARCH_DISABLE_ZERO_STREAK = 3
-const QMD_VECTOR_AVAILABILITY_TTL_MS = 5 * 60 * 1_000
 
 export interface QMDRecallHit {
   id: string
@@ -34,7 +30,7 @@ interface QMDQueryInput {
   contextFilenames?: string[]
 }
 
-type QMDSearchMode = 'query' | 'search' | 'vsearch'
+type QMDSearchMode = 'query' | 'search'
 
 const QMD_COLLECTIONS: Record<KnowledgeNamespace, { name: string, dir: string }> = {
   context: {
@@ -77,42 +73,6 @@ function normalizePath(value: string): string {
   } catch {
     return value
   }
-}
-
-function tokenizeQuery(value: string): string[] {
-  return (value.toLowerCase().match(/[a-z0-9_]+/g) || [])
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 2)
-}
-
-function buildQueryVariants(query: string): string[] {
-  const variants: string[] = []
-  const normalized = query.trim()
-  if (normalized) {
-    variants.push(normalized)
-  }
-
-  const tokens = tokenizeQuery(normalized)
-  if (tokens.length > 0) {
-    variants.push(tokens.join(' '))
-
-    // Prefer suffix windows because personal questions often end with the target entity.
-    const maxWindowSize = Math.min(3, tokens.length)
-    for (let windowSize = maxWindowSize; windowSize >= 1; windowSize -= 1) {
-      variants.push(tokens.slice(-windowSize).join(' '))
-    }
-
-    // Add strongest standalone terms (length-based, language-agnostic heuristic).
-    const uniqueTokens = [...new Set(tokens)]
-    const longestTokens = uniqueTokens
-      .filter((token) => token.length >= 5)
-      .sort((a, b) => b.length - a.length)
-      .slice(0, 6)
-    variants.push(...longestTokens)
-  }
-
-  return [...new Set(variants.map((value) => value.trim()).filter(Boolean))]
-    .slice(0, 12)
 }
 
 function parseRows(raw: string): Array<Record<string, unknown>> {
@@ -333,17 +293,6 @@ export default class QMDBackend {
   private loaded = false
   private lastUpdateAt = 0
   private readonly dirtyNamespaces = new Set<KnowledgeNamespace>()
-  private vsearchState: 'unknown' | 'enabled' | 'disabled' = 'unknown'
-  private vsearchZeroStreak = 0
-  private lastVectorAvailabilityCheckAt = 0
-
-  private get indexDbPath(): string {
-    const cacheDirectory = process.env['XDG_CACHE_HOME']
-      ? path.join(process.env['XDG_CACHE_HOME'], 'qmd')
-      : path.join(os.homedir(), '.cache', 'qmd')
-
-    return path.join(cacheDirectory, `${QMD_INDEX_NAME}.sqlite`)
-  }
 
   public markDirty(namespace: KnowledgeNamespace): void {
     this.dirtyNamespaces.add(namespace)
@@ -377,74 +326,9 @@ export default class QMDBackend {
     await this.runQMD(['--index', QMD_INDEX_NAME, 'update'])
     this.lastUpdateAt = now
     this.dirtyNamespaces.clear()
-    this.vsearchState = 'unknown'
-    this.lastVectorAvailabilityCheckAt = 0
 
     LogHelper.title('Memory Manager')
     LogHelper.debug('QMD index refreshed')
-  }
-
-  private shouldRunVectorSearch(): boolean {
-    if (this.vsearchState === 'enabled') {
-      return true
-    }
-
-    if (this.vsearchState === 'disabled') {
-      return false
-    }
-
-    const now = Date.now()
-    if (
-      this.lastVectorAvailabilityCheckAt > 0 &&
-      now - this.lastVectorAvailabilityCheckAt < QMD_VECTOR_AVAILABILITY_TTL_MS
-    ) {
-      return true
-    }
-
-    this.lastVectorAvailabilityCheckAt = now
-
-    interface ReadonlyQmdDb {
-      prepare: (sql: string) => { get: () => unknown }
-      close: () => void
-    }
-
-    let database: ReadonlyQmdDb | null = null
-    try {
-      if (!fs.existsSync(this.indexDbPath)) {
-        this.vsearchState = 'disabled'
-        return false
-      }
-
-      database = new Database(this.indexDbPath, {
-        readonly: true,
-        fileMustExist: true
-      }) as unknown as ReadonlyQmdDb
-
-      const row = database
-        .prepare(
-          'SELECT COUNT(*) as count FROM content_vectors'
-        )
-        .get() as { count?: number } | undefined
-
-      const vectorCount =
-        row && typeof row.count === 'number' ? row.count : 0
-      this.vsearchState = vectorCount > 0 ? 'enabled' : 'disabled'
-
-      LogHelper.title('Memory Manager')
-      LogHelper.debug(
-        `QMD vector availability: ${this.vsearchState} (vectors=${vectorCount})`
-      )
-      return this.vsearchState === 'enabled'
-    } catch {
-      this.vsearchState = 'disabled'
-      return false
-    } finally {
-      try {
-        database?.close()
-      } catch {
-        // Ignore close errors.
-      }
-    }
   }
 
   public async query(input: QMDQueryInput): Promise<QMDRecallHit[]> {
@@ -456,136 +340,157 @@ export default class QMDBackend {
     }
 
     const perNamespaceLimit = Math.max(input.topK * 3, input.topK)
+    const collectionNames = [
+      ...new Set(
+        uniqueNamespaces
+          .map((namespace) => QMD_COLLECTIONS[namespace]?.name)
+          .filter((name): name is string => Boolean(name))
+      )
+    ]
+    if (collectionNames.length === 0) {
+      return []
+    }
+    const globalLimit = Math.max(
+      input.topK,
+      perNamespaceLimit * collectionNames.length
+    )
     const allowedContextFilenames = new Set(
       (input.contextFilenames || []).map((filename) => normalizeFilename(filename))
     )
+    const namespaceByCollection = new Map<string, KnowledgeNamespace[]>(
+      collectionNames.map((collectionName) => {
+        const mappedNamespaces = uniqueNamespaces.filter(
+          (namespace) => QMD_COLLECTIONS[namespace]?.name === collectionName
+        )
+        return [collectionName, mappedNamespaces]
+      })
+    )
+    const collectionPathByName = new Map<string, string>(
+      collectionNames.map((collectionName) => {
+        const definition = Object.values(QMD_COLLECTIONS).find(
+          (entry) => entry.name === collectionName
+        )
+        return [collectionName, definition?.dir || '']
+      })
+    )
 
     const hits: QMDRecallHit[] = []
-    const runVectorSearch = this.shouldRunVectorSearch()
+    let rows: Array<Record<string, unknown>> = []
+    let modeUsed: QMDSearchMode | null = null
 
-    for (const namespace of uniqueNamespaces) {
-      const collection = QMD_COLLECTIONS[namespace]
-      if (!collection) {
+    try {
+      rows = parseRows(
+        await this.runQMDSearchMode(
+          'query',
+          input.query,
+          collectionNames,
+          globalLimit
+        )
+      )
+      modeUsed = 'query'
+      LogHelper.title('Memory Manager')
+      LogHelper.debug(
+        `QMD query collections=${collectionNames.join(', ')} rows=${rows.length} query=${JSON.stringify(input.query)}`
+      )
+    } catch (error) {
+      LogHelper.title('Memory Manager')
+      LogHelper.warning(
+        `QMD query failed for collections=${collectionNames.join(', ')}: ${String(error)}`
+      )
+    }
+
+    if (rows.length === 0) {
+      try {
+        rows = parseRows(
+          await this.runQMDSearchMode(
+            'search',
+            input.query,
+            collectionNames,
+            globalLimit
+          )
+        )
+        modeUsed = 'search'
+        LogHelper.title('Memory Manager')
+        LogHelper.debug(
+          `QMD search fallback collections=${collectionNames.join(', ')} rows=${rows.length} query=${JSON.stringify(input.query)}`
+        )
+      } catch (error) {
+        LogHelper.title('Memory Manager')
+        LogHelper.warning(
+          `QMD search fallback failed for collections=${collectionNames.join(', ')}: ${String(error)}`
+        )
+      }
+    }
+
+    for (const row of rows) {
+      const sourcePath = normalizePath(
+        pickStringDeep(row, [
+          'filepath',
+          'path',
+          'file',
+          'source',
+          'doc_path',
+          'document_path',
+          'docPath',
+          'uri'
+        ])
+      )
+      const title =
+        pickStringDeep(row, ['title', 'name']) ||
+        (sourcePath ? path.basename(sourcePath) : '')
+      const content = extractContent(row)
+      const id =
+        pickStringDeep(row, ['docid', 'id']) ||
+        sourcePath ||
+        title
+      if (!id || !content) {
         continue
       }
 
-      const modes: QMDSearchMode[] = runVectorSearch
-        ? ['search', 'vsearch', 'query']
-        : ['search', 'query']
-      const queryVariants = buildQueryVariants(input.query)
-      const namespaceHitsStart = hits.length
-      for (const mode of modes) {
-        const hasNamespaceHits = hits.length > namespaceHitsStart
-        if (hasNamespaceHits) {
-          LogHelper.title('Memory Manager')
-          LogHelper.debug(
-            `QMD ${mode} skipped for namespace=${namespace}, collection=${collection.name} because previous mode already returned hits`
-          )
-          continue
+      const explicitCollection = pickStringDeep(row, [
+        'collection',
+        'collection_name',
+        'collectionName'
+      ])
+      const collectionFromQmdPathMatch = sourcePath.match(/^qmd:\/\/([^/]+)\//i)
+      const collectionFromQmdPath = collectionFromQmdPathMatch?.[1] || ''
+      const collectionFromAbsolutePath = collectionNames.find((collectionName) => {
+        const collectionPath = collectionPathByName.get(collectionName)
+        if (!collectionPath || !sourcePath) {
+          return false
         }
 
-        let rows: Array<Record<string, unknown>> = []
-        let usedVariant = ''
-        let lastError: unknown = null
-        for (const queryVariant of queryVariants) {
-          try {
-            const payload = await this.runQMDSearchMode(
-              mode,
-              queryVariant,
-              collection.name,
-              perNamespaceLimit
-            )
-            const parsedRows = parseRows(payload)
-            if (parsedRows.length > 0) {
-              rows = parsedRows
-              usedVariant = queryVariant
-              break
-            }
-          } catch (error) {
-            lastError = error
-          }
-        }
+        return sourcePath.startsWith(collectionPath)
+      })
+      const resolvedCollectionName =
+        explicitCollection ||
+        collectionFromQmdPath ||
+        collectionFromAbsolutePath ||
+        (collectionNames.length === 1 ? (collectionNames[0] || '') : '')
 
-        if (rows.length === 0 && lastError) {
-          const message = String(lastError)
-          LogHelper.title('Memory Manager')
-          LogHelper.warning(
-            `QMD ${mode} skipped for namespace=${namespace}, collection=${collection.name}: ${message}`
-          )
-          continue
-        }
-
-        LogHelper.title('Memory Manager')
-        LogHelper.debug(
-          `QMD ${mode} namespace=${namespace} collection=${collection.name} rows=${rows.length}${usedVariant ? ` query=${JSON.stringify(usedVariant)}` : ''}`
-        )
-
-        if (mode === 'vsearch') {
-          if (rows.length > 0) {
-            this.vsearchState = 'enabled'
-            this.vsearchZeroStreak = 0
-          } else if (this.vsearchState === 'unknown') {
-            this.vsearchZeroStreak += 1
-            if (this.vsearchZeroStreak >= QMD_VSEARCH_DISABLE_ZERO_STREAK) {
-              this.vsearchState = 'disabled'
-              LogHelper.title('Memory Manager')
-              LogHelper.debug(
-                `QMD vsearch disabled for this session after ${this.vsearchZeroStreak} consecutive zero-result attempts`
-              )
-            }
-          }
-        }
-
-        for (const row of rows) {
-          const sourcePath = normalizePath(
-            pickStringDeep(row, [
-              'filepath',
-              'path',
-              'file',
-              'source',
-              'doc_path',
-              'document_path',
-              'docPath',
-              'uri'
-            ])
-          )
-          const title =
-            pickStringDeep(row, ['title', 'name']) ||
-            (sourcePath ? path.basename(sourcePath) : '')
-          const content = extractContent(row)
-          const score =
-            extractScore(row) +
-            (mode === 'search'
-              ? 0.02
-              : mode === 'vsearch'
-                ? 0.01
-                : 0)
-          const id =
-            pickStringDeep(row, ['docid', 'id']) ||
-            sourcePath ||
-            title
-
-          if (!id || !content) {
-            continue
-          }
-
-          if (
-            namespace === 'context' &&
-            !isContextFilenameAllowed(allowedContextFilenames, sourcePath, title)
-          ) {
-            continue
-          }
-
-          hits.push({
-            id,
-            path: sourcePath,
-            title,
-            content,
-            score,
-            namespace
-          })
-        }
+      const mappedNamespaces = namespaceByCollection.get(resolvedCollectionName) || []
+      const resolvedNamespace =
+        uniqueNamespaces.find((namespace) => mappedNamespaces.includes(namespace)) ||
+        (uniqueNamespaces.length === 1 ? uniqueNamespaces[0] : null)
+      if (!resolvedNamespace) {
+        continue
       }
+
+      if (
+        resolvedNamespace === 'context' &&
+        !isContextFilenameAllowed(allowedContextFilenames, sourcePath, title)
+      ) {
+        continue
+      }
+
+      hits.push({
+        id,
+        path: sourcePath,
+        title,
+        content,
+        score: extractScore(row) + (modeUsed === 'query' ? 0.03 : 0.01),
+        namespace: resolvedNamespace
+      })
     }
 
     const deduped = new Map<string, QMDRecallHit>()
@@ -667,7 +572,7 @@ export default class QMDBackend {
   private async runQMDSearchMode(
     mode: QMDSearchMode,
     query: string,
-    collectionName: string,
+    collectionNames: string[],
     limit: number
   ): Promise<string> {
     const baseArgs = [
@@ -678,8 +583,7 @@ export default class QMDBackend {
       '--json',
       '-n',
       String(limit),
-      '-c',
-      collectionName
+      ...collectionNames.flatMap((collectionName) => ['-c', collectionName])
     ]
 
     try {
