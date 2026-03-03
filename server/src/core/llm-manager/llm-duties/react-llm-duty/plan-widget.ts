@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import { SOCKET_SERVER } from '@/core'
 
 import type { TrackedPlanStep } from './types'
@@ -6,7 +8,7 @@ import type { TrackedPlanStep } from './types'
  * Helper to generate a short random ID for widget component IDs.
  */
 export const widgetId = (prefix: string): string =>
-  `${prefix}-${Math.random().toString(36).substring(2, 7)}`
+  `${prefix}-${randomUUID()}`
 
 /**
  * Builds a serialized Aurora component tree for the plan widget.

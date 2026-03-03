@@ -67,6 +67,16 @@ export interface PromptLogSection {
   content?: string
 }
 
+export type ReactPhase = 'planning' | 'execution' | 'recovery' | 'final_answer'
+
+export interface LLMCallOptions {
+  phase?: ReactPhase
+  disableThinking?: boolean
+  emitReasoning?: boolean
+  streamToProvider?: boolean
+  streamToUser?: boolean
+}
+
 /**
  * Callback interface for LLM calls from phase functions.
  * This decouples the phase logic from the duty class instance.
@@ -78,7 +88,7 @@ export interface LLMCaller {
     schema: Record<string, unknown>,
     history?: MessageLog[],
     promptSections?: PromptLogSection[],
-    options?: { disableThinking?: boolean }
+    options?: LLMCallOptions
   ): Promise<{
     output: unknown
     usedInputTokens?: number
@@ -92,7 +102,7 @@ export interface LLMCaller {
     history?: MessageLog[],
     shouldStream?: boolean,
     promptSections?: PromptLogSection[],
-    options?: { disableThinking?: boolean }
+    options?: LLMCallOptions
   ): Promise<{
     output: string
     usedInputTokens?: number
@@ -108,7 +118,7 @@ export interface LLMCaller {
     history?: MessageLog[],
     shouldStreamToUser?: boolean,
     promptSections?: PromptLogSection[],
-    options?: { disableThinking?: boolean }
+    options?: LLMCallOptions
   ): Promise<{
     toolCall?: { functionName: string, arguments: string }
     unexpectedToolCall?: { functionName: string, arguments: string }

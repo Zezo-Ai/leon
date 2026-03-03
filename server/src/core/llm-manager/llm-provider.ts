@@ -1936,7 +1936,12 @@ export default class LLMProvider {
       shouldUseRemoteStreaming =
         isRemoteProvider && shouldStreamOutput && providerReturnedStream
 
-      if (isRemoteProvider && shouldStreamOutput && !providerReturnedStream) {
+      if (
+        isRemoteProvider &&
+        shouldStreamOutput &&
+        !providerReturnedStream &&
+        !hasStartedStreaming
+      ) {
         LogHelper.title('LLM Provider')
         LogHelper.debug(
           `Streaming requested but provider returned non-stream payload; falling back to non-stream normalization (type=${typeof remoteStreamCandidate})`
@@ -1999,14 +2004,22 @@ export default class LLMProvider {
           LLM_PROVIDER as LLMProviders
         )
       ) {
-        const normalized = this.normalizeCompletionResultForOpenAIResponsesProvider(
-          rawResult as AxiosResponse
+        const parsedResponseData = this.parseProviderResponseData(
+          (rawResult as AxiosResponse).data
         )
+        const normalized = Array.isArray(parsedResponseData['choices'])
+          ? this.normalizeCompletionResultForOpenAICompatibleProvider(
+              rawResult as AxiosResponse
+            )
+          : this.normalizeCompletionResultForOpenAIResponsesProvider(
+              rawResult as AxiosResponse
+            )
 
         rawResult = normalized.rawResult
         usedInputTokens = normalized.usedInputTokens
         usedOutputTokens = normalized.usedOutputTokens
         toolCalls = normalized.toolCalls
+        reasoning = normalized.reasoning
       } else {
         LogHelper.error(`The LLM provider "${LLM_PROVIDER}" is not yet supported`)
         return null
@@ -2022,7 +2035,7 @@ export default class LLMProvider {
         LogHelper.title('LLM Provider')
         LogHelper.debug(`Reasoning:\n${this.truncateForLog(reasoning)}`)
 
-        if (!shouldUseRemoteStreaming) {
+        if (!shouldUseRemoteStreaming && !hasStartedStreaming) {
           completionParams.onReasoningToken?.(reasoning)
         }
       }

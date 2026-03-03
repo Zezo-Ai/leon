@@ -279,7 +279,7 @@ export function shouldTreatPlanningTextAsFinalAnswer(text: string): boolean {
   if (
     /^(\{|\[)/.test(trimmedText) ||
     /<tool_call>|<function=|<parameter=/i.test(trimmedText) ||
-    /([a-z_]+\.[a-z_]+\.[a-zA-Z_]+)/.test(trimmedText)
+    /^[a-z_]+\.[a-z_]+(?:\.[a-zA-Z_]+)?$/.test(trimmedText)
   ) {
     return false
   }

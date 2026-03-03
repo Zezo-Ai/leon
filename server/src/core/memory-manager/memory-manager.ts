@@ -51,8 +51,7 @@ const EXTRACT_PERSISTENT_MEMORY_SCHEMA = {
       items: {
         type: 'object',
         properties: {
-          content: { type: 'string' },
-          confidence: { type: 'number' }
+          content: { type: 'string' }
         },
         required: ['content'],
         additionalProperties: false
@@ -1197,6 +1196,58 @@ export default class MemoryManager {
     return [...new Set(lineCandidates)]
   }
 
+  private isExplicitEmptyPersistentExtractionPayload(
+    output: unknown
+  ): boolean {
+    const hasExplicitEmptyItems = (payload: unknown): boolean => {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return false
+      }
+
+      const payloadObject = payload as Record<string, unknown>
+      return (
+        Array.isArray(payloadObject['items']) &&
+        payloadObject['items'].length === 0
+      )
+    }
+
+    if (hasExplicitEmptyItems(output)) {
+      return true
+    }
+
+    if (typeof output !== 'string') {
+      return false
+    }
+
+    const rawOutput = output.trim()
+    if (!rawOutput) {
+      return false
+    }
+
+    const strippedCodeFence = rawOutput
+      .replace(/^```(?:json)?\s*\n?/i, '')
+      .replace(/\n?```\s*$/i, '')
+      .trim()
+    const extractedJson = this.extractJsonSubstring(strippedCodeFence)
+    const parseCandidates = [
+      rawOutput,
+      strippedCodeFence,
+      extractedJson
+    ].filter((candidate): candidate is string => Boolean(candidate))
+
+    for (const parseCandidate of parseCandidates) {
+      try {
+        if (hasExplicitEmptyItems(JSON.parse(parseCandidate))) {
+          return true
+        }
+      } catch {
+        // Continue fallback parsing
+      }
+    }
+
+    return false
+  }
+
   public async savePersistentMemoryCandidatesFromTurn(
     userMessage: string,
     assistantMessage: string,
@@ -1235,7 +1286,9 @@ Leon: ${normalizedAssistantMessage}
 Extract only durable personal memories worth persisting long-term.
 Keep only stable user facts/preferences/commitments likely useful in future conversations.
 Do not include transient chat content.
-Return JSON.`
+Return strictly valid JSON with this exact shape:
+{"items":[{"content":"..."}]}
+No markdown. No explanation.`
 
     try {
       const { LLM_PROVIDER } = await import('@/core')
@@ -1253,14 +1306,44 @@ Return JSON.`
 
       if (!completion?.output) {
         LogHelper.title('Memory Manager')
-        LogHelper.warning('Persistent memory extraction returned no output')
+        LogHelper.debug(
+          `Persistent extraction diagnostics | output=${String(completion?.output)} | output_type=${typeof completion?.output}`
+        )
+        LogHelper.debug('Persistent memory extraction returned no output')
         return 0
       }
 
       const candidates = this.parsePersistentExtractionCandidates(
         completion.output
       ).slice(0, 3)
+      const isExplicitEmptyPayload = this.isExplicitEmptyPersistentExtractionPayload(
+        completion.output
+      )
       if (candidates.length === 0) {
+        const outputPreview =
+          typeof completion.output === 'string'
+            ? truncateForExtraction(
+                normalizeContent(completion.output),
+                360
+              )
+            : truncateForExtraction(
+                normalizeContent(JSON.stringify(completion.output)),
+                360
+              )
+
+        LogHelper.title('Memory Manager')
+        LogHelper.debug(
+          `Persistent extraction diagnostics | output_type=${typeof completion.output} | explicit_empty=${String(isExplicitEmptyPayload)} | preview=${JSON.stringify(outputPreview)}`
+        )
+
+        if (isExplicitEmptyPayload) {
+          LogHelper.title('Memory Manager')
+          LogHelper.debug(
+            'Persistent memory extraction found no durable candidates'
+          )
+          return 0
+        }
+
         LogHelper.title('Memory Manager')
         LogHelper.warning(
           'Persistent memory extraction returned invalid or empty payload'
@@ -1275,6 +1358,9 @@ Return JSON.`
       )
 
       LogHelper.title('Memory Manager')
+      LogHelper.debug(
+        `Persistent extraction diagnostics | candidates=${JSON.stringify(candidates)}`
+      )
       LogHelper.debug(
         `Persistent memory candidates extracted and saved: ${saved}`
       )

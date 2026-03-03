@@ -180,20 +180,11 @@ export default class Chatbot {
       return null
     }
 
-    const reasoningBlocks = this.feed?.querySelectorAll(
-      '.reasoning-block-container'
-    )
-    if (!reasoningBlocks || reasoningBlocks.length === 0) {
-      return null
-    }
-
-    const isThinkingPhase = JSON.stringify(widgetPayload).includes('Thinking...')
-    if (isThinkingPhase) {
-      return reasoningBlocks[0]
-    }
-
-    const lastReasoningBlock = reasoningBlocks[reasoningBlocks.length - 1]
-    return lastReasoningBlock?.nextSibling || null
+    // Always append new plan widgets as new bubbles.
+    // Widget updates are handled via replaceMessageId targeting the same
+    // messageId, so insertion-point heuristics are unnecessary and can cause
+    // visual reuse across turns.
+    return null
   }
 
   loadFeed() {
@@ -520,6 +511,18 @@ export default class Chatbot {
     return message
   }
 
+  getLatestReasoningContainer() {
+    const reasoningContainers = this.feed.querySelectorAll(
+      '.reasoning-block-container'
+    )
+
+    if (reasoningContainers.length === 0) {
+      return null
+    }
+
+    return reasoningContainers[reasoningContainers.length - 1] || null
+  }
+
   replaceMessage(replaceMessageId, newData) {
     const existingBubble = document.querySelector(
       `[data-message-id="${replaceMessageId}"]`
@@ -540,15 +543,32 @@ export default class Chatbot {
     const widgetString =
       typeof newData === 'string' ? newData : JSON.stringify(newData)
 
+    let beforeElement = nextSibling
+
+    // Keep plan updates visually after the reasoning block when transitioning
+    // from "Thinking..." to concrete tool-call steps, but only when this
+    // widget was originally placed before that reasoning block.
+    if (newData && typeof newData === 'object' && newData.widget === 'PlanWidget') {
+      const latestReasoningContainer = this.getLatestReasoningContainer()
+      const isWidgetBeforeReasoning =
+        !!existingBubble &&
+        !!latestReasoningContainer &&
+        Boolean(
+          existingBubble.compareDocumentPosition(latestReasoningContainer) &
+            Node.DOCUMENT_POSITION_FOLLOWING
+        )
+
+      if (latestReasoningContainer && isWidgetBeforeReasoning) {
+        beforeElement = latestReasoningContainer.nextSibling
+      }
+    }
+
     this.createBubble({
       who: 'leon',
       string: widgetString,
       save: false,
       messageId: replaceMessageId,
-      beforeElement:
-        newData?.widget === 'PlanWidget'
-          ? null
-          : nextSibling
+      beforeElement
     })
 
     /**

@@ -1,6 +1,5 @@
 import { LogHelper } from '@/helpers/log-helper'
 import {
-  PERSONA,
   CONTEXT_MANAGER
 } from '@/core'
 import type { OpenAITool } from '@/core/llm-manager/types'
@@ -31,6 +30,7 @@ import {
   PLAN_RESPONSE_SCHEMA,
   PLAN_STEP_SCHEMA
 } from './plan-contract'
+import { buildPhaseSystemPrompt } from './phase-policy'
 
 function buildPlanningPromptSections(params: {
   prompt: string
@@ -98,12 +98,9 @@ export async function runPlanningPhase(
     catalog.mode === 'tool'
       ? '\nNote: The catalog lists tools, not individual functions. Use the format toolkit_id.tool_id in your plan steps.'
       : ''
-  const planSystemPrompt = PERSONA.getCompactDutySystemPrompt(
+  const planSystemPrompt = buildPhaseSystemPrompt(
     PLAN_SYSTEM_PROMPT,
-    {
-      includePersonality: true,
-      includeMood: true
-    }
+    'planning'
   )
   const contextManifest = CONTEXT_MANAGER.getManifest()
 
@@ -185,7 +182,7 @@ export async function runPlanningPhase(
         tools: planTools
       }),
       {
-        disableThinking: false
+        phase: 'planning'
       }
     )
 
@@ -311,7 +308,7 @@ export async function runPlanningPhase(
         includeSchema: true
       }),
       {
-        disableThinking: false
+        phase: 'planning'
       }
     )
     if (!jsonModeResult) {
@@ -406,7 +403,7 @@ export async function runPlanningPhase(
       includeSchema: true
     }),
     {
-      disableThinking: false
+      phase: 'planning'
     }
   )
   if (!completionResult) {

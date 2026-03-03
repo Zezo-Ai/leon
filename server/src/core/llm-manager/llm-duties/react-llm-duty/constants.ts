@@ -66,6 +66,11 @@ IMPORTANT: Only provide required parameters. Do NOT fill in optional parameters 
 
 When the next action is based on uncertainty, assumptions, ambiguous selection, or could be irreversible, ask for confirmation before executing the tool.
 
+Human-in-the-loop continuation:
+- If required information is missing, return {"type":"final","answer":"..."} with one concise clarification question.
+- If the request context already includes a clarification reply, use it to continue THIS SAME step (do not restart the whole task, do not re-run already completed steps).
+- If the clarification reply means the user wants to stop/cancel, return {"type":"final","answer":"..."} confirming execution is stopped.
+
 tool_input must be a JSON string.
 
 ${FORMATTING_RULES}
@@ -82,6 +87,11 @@ export const RESOLVE_FUNCTION_SYSTEM_PROMPT = `You are selecting a function from
 You are given the available functions for a specific tool. Choose the most appropriate function for the current step and provide the tool_input.
 
 IMPORTANT: Only provide required parameters. Do NOT fill in optional parameters unless the user explicitly provided values for them.
+
+Human-in-the-loop continuation:
+- If required information is missing, return {"type":"final","answer":"..."} with one concise clarification question.
+- If the request context already includes a clarification reply, use it to continue THIS SAME step (do not restart the whole task, do not re-run already completed steps).
+- If the clarification reply means the user wants to stop/cancel, return {"type":"final","answer":"..."} confirming execution is stopped.
 
 tool_input must be a JSON string.
 
@@ -106,6 +116,7 @@ If recovery is possible:
 If recovery is not possible without user input:
 - Return an empty steps array and put a clear clarification request in summary.
 - The summary must be directly user-facing (ask the user the missing detail). Do not explain internal reasoning (avoid "I need to..." or "I cannot...").
+- If the user clarification indicates stop/cancel, do not return steps; return a direct stop message instead.
 
 Use only functions/tools listed in the catalog.
 
@@ -122,7 +133,7 @@ export const MAX_TOOL_FAILURE_RETRIES = 2
 export const REACT_TEMPERATURE = 0.2
 export const REACT_INFERENCE_TIMEOUT_MS = 120_000
 export const REACT_TIMEOUT_MAX_RETRIES = 1
-export const FINAL_ANSWER_RETRY_DURATION_MS = 60_000
+export const FINAL_ANSWER_RETRY_DURATION_MS = 75_000
 export const FINAL_ANSWER_MAX_RETRIES = 2
 export const TOOL_CALL_WAIT_NOTICE_DELAY_MS = 45_000
 export const TOOL_CALL_DIAGNOSIS_DELAY_MS = 90_000
