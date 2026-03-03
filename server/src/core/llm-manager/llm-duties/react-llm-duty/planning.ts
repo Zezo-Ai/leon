@@ -101,8 +101,8 @@ export async function runPlanningPhase(
   const planSystemPrompt = PERSONA.getCompactDutySystemPrompt(
     PLAN_SYSTEM_PROMPT,
     {
-      includePersonality: false,
-      includeMood: false
+      includePersonality: true,
+      includeMood: true
     }
   )
   const contextManifest = CONTEXT_MANAGER.getManifest()

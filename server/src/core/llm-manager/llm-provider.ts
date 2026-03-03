@@ -1712,10 +1712,20 @@ export default class LLMProvider {
       signal: abortController.signal
     }
 
-    const rawResultPromise = this.llmProvider.runChatCompletion(
-      promptOrChatHistory,
-      completionParamsWithAbort
-    )
+    let rawResultPromise: Promise<unknown>
+    try {
+      rawResultPromise = Promise.resolve(
+        this.llmProvider.runChatCompletion(
+          promptOrChatHistory,
+          completionParamsWithAbort
+        )
+      )
+    } catch (e) {
+      LogHelper.title('LLM Provider')
+      LogHelper.error(`Error to complete prompt: ${String(e)}`)
+      LogHelper.timeEnd(measureExecutionTimeLabel)
+      return null
+    }
     // Ensure late rejections after timeout/abort are consumed to avoid
     // unhandled promise rejection noise when we already moved to a retry.
     void rawResultPromise.catch(() => undefined)
@@ -1749,7 +1759,7 @@ export default class LLMProvider {
       }
 
       LogHelper.title('LLM Provider')
-      LogHelper.error(`Error to complete prompt: ${e}`)
+      LogHelper.error(`Error to complete prompt: ${String(e)}`)
       LogHelper.timeEnd(measureExecutionTimeLabel)
 
       const isTimeoutError = this.isTimeoutLikeError(e)
@@ -1803,7 +1813,10 @@ export default class LLMProvider {
         })
       }
 
-      if ((isTimeoutError || isRetryableNonTimeoutError) && remainingRetries > 0) {
+      if (
+        (isTimeoutError || isRetryableNonTimeoutError) &&
+        remainingRetries > 0
+      ) {
         if (!abortController.signal.aborted) {
           abortController.abort()
         }
@@ -1905,109 +1918,120 @@ export default class LLMProvider {
      * Normalize the completion result according to the provider
      */
     const isRemoteProvider = LLM_PROVIDER !== LLMProviders.Local
-    const remoteRawData =
-      isRemoteProvider &&
-      rawResult &&
-      typeof rawResult === 'object' &&
-      'data' in (rawResult as Record<string, unknown>)
-        ? (rawResult as AxiosResponse).data
-        : null
-    const remoteStreamCandidate =
-      remoteRawData !== null ? remoteRawData : rawResult
-    const providerReturnedStream =
-      isRemoteProvider && this.isReadableStream(remoteStreamCandidate)
-    const shouldUseRemoteStreaming =
-      isRemoteProvider && shouldStreamOutput && providerReturnedStream
+    let remoteRawData: unknown = null
+    let shouldUseRemoteStreaming = false
 
-    if (isRemoteProvider && shouldStreamOutput && !providerReturnedStream) {
-      LogHelper.title('LLM Provider')
-      LogHelper.debug(
-        `Streaming requested but provider returned non-stream payload; falling back to non-stream normalization (type=${typeof remoteStreamCandidate})`
-      )
-    }
+    try {
+      remoteRawData =
+        isRemoteProvider &&
+        rawResult &&
+        typeof rawResult === 'object' &&
+        'data' in (rawResult as Record<string, unknown>)
+          ? (rawResult as AxiosResponse).data
+          : null
+      const remoteStreamCandidate =
+        remoteRawData !== null ? remoteRawData : rawResult
+      const providerReturnedStream =
+        isRemoteProvider && this.isReadableStream(remoteStreamCandidate)
+      shouldUseRemoteStreaming =
+        isRemoteProvider && shouldStreamOutput && providerReturnedStream
 
-    if (shouldUseRemoteStreaming) {
-      const streamResponse =
-        remoteRawData !== null
-          ? (rawResult as AxiosResponse)
-          : ({
-              data: remoteStreamCandidate
-            } as AxiosResponse)
-      const normalized = await this.normalizeStreamingCompletionResult(
-        streamResponse,
-        completionParams
-      )
+      if (isRemoteProvider && shouldStreamOutput && !providerReturnedStream) {
+        LogHelper.title('LLM Provider')
+        LogHelper.debug(
+          `Streaming requested but provider returned non-stream payload; falling back to non-stream normalization (type=${typeof remoteStreamCandidate})`
+        )
+      }
 
-      rawResult = normalized.rawResult
-      usedInputTokens = normalized.usedInputTokens
-      usedOutputTokens = normalized.usedOutputTokens
-      toolCalls = normalized.toolCalls
-      reasoning = normalized.reasoning
-    } else if (LLM_PROVIDER === LLMProviders.Local) {
-      if (completionParams.session) {
-        const {
-          rawResult: result,
-          usedInputTokens: inputTokens,
-          usedOutputTokens: outputTokens
-        } = this.normalizeCompletionResultForLocalProvider(
-          rawResult as string,
+      if (shouldUseRemoteStreaming) {
+        const streamResponse =
+          remoteRawData !== null
+            ? (rawResult as AxiosResponse)
+            : ({
+                data: remoteStreamCandidate
+              } as AxiosResponse)
+        const normalized = await this.normalizeStreamingCompletionResult(
+          streamResponse,
           completionParams
         )
 
-        rawResult = result
-        usedInputTokens = inputTokens
-        usedOutputTokens = outputTokens
+        rawResult = normalized.rawResult
+        usedInputTokens = normalized.usedInputTokens
+        usedOutputTokens = normalized.usedOutputTokens
+        toolCalls = normalized.toolCalls
+        reasoning = normalized.reasoning
+      } else if (LLM_PROVIDER === LLMProviders.Local) {
+        if (completionParams.session) {
+          const {
+            rawResult: result,
+            usedInputTokens: inputTokens,
+            usedOutputTokens: outputTokens
+          } = this.normalizeCompletionResultForLocalProvider(
+            rawResult as string,
+            completionParams
+          )
+
+          rawResult = result
+          usedInputTokens = inputTokens
+          usedOutputTokens = outputTokens
+        }
+      } else if (
+        [
+          LLMProviders.Groq,
+          LLMProviders.ZAI,
+          LLMProviders.Anthropic,
+          LLMProviders.MoonshotAI,
+          LLMProviders.Cerebras,
+          LLMProviders.HuggingFace
+        ].includes(LLM_PROVIDER as LLMProviders)
+      ) {
+        const normalized = this.normalizeCompletionResultForOpenAICompatibleProvider(
+          rawResult as AxiosResponse
+        )
+
+        rawResult = normalized.rawResult
+        usedInputTokens = normalized.usedInputTokens
+        usedOutputTokens = normalized.usedOutputTokens
+        toolCalls = normalized.toolCalls
+        reasoning = normalized.reasoning
+      } else if (
+        [LLMProviders.OpenAI, LLMProviders.OpenRouter].includes(
+          LLM_PROVIDER as LLMProviders
+        )
+      ) {
+        const normalized = this.normalizeCompletionResultForOpenAIResponsesProvider(
+          rawResult as AxiosResponse
+        )
+
+        rawResult = normalized.rawResult
+        usedInputTokens = normalized.usedInputTokens
+        usedOutputTokens = normalized.usedOutputTokens
+        toolCalls = normalized.toolCalls
+      } else {
+        LogHelper.error(`The LLM provider "${LLM_PROVIDER}" is not yet supported`)
+        return null
       }
-    } else if (
-      [
-        LLMProviders.Groq,
-        LLMProviders.ZAI,
-        LLMProviders.Anthropic,
-        LLMProviders.MoonshotAI,
-        LLMProviders.Cerebras,
-        LLMProviders.HuggingFace
-      ].includes(LLM_PROVIDER as LLMProviders)
-    ) {
-      const normalized = this.normalizeCompletionResultForOpenAICompatibleProvider(
-        rawResult as AxiosResponse
-      )
 
-      rawResult = normalized.rawResult
-      usedInputTokens = normalized.usedInputTokens
-      usedOutputTokens = normalized.usedOutputTokens
-      toolCalls = normalized.toolCalls
-      reasoning = normalized.reasoning
-    } else if (
-      [LLMProviders.OpenAI, LLMProviders.OpenRouter].includes(
-        LLM_PROVIDER as LLMProviders
-      )
-    ) {
-      const normalized = this.normalizeCompletionResultForOpenAIResponsesProvider(
-        rawResult as AxiosResponse
-      )
+      rawResultString = rawResult as string
 
-      rawResult = normalized.rawResult
-      usedInputTokens = normalized.usedInputTokens
-      usedOutputTokens = normalized.usedOutputTokens
-      toolCalls = normalized.toolCalls
-    } else {
-      LogHelper.error(`The LLM provider "${LLM_PROVIDER}" is not yet supported`)
-      return null
-    }
+      if (typeof rawResult === 'string') {
+        rawResultString = this.cleanUpResult(rawResultString)
+      }
 
-    rawResultString = rawResult as string
+      if (reasoning && reasoning.trim()) {
+        LogHelper.title('LLM Provider')
+        LogHelper.debug(`Reasoning:\n${this.truncateForLog(reasoning)}`)
 
-    if (typeof rawResult === 'string') {
-      rawResultString = this.cleanUpResult(rawResultString)
-    }
-
-    if (reasoning && reasoning.trim()) {
+        if (!shouldUseRemoteStreaming) {
+          completionParams.onReasoningToken?.(reasoning)
+        }
+      }
+    } catch (e) {
       LogHelper.title('LLM Provider')
-      LogHelper.debug(`Reasoning:\n${this.truncateForLog(reasoning)}`)
+      LogHelper.error(`Failed to normalize completion result: ${String(e)}`)
+      LogHelper.timeEnd(measureExecutionTimeLabel)
 
-      if (!shouldUseRemoteStreaming) {
-        completionParams.onReasoningToken?.(reasoning)
-      }
+      return null
     }
 
     // Guard against silent empty provider responses which otherwise trigger
