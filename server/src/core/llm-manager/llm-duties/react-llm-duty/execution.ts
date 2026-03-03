@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 
 import { LogHelper } from '@/helpers/log-helper'
 import {
-  PERSONA,
   TOOLKIT_REGISTRY,
   TOOL_EXECUTOR
 } from '@/core'
@@ -43,6 +42,7 @@ import {
   buildPreviouslyUsedInputsSection,
   buildToolkitContextSection
 } from './phase-helpers'
+import { buildPhaseSystemPrompt } from './phase-policy'
 
 async function buildExecutionMemorySection(
   _caller: LLMCaller,
@@ -309,12 +309,9 @@ async function resolveToolFunctionWithNativeTools(
     toolkitId
   )
   const historySection = formatExecutionHistory(executionHistory)
-  const resolveSystemPrompt = PERSONA.getCompactDutySystemPrompt(
+  const resolveSystemPrompt = buildPhaseSystemPrompt(
     RESOLVE_FUNCTION_SYSTEM_PROMPT,
-    {
-      includePersonality: false,
-      includeMood: false
-    }
+    'execution'
   )
 
   const tools: OpenAITool[] = Object.entries(toolFunctions).map(
@@ -348,7 +345,7 @@ async function resolveToolFunctionWithNativeTools(
       tools
     }),
     {
-      disableThinking: true
+      phase: 'execution'
     }
   )
 
@@ -489,12 +486,9 @@ async function resolveToolFunctionWithJSONMode(
     .join('\n')
 
   const historySection = formatExecutionHistory(executionHistory)
-  const resolveSystemPrompt = PERSONA.getCompactDutySystemPrompt(
+  const resolveSystemPrompt = buildPhaseSystemPrompt(
     RESOLVE_FUNCTION_SYSTEM_PROMPT,
-    {
-      includePersonality: false,
-      includeMood: false
-    }
+    'execution'
   )
   const prompt = `Tool: ${effectiveToolkitId}.${effectiveToolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\nAvailable Functions:\n${functionsSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide tool_input.`
 
@@ -551,7 +545,7 @@ async function resolveToolFunctionWithJSONMode(
       schema: resolveSchema
     }),
     {
-      disableThinking: true
+      phase: 'execution'
     }
   )
   const parsed = parseOutput(completionResult?.output)
@@ -684,12 +678,9 @@ async function executeFunctionWithNativeTools(
     toolkitId
   )
   const historySection = formatExecutionHistory(executionHistory)
-  const executeSystemPrompt = PERSONA.getCompactDutySystemPrompt(
+  const executeSystemPrompt = buildPhaseSystemPrompt(
     EXECUTE_SYSTEM_PROMPT,
-    {
-      includePersonality: false,
-      includeMood: false
-    }
+    'execution'
   )
 
   const tool: OpenAITool = {
@@ -810,7 +801,7 @@ async function executeFunctionWithNativeTools(
         tools: [tool]
       }),
       {
-        disableThinking: true
+        phase: 'execution'
       }
     )
 
@@ -944,12 +935,9 @@ async function executeFunctionWithJSONMode(
     toolkitId
   )
   const historySection = formatExecutionHistory(executionHistory)
-  const executeSystemPrompt = PERSONA.getCompactDutySystemPrompt(
+  const executeSystemPrompt = buildPhaseSystemPrompt(
     EXECUTE_SYSTEM_PROMPT,
-    {
-      includePersonality: false,
-      includeMood: false
-    }
+    'execution'
   )
 
   const executeSchema = {
@@ -1017,7 +1005,7 @@ async function executeFunctionWithJSONMode(
         schema: executeSchema
       }),
       {
-        disableThinking: true
+        phase: 'execution'
       }
     )
     if (!completionResult) {

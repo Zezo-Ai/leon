@@ -1,6 +1,5 @@
 import { LogHelper } from '@/helpers/log-helper'
 import {
-  PERSONA,
   CONTEXT_MANAGER
 } from '@/core'
 import type { OpenAITool } from '@/core/llm-manager/types'
@@ -31,6 +30,7 @@ import {
   PLAN_RESPONSE_SCHEMA,
   PLAN_STEP_SCHEMA
 } from './plan-contract'
+import { buildPhaseSystemPrompt } from './phase-policy'
 
 function buildRecoveryPromptSections(params: {
   prompt: string
@@ -90,12 +90,9 @@ export async function runRecoveryPlanningPhase(
     catalog.mode === 'tool'
       ? '\nNote: The catalog lists tools, not individual functions. Use the format toolkit_id.tool_id in your plan steps.'
       : ''
-  const recoverySystemPrompt = PERSONA.getCompactDutySystemPrompt(
+  const recoverySystemPrompt = buildPhaseSystemPrompt(
     RECOVERY_PLAN_SYSTEM_PROMPT,
-    {
-      includePersonality: false,
-      includeMood: false
-    }
+    'recovery'
   )
   const contextManifest = CONTEXT_MANAGER.getManifest()
   const failedExecution = executionHistory[executionHistory.length - 1]
@@ -200,7 +197,7 @@ Create a revised plan from this point to complete the user request.`
         tools: planTools
       }),
       {
-        disableThinking: false
+        phase: 'recovery'
       }
     )
 
@@ -292,7 +289,7 @@ Create a revised plan from this point to complete the user request.`
       includeSchema: true
     }),
     {
-      disableThinking: false
+      phase: 'recovery'
     }
   )
   if (!jsonModeResult) {

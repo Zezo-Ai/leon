@@ -51,9 +51,14 @@ import type {
   TrackedPlanStep,
   PlanStepStatus,
   LLMCaller,
-  PromptLogSection
+  PromptLogSection,
+  LLMCallOptions
 } from './react-llm-duty/types'
 import { widgetId, emitPlanWidget } from './react-llm-duty/plan-widget'
+import {
+  getPhasePolicy,
+  formatPhasePolicyForLog
+} from './react-llm-duty/phase-policy'
 import {
   buildCatalog,
   runPlanningPhase,
@@ -748,21 +753,31 @@ export class ReActLLMDuty extends LLMDuty {
     schema: Record<string, unknown>,
     history?: MessageLog[],
     promptSections?: PromptLogSection[],
-    options?: { disableThinking?: boolean }
+    options?: LLMCallOptions
   ): Promise<{
     output: unknown
     usedInputTokens?: number
     usedOutputTokens?: number
     reasoning?: string
   } | null> {
-    const reasoningGenerationId =
-      this.reasoningGenerationId || StringHelper.random(6, { onlyLetters: true })
-    const shouldStream = LLM_PROVIDER_NAME !== LLMProviders.Local
+    const phase = options?.phase ?? 'execution'
+    const phasePolicy = getPhasePolicy(phase)
+    const disableThinking =
+      options?.disableThinking ?? !phasePolicy.thinkingEnabled
+    const shouldEmitReasoning =
+      options?.emitReasoning ?? phasePolicy.emitReasoning
+    const shouldStream =
+      (options?.streamToProvider ?? phasePolicy.streamToProvider) &&
+      LLM_PROVIDER_NAME !== LLMProviders.Local
+    const reasoningGenerationId = shouldEmitReasoning
+      ? this.reasoningGenerationId || StringHelper.random(6, { onlyLetters: true })
+      : null
 
     this.logPromptDispatch({
       channel: 'json',
       prompt,
       systemPrompt,
+      phasePolicySummary: formatPhasePolicyForLog(phase, phasePolicy),
       shouldStream,
       schema,
       ...(promptSections ? { promptSections } : {}),
@@ -777,10 +792,14 @@ export class ReActLLMDuty extends LLMDuty {
       timeout: REACT_INFERENCE_TIMEOUT_MS,
       maxRetries: REACT_TIMEOUT_MAX_RETRIES,
       shouldStream,
-      onReasoningToken: (reasoningChunk: string): void => {
-        this.emitReasoningToken(reasoningChunk, reasoningGenerationId)
-      },
-      ...(options?.disableThinking ? { disableThinking: true } : {}),
+      ...(shouldEmitReasoning && reasoningGenerationId
+        ? {
+            onReasoningToken: (reasoningChunk: string): void => {
+              this.emitReasoningToken(reasoningChunk, reasoningGenerationId)
+            }
+          }
+        : {}),
+      ...(disableThinking ? { disableThinking: true } : {}),
       ...(history ? { history } : {})
     }
 
@@ -812,34 +831,43 @@ export class ReActLLMDuty extends LLMDuty {
     prompt: string,
     systemPrompt: string,
     history?: MessageLog[],
-    shouldStream = false,
+    shouldStream?: boolean,
     promptSections?: PromptLogSection[],
-    options?: { disableThinking?: boolean }
+    options?: LLMCallOptions
   ): Promise<{
     output: string
     usedInputTokens?: number
     usedOutputTokens?: number
     reasoning?: string
   } | null> {
+    const phase = options?.phase ?? 'execution'
+    const phasePolicy = getPhasePolicy(phase)
+    const disableThinking =
+      options?.disableThinking ?? !phasePolicy.thinkingEnabled
+    const shouldEmitReasoning =
+      options?.emitReasoning ?? phasePolicy.emitReasoning
+    const shouldStreamToUser =
+      options?.streamToUser ?? shouldStream ?? phasePolicy.streamToUser
     const shouldStreamEffective =
-      shouldStream || LLM_PROVIDER_NAME !== LLMProviders.Local
+      (options?.streamToProvider ?? phasePolicy.streamToProvider) &&
+      LLM_PROVIDER_NAME !== LLMProviders.Local
+    const reasoningGenerationId = shouldEmitReasoning
+      ? this.reasoningGenerationId || StringHelper.random(6, { onlyLetters: true })
+      : null
 
     this.logPromptDispatch({
       channel: 'text',
       prompt,
       systemPrompt,
+      phasePolicySummary: formatPhasePolicyForLog(phase, phasePolicy),
       shouldStream: shouldStreamEffective,
       ...(promptSections ? { promptSections } : {}),
       ...(history ? { history } : {})
     })
 
-    const generationId = shouldStream
+    const generationId = shouldStreamToUser
       ? StringHelper.random(6, { onlyLetters: true })
       : null
-    const reasoningGenerationId =
-      this.reasoningGenerationId || generationId || StringHelper.random(6, {
-        onlyLetters: true
-      })
 
     const completionParams = {
       dutyType: LLMDuties.ReAct,
@@ -848,11 +876,15 @@ export class ReActLLMDuty extends LLMDuty {
       timeout: REACT_INFERENCE_TIMEOUT_MS,
       maxRetries: REACT_TIMEOUT_MAX_RETRIES,
       shouldStream: shouldStreamEffective,
-      onReasoningToken: (reasoningChunk: string): void => {
-        this.emitReasoningToken(reasoningChunk, reasoningGenerationId)
-      },
-      ...(options?.disableThinking ? { disableThinking: true } : {}),
-      ...(shouldStream
+      ...(shouldEmitReasoning && reasoningGenerationId
+        ? {
+            onReasoningToken: (reasoningChunk: string): void => {
+              this.emitReasoningToken(reasoningChunk, reasoningGenerationId)
+            }
+          }
+        : {}),
+      ...(disableThinking ? { disableThinking: true } : {}),
+      ...(shouldStreamToUser
         ? {
             onToken: (chunk: unknown): void => {
               const token =
@@ -926,9 +958,9 @@ export class ReActLLMDuty extends LLMDuty {
     tools: OpenAITool[],
     toolChoice: OpenAIToolChoice,
     history?: MessageLog[],
-    shouldStreamToUser = false,
+    shouldStreamToUser?: boolean,
     promptSections?: PromptLogSection[],
-    options?: { disableThinking?: boolean }
+    options?: LLMCallOptions
   ): Promise<{
     toolCall?: { functionName: string, arguments: string }
     unexpectedToolCall?: { functionName: string, arguments: string }
@@ -937,8 +969,17 @@ export class ReActLLMDuty extends LLMDuty {
     usedOutputTokens?: number
     reasoning?: string
   } | null> {
+    const phase = options?.phase ?? 'execution'
+    const phasePolicy = getPhasePolicy(phase)
+    const disableThinking =
+      options?.disableThinking ?? !phasePolicy.thinkingEnabled
+    const shouldEmitReasoning =
+      options?.emitReasoning ?? phasePolicy.emitReasoning
+    const shouldStreamToUserEffective =
+      options?.streamToUser ?? shouldStreamToUser ?? phasePolicy.streamToUser
     const shouldStreamEffective =
-      shouldStreamToUser || LLM_PROVIDER_NAME !== LLMProviders.Local
+      (options?.streamToProvider ?? phasePolicy.streamToProvider) &&
+      LLM_PROVIDER_NAME !== LLMProviders.Local
 
     const effectiveToolChoice: OpenAIToolChoice | undefined =
       tools.length <= 1
@@ -952,13 +993,14 @@ export class ReActLLMDuty extends LLMDuty {
       effectiveToolChoice === undefined
         ? 'omitted'
         : effectiveToolChoice
-    const generationId = shouldStreamToUser
+    const generationId = shouldStreamToUserEffective
       ? StringHelper.random(6, { onlyLetters: true })
       : null
-    const reasoningGenerationId =
-      this.reasoningGenerationId || generationId || StringHelper.random(6, {
-        onlyLetters: true
-      })
+    const reasoningGenerationId = shouldEmitReasoning
+      ? this.reasoningGenerationId || generationId || StringHelper.random(6, {
+          onlyLetters: true
+        })
+      : null
 
     LogHelper.title(this.name)
     LogHelper.debug(
@@ -972,6 +1014,7 @@ export class ReActLLMDuty extends LLMDuty {
       ...(effectiveToolChoice !== undefined
         ? { toolChoice: effectiveToolChoice }
         : {}),
+      phasePolicySummary: formatPhasePolicyForLog(phase, phasePolicy),
       shouldStream: shouldStreamEffective,
       ...(promptSections ? { promptSections } : {}),
       ...(history ? { history } : {})
@@ -1025,11 +1068,15 @@ export class ReActLLMDuty extends LLMDuty {
         timeout: REACT_INFERENCE_TIMEOUT_MS,
         maxRetries: REACT_TIMEOUT_MAX_RETRIES,
         shouldStream: shouldStreamEffective,
-        onReasoningToken: (reasoningChunk: string): void => {
-          this.emitReasoningToken(reasoningChunk, reasoningGenerationId)
-        },
-        ...(options?.disableThinking ? { disableThinking: true } : {}),
-        ...(shouldStreamToUser
+        ...(shouldEmitReasoning && reasoningGenerationId
+          ? {
+              onReasoningToken: (reasoningChunk: string): void => {
+                this.emitReasoningToken(reasoningChunk, reasoningGenerationId)
+              }
+            }
+          : {}),
+        ...(disableThinking ? { disableThinking: true } : {}),
+        ...(shouldStreamToUserEffective
           ? {
               onToken: (chunk: unknown): void => {
                 const token =
@@ -1240,6 +1287,7 @@ export class ReActLLMDuty extends LLMDuty {
     channel: 'json' | 'text' | 'tools'
     prompt: string
     systemPrompt: string
+    phasePolicySummary?: string
     history?: MessageLog[]
     schema?: Record<string, unknown>
     tools?: OpenAITool[]
@@ -1260,6 +1308,8 @@ export class ReActLLMDuty extends LLMDuty {
     LogHelper.debug(
       `Prompt dispatch [${params.channel}] est_tokens=${totalEstimated} (prompt=${promptTokens}, system=${systemTokens}, history=${historyTokens}${schemaTokens > 0 ? `, schema=${schemaTokens}` : ''})${
         params.shouldStream === true ? ' | stream=true' : ''
+      }${
+        params.phasePolicySummary ? ` | ${params.phasePolicySummary}` : ''
       }${
         params.tools
           ? ` | tools=${params.tools.length} | tool_choice=${

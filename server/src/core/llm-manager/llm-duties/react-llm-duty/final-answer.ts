@@ -1,5 +1,4 @@
 import { LogHelper } from '@/helpers/log-helper'
-import { PERSONA } from '@/core'
 import type { OpenAITool } from '@/core/llm-manager/types'
 
 import {
@@ -14,6 +13,7 @@ import type {
   PromptLogSection
 } from './types'
 import { formatExecutionHistory, parseOutput, parseToolCallArguments } from './utils'
+import { buildPhaseSystemPrompt } from './phase-policy'
 
 export async function runFinalAnswerPhase(
   caller: LLMCaller,
@@ -23,7 +23,7 @@ export async function runFinalAnswerPhase(
   LogHelper.debug('Synthesizing final answer from execution history...')
 
   const historySection = formatExecutionHistory(executionHistory)
-  const systemPrompt = PERSONA.getCompactDutySystemPrompt(
+  const systemPrompt = buildPhaseSystemPrompt(
     `You are synthesizing a final answer from tool execution results. Provide a clear, helpful, and complete response to the user based on the observations collected. Always include relevant details from the tool results.
 
 Important:
@@ -33,10 +33,7 @@ Important:
 - Return a completed answer based only on available observations.
 
 ${FORMATTING_RULES}`,
-    {
-      includePersonality: true,
-      includeMood: true
-    }
+    'final_answer'
   )
   const prompt = `${historySection}\n\nUser Request: "${caller.input}"\n\nBased on the execution results above, provide a final answer to the user.`
 
@@ -80,7 +77,7 @@ ${FORMATTING_RULES}`,
         true,
         buildFinalAnswerPromptSections(prompt, systemPrompt),
         {
-          disableThinking: true
+          phase: 'final_answer'
         }
       )
 
@@ -125,7 +122,7 @@ ${FORMATTING_RULES}`,
             }
           ]),
           {
-            disableThinking: true
+            phase: 'final_answer'
           }
         )
 
@@ -170,7 +167,7 @@ ${FORMATTING_RULES}`,
           }
         ]),
         {
-          disableThinking: true
+          phase: 'final_answer'
         }
       )
 
