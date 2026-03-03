@@ -10,6 +10,7 @@
 ## ReAct Loop
 - Planning phase chooses either a direct answer or an ordered tool plan with short user-facing step labels.
 - Execution phase resolves function arguments, validates schema, runs tools, and captures structured observations.
+- Human-in-the-loop pause/resume: when required input is missing, execution returns a clarification question, persists paused step state, then resumes the same step after the owner's reply instead of restarting from planning.
 - Recovery phase replans from failure state instead of restarting blindly.
 - Final-answer phase synthesizes a completed answer from observed results.
 - Persona mood and emotional style are injected into compact ReAct prompts so planning, execution, and final responses stay behaviorally consistent.
