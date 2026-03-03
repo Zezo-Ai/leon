@@ -6,6 +6,7 @@ import { createMoonshotAI } from '@ai-sdk/moonshotai'
 import { createHuggingFace } from '@ai-sdk/huggingface'
 import { createCerebras } from '@ai-sdk/cerebras'
 import { createGroq } from '@ai-sdk/groq'
+import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 
 import type {
   CompletionParams,
@@ -18,6 +19,7 @@ import { LogHelper } from '@/helpers/log-helper'
 
 type AISDKFlavor =
   | 'openai-responses'
+  | 'openrouter'
   | 'openai-compatible'
   | 'anthropic'
   | 'moonshotai'
@@ -116,6 +118,17 @@ export default class AISDKRemoteLLMProvider {
       })
 
       return provider(this.model)
+    }
+
+    if (this.config.flavor === 'openrouter') {
+      const provider = createOpenRouter({
+        apiKey,
+        baseURL: this.config.baseURL,
+        compatibility: 'strict',
+        ...(headers && Object.keys(headers).length > 0 ? { headers } : {})
+      })
+
+      return provider.chat(this.model)
     }
 
     if (this.config.flavor === 'anthropic') {
@@ -352,8 +365,8 @@ export default class AISDKRemoteLLMProvider {
           reasoningEffort: 'low'
         }
       } else {
-        // For Responses API models (OpenAI/OpenRouter via createOpenAI), request
-        // reasoning summaries so planning/recovery reasoning is visible in stream.
+        // For OpenAI Responses models, request reasoning summaries so planning
+        // and recovery reasoning is visible in stream.
         providerOptions['openai'] = {
           reasoningSummary: 'detailed'
         }

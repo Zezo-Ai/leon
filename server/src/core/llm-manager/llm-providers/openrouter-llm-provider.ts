@@ -10,7 +10,7 @@ export default class OpenRouterLLMProvider extends AISDKRemoteLLMProvider {
       modelEnv: 'LEON_OPENROUTER_MODEL',
       defaultModel: 'openrouter/auto',
       baseURL: 'https://openrouter.ai/api/v1',
-      flavor: 'openai-responses'
+      flavor: 'openrouter'
     })
   }
 }
