@@ -77,6 +77,8 @@
     "kill": "pkill -f node && pkill -f leon-tcp-server && pkill -f pt_main_thread"
   },
   "dependencies": {
+    "@ai-sdk/openai": "3.0.39",
+    "@ai-sdk/openai-compatible": "2.0.33",
     "@aws-sdk/client-polly": "3.18.0",
     "@fastify/static": "6.12.0",
     "@ffprobe-installer/ffprobe": "2.1.2",
@@ -88,10 +90,10 @@
     "@nlpjs/core-loader": "4.22.7",
     "@nlpjs/lang-all": "4.22.12",
     "@nlpjs/nlp": "4.22.17",
-    "@openrouter/sdk": "0.9.11",
     "@segment/ajv-human-errors": "2.11.3",
     "@sinclair/typebox": "0.31.23",
     "@tobilu/qmd": "1.0.7",
+    "ai": "6.0.108",
     "ajv": "8.12.0",
     "ajv-formats": "2.1.1",
     "archiver": "6.0.1",
@@ -110,7 +112,6 @@
     "ipull": "3.9.2",
     "node-llama-cpp": "3.12.1",
     "node-wav": "0.0.2",
-    "openai": "6.25.0",
     "os-name": "4.0.1",
     "pretty-bytes": "5.6.0",
     "ps-list": "7.2.0",

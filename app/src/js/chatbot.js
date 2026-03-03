@@ -180,20 +180,11 @@ export default class Chatbot {
       return null
     }
 
-    const reasoningBlocks = this.feed?.querySelectorAll(
-      '.reasoning-block-container'
-    )
-    if (!reasoningBlocks || reasoningBlocks.length === 0) {
-      return null
-    }
-
-    const isThinkingPhase = JSON.stringify(widgetPayload).includes('Thinking...')
-    if (isThinkingPhase) {
-      return reasoningBlocks[0]
-    }
-
-    const lastReasoningBlock = reasoningBlocks[reasoningBlocks.length - 1]
-    return lastReasoningBlock?.nextSibling || null
+    // Always append new plan widgets as new bubbles.
+    // Widget updates are handled via replaceMessageId targeting the same
+    // messageId, so insertion-point heuristics are unnecessary and can cause
+    // visual reuse across turns.
+    return null
   }
 
   loadFeed() {
@@ -545,10 +536,7 @@ export default class Chatbot {
       string: widgetString,
       save: false,
       messageId: replaceMessageId,
-      beforeElement:
-        newData?.widget === 'PlanWidget'
-          ? null
-          : nextSibling
+      beforeElement: nextSibling
     })
 
     /**
