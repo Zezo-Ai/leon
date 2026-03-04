@@ -284,15 +284,11 @@ export async function runPlanningPhase(
         shouldTreatPlanningTextAsFinalAnswer(textFallback)
       ) {
         LogHelper.debug(
-          'Planning: treating plain text fallback as final conversational answer (no JSON fallback)'
+          'Planning: plain text fallback received without tool call; skipping direct final answer and attempting JSON fallback first'
         )
-        return {
-          type: 'final',
-          answer: stripInlineToolMarkup(textFallback) || textFallback
-        }
+      } else {
+        LogHelper.debug('Planning: no tool call returned, falling back to JSON mode')
       }
-
-      LogHelper.debug('Planning: no tool call returned, falling back to JSON mode')
     }
 
     // Final fallback: JSON mode planning
