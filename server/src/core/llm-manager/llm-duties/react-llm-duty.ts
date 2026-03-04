@@ -212,6 +212,7 @@ export class ReActLLMDuty extends LLMDuty {
       let pendingSteps: PlanStep[] = []
       let trackedSteps: TrackedPlanStep[] = []
       let currentStepIndex = 0
+      let currentExecutingFunction: string | null = null
 
       if (continuation) {
         pendingSteps = continuation.state.pendingSteps.map((step) => ({
@@ -339,6 +340,15 @@ export class ReActLLMDuty extends LLMDuty {
       while (pendingSteps.length > 0 && executionCount < MAX_EXECUTIONS) {
         const currentStep = pendingSteps.shift()!
         executionCount += 1
+        currentExecutingFunction = currentStep.function
+
+        emitPlanWidget(
+          trackedSteps,
+          null,
+          planWidgetIdValue,
+          true,
+          currentExecutingFunction
+        )
 
         LogHelper.title(this.name)
         LogHelper.debug(
@@ -385,7 +395,14 @@ export class ReActLLMDuty extends LLMDuty {
               executionCount,
               createdAt: Date.now()
             })
-            emitPlanWidget(pausedTrackedSteps, null, planWidgetIdValue, true)
+            currentExecutingFunction = null
+            emitPlanWidget(
+              pausedTrackedSteps,
+              null,
+              planWidgetIdValue,
+              true,
+              currentExecutingFunction
+            )
 
             LogHelper.debug(
               `Execution paused for clarification at step "${currentStep.label}"`
@@ -397,7 +414,14 @@ export class ReActLLMDuty extends LLMDuty {
           for (const ts of trackedSteps) {
             ts.status = 'completed'
           }
-          emitPlanWidget(trackedSteps, null, planWidgetIdValue, true)
+          currentExecutingFunction = null
+          emitPlanWidget(
+            trackedSteps,
+            null,
+            planWidgetIdValue,
+            true,
+            currentExecutingFunction
+          )
 
           return this.makeDutyResult(stepResult.answer)
         }
@@ -431,7 +455,14 @@ export class ReActLLMDuty extends LLMDuty {
           trackedSteps = [...completedSteps, ...newSteps]
           currentStepIndex = completedSteps.length
 
-          emitPlanWidget(trackedSteps, null, planWidgetIdValue, true)
+          currentExecutingFunction = null
+          emitPlanWidget(
+            trackedSteps,
+            null,
+            planWidgetIdValue,
+            true,
+            currentExecutingFunction
+          )
           continue
         }
 
@@ -460,7 +491,14 @@ export class ReActLLMDuty extends LLMDuty {
         if (nextTrackedIndex < trackedSteps.length) {
           trackedSteps[nextTrackedIndex]!.status = 'in_progress'
         }
-        emitPlanWidget(trackedSteps, currentStepIndex, planWidgetIdValue, true)
+        currentExecutingFunction = null
+        emitPlanWidget(
+          trackedSteps,
+          currentStepIndex,
+          planWidgetIdValue,
+          true,
+          currentExecutingFunction
+        )
         currentStepIndex = nextTrackedIndex
 
         // Check for short-circuit final answer from tool result
@@ -472,7 +510,14 @@ export class ReActLLMDuty extends LLMDuty {
           for (const ts of trackedSteps) {
             ts.status = 'completed'
           }
-          emitPlanWidget(trackedSteps, null, planWidgetIdValue, true)
+          currentExecutingFunction = null
+          emitPlanWidget(
+            trackedSteps,
+            null,
+            planWidgetIdValue,
+            true,
+            currentExecutingFunction
+          )
 
           return this.makeDutyResult(stepResult.finalAnswer)
         }
@@ -539,7 +584,14 @@ export class ReActLLMDuty extends LLMDuty {
                 executionCount,
                 createdAt: Date.now()
               })
-              emitPlanWidget(pausedTrackedSteps, null, planWidgetIdValue, true)
+              currentExecutingFunction = null
+              emitPlanWidget(
+                pausedTrackedSteps,
+                null,
+                planWidgetIdValue,
+                true,
+                currentExecutingFunction
+              )
 
               LogHelper.debug(
                 `Recovery execution paused for clarification at step "${currentStep.label}"`
@@ -583,7 +635,14 @@ export class ReActLLMDuty extends LLMDuty {
             trackedSteps = [...completedSteps, ...newSteps]
             currentStepIndex = completedSteps.length
 
-            emitPlanWidget(trackedSteps, null, planWidgetIdValue, true)
+            currentExecutingFunction = null
+            emitPlanWidget(
+              trackedSteps,
+              null,
+              planWidgetIdValue,
+              true,
+              currentExecutingFunction
+            )
           }
         }
       }
@@ -596,7 +655,14 @@ export class ReActLLMDuty extends LLMDuty {
       for (const ts of trackedSteps) {
         ts.status = 'completed'
       }
-      emitPlanWidget(trackedSteps, null, planWidgetIdValue, true)
+      currentExecutingFunction = null
+      emitPlanWidget(
+        trackedSteps,
+        null,
+        planWidgetIdValue,
+        true,
+        currentExecutingFunction
+      )
 
       if (executionHistory.length === 0) {
         LogHelper.debug('No executions completed, returning fallback')

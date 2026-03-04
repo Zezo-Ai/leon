@@ -4,6 +4,7 @@
   "toolkit_id": "music_audio",
   "name": "Qwen3-TTS",
   "description": "A tool for text-to-speech, voice cloning, and voice design using Qwen3-TTS models.",
+  "icon_name": "qwen-ai",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -68,27 +69,67 @@
               {
                 "type": "object",
                 "properties": {
-                  "text": { "type": "string" },
-                  "target_language": { "type": "string" },
-                  "language": { "type": "string" },
-                  "audio_path": { "type": "string" },
-                  "output_path": { "type": "string" },
-                  "speaker_reference_path": { "type": "string" },
-                  "reference_audio_path": { "type": "string" },
-                  "reference_text": { "type": "string" },
-                  "x_vector_only_mode": { "type": "boolean" },
-                  "max_new_tokens": { "type": "number" },
-                  "do_sample": { "type": "boolean" },
-                  "top_k": { "type": "number" },
-                  "top_p": { "type": "number" },
-                  "temperature": { "type": "number" },
-                  "repetition_penalty": { "type": "number" },
-                  "subtalker_dosample": { "type": "boolean" },
-                  "subtalker_top_k": { "type": "number" },
-                  "subtalker_top_p": { "type": "number" },
-                  "subtalker_temperature": { "type": "number" }
+                  "text": {
+                    "type": "string"
+                  },
+                  "target_language": {
+                    "type": "string"
+                  },
+                  "language": {
+                    "type": "string"
+                  },
+                  "audio_path": {
+                    "type": "string"
+                  },
+                  "output_path": {
+                    "type": "string"
+                  },
+                  "speaker_reference_path": {
+                    "type": "string"
+                  },
+                  "reference_audio_path": {
+                    "type": "string"
+                  },
+                  "reference_text": {
+                    "type": "string"
+                  },
+                  "x_vector_only_mode": {
+                    "type": "boolean"
+                  },
+                  "max_new_tokens": {
+                    "type": "number"
+                  },
+                  "do_sample": {
+                    "type": "boolean"
+                  },
+                  "top_k": {
+                    "type": "number"
+                  },
+                  "top_p": {
+                    "type": "number"
+                  },
+                  "temperature": {
+                    "type": "number"
+                  },
+                  "repetition_penalty": {
+                    "type": "number"
+                  },
+                  "subtalker_dosample": {
+                    "type": "boolean"
+                  },
+                  "subtalker_top_k": {
+                    "type": "number"
+                  },
+                  "subtalker_top_p": {
+                    "type": "number"
+                  },
+                  "subtalker_temperature": {
+                    "type": "number"
+                  }
                 },
-                "required": ["text"],
+                "required": [
+                  "text"
+                ],
                 "additionalProperties": true
               },
               {
@@ -96,37 +137,85 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "text": { "type": "string" },
-                    "target_language": { "type": "string" },
-                    "language": { "type": "string" },
-                    "audio_path": { "type": "string" },
-                    "output_path": { "type": "string" },
-                    "speaker_reference_path": { "type": "string" },
-                    "reference_audio_path": { "type": "string" },
-                    "reference_text": { "type": "string" },
-                    "x_vector_only_mode": { "type": "boolean" },
-                    "max_new_tokens": { "type": "number" },
-                    "do_sample": { "type": "boolean" },
-                    "top_k": { "type": "number" },
-                    "top_p": { "type": "number" },
-                    "temperature": { "type": "number" },
-                    "repetition_penalty": { "type": "number" },
-                    "subtalker_dosample": { "type": "boolean" },
-                    "subtalker_top_k": { "type": "number" },
-                    "subtalker_top_p": { "type": "number" },
-                    "subtalker_temperature": { "type": "number" }
+                    "text": {
+                      "type": "string"
+                    },
+                    "target_language": {
+                      "type": "string"
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "audio_path": {
+                      "type": "string"
+                    },
+                    "output_path": {
+                      "type": "string"
+                    },
+                    "speaker_reference_path": {
+                      "type": "string"
+                    },
+                    "reference_audio_path": {
+                      "type": "string"
+                    },
+                    "reference_text": {
+                      "type": "string"
+                    },
+                    "x_vector_only_mode": {
+                      "type": "boolean"
+                    },
+                    "max_new_tokens": {
+                      "type": "number"
+                    },
+                    "do_sample": {
+                      "type": "boolean"
+                    },
+                    "top_k": {
+                      "type": "number"
+                    },
+                    "top_p": {
+                      "type": "number"
+                    },
+                    "temperature": {
+                      "type": "number"
+                    },
+                    "repetition_penalty": {
+                      "type": "number"
+                    },
+                    "subtalker_dosample": {
+                      "type": "boolean"
+                    },
+                    "subtalker_top_k": {
+                      "type": "number"
+                    },
+                    "subtalker_top_p": {
+                      "type": "number"
+                    },
+                    "subtalker_temperature": {
+                      "type": "number"
+                    }
                   },
-                  "required": ["text"],
+                  "required": [
+                    "text"
+                  ],
                   "additionalProperties": true
                 }
               }
             ]
           },
-          "device": { "type": "string" },
-          "nvidiaLibsPath": { "type": "string" },
-          "torchPath": { "type": "string" }
+          "device": {
+            "type": "string"
+          },
+          "nvidiaLibsPath": {
+            "type": "string"
+          },
+          "torchPath": {
+            "type": "string"
+          }
         },
-        "required": ["tasks"]
+        "required": [
+          "tasks"
+        ]
       }
     },
     "designVoice": {
@@ -139,24 +228,58 @@
               {
                 "type": "object",
                 "properties": {
-                  "text": { "type": "string" },
-                  "target_language": { "type": "string" },
-                  "language": { "type": "string" },
-                  "instruct": { "type": "string" },
-                  "audio_path": { "type": "string" },
-                  "output_path": { "type": "string" },
-                  "max_new_tokens": { "type": "number" },
-                  "do_sample": { "type": "boolean" },
-                  "top_k": { "type": "number" },
-                  "top_p": { "type": "number" },
-                  "temperature": { "type": "number" },
-                  "repetition_penalty": { "type": "number" },
-                  "subtalker_dosample": { "type": "boolean" },
-                  "subtalker_top_k": { "type": "number" },
-                  "subtalker_top_p": { "type": "number" },
-                  "subtalker_temperature": { "type": "number" }
+                  "text": {
+                    "type": "string"
+                  },
+                  "target_language": {
+                    "type": "string"
+                  },
+                  "language": {
+                    "type": "string"
+                  },
+                  "instruct": {
+                    "type": "string"
+                  },
+                  "audio_path": {
+                    "type": "string"
+                  },
+                  "output_path": {
+                    "type": "string"
+                  },
+                  "max_new_tokens": {
+                    "type": "number"
+                  },
+                  "do_sample": {
+                    "type": "boolean"
+                  },
+                  "top_k": {
+                    "type": "number"
+                  },
+                  "top_p": {
+                    "type": "number"
+                  },
+                  "temperature": {
+                    "type": "number"
+                  },
+                  "repetition_penalty": {
+                    "type": "number"
+                  },
+                  "subtalker_dosample": {
+                    "type": "boolean"
+                  },
+                  "subtalker_top_k": {
+                    "type": "number"
+                  },
+                  "subtalker_top_p": {
+                    "type": "number"
+                  },
+                  "subtalker_temperature": {
+                    "type": "number"
+                  }
                 },
-                "required": ["text"],
+                "required": [
+                  "text"
+                ],
                 "additionalProperties": true
               },
               {
@@ -164,34 +287,76 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "text": { "type": "string" },
-                    "target_language": { "type": "string" },
-                    "language": { "type": "string" },
-                    "instruct": { "type": "string" },
-                    "audio_path": { "type": "string" },
-                    "output_path": { "type": "string" },
-                    "max_new_tokens": { "type": "number" },
-                    "do_sample": { "type": "boolean" },
-                    "top_k": { "type": "number" },
-                    "top_p": { "type": "number" },
-                    "temperature": { "type": "number" },
-                    "repetition_penalty": { "type": "number" },
-                    "subtalker_dosample": { "type": "boolean" },
-                    "subtalker_top_k": { "type": "number" },
-                    "subtalker_top_p": { "type": "number" },
-                    "subtalker_temperature": { "type": "number" }
+                    "text": {
+                      "type": "string"
+                    },
+                    "target_language": {
+                      "type": "string"
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "instruct": {
+                      "type": "string"
+                    },
+                    "audio_path": {
+                      "type": "string"
+                    },
+                    "output_path": {
+                      "type": "string"
+                    },
+                    "max_new_tokens": {
+                      "type": "number"
+                    },
+                    "do_sample": {
+                      "type": "boolean"
+                    },
+                    "top_k": {
+                      "type": "number"
+                    },
+                    "top_p": {
+                      "type": "number"
+                    },
+                    "temperature": {
+                      "type": "number"
+                    },
+                    "repetition_penalty": {
+                      "type": "number"
+                    },
+                    "subtalker_dosample": {
+                      "type": "boolean"
+                    },
+                    "subtalker_top_k": {
+                      "type": "number"
+                    },
+                    "subtalker_top_p": {
+                      "type": "number"
+                    },
+                    "subtalker_temperature": {
+                      "type": "number"
+                    }
                   },
-                  "required": ["text"],
+                  "required": [
+                    "text"
+                  ],
                   "additionalProperties": true
                 }
               }
             ]
           },
-          "device": { "type": "string" },
-          "nvidiaLibsPath": { "type": "string" },
-          "torchPath": { "type": "string" }
+          "device": {
+            "type": "string"
+          },
+          "nvidiaLibsPath": {
+            "type": "string"
+          },
+          "torchPath": {
+            "type": "string"
+          }
         },
-        "required": ["tasks"]
+        "required": [
+          "tasks"
+        ]
       }
     },
     "customVoice": {
@@ -204,9 +369,15 @@
               {
                 "type": "object",
                 "properties": {
-                  "text": { "type": "string" },
-                  "target_language": { "type": "string" },
-                  "language": { "type": "string" },
+                  "text": {
+                    "type": "string"
+                  },
+                  "target_language": {
+                    "type": "string"
+                  },
+                  "language": {
+                    "type": "string"
+                  },
                   "speaker": {
                     "type": "string",
                     "enum": [
@@ -221,21 +392,50 @@
                       "Sohee"
                     ]
                   },
-                  "instruct": { "type": "string" },
-                  "audio_path": { "type": "string" },
-                  "output_path": { "type": "string" },
-                  "max_new_tokens": { "type": "number" },
-                  "do_sample": { "type": "boolean" },
-                  "top_k": { "type": "number" },
-                  "top_p": { "type": "number" },
-                  "temperature": { "type": "number" },
-                  "repetition_penalty": { "type": "number" },
-                  "subtalker_dosample": { "type": "boolean" },
-                  "subtalker_top_k": { "type": "number" },
-                  "subtalker_top_p": { "type": "number" },
-                  "subtalker_temperature": { "type": "number" }
+                  "instruct": {
+                    "type": "string"
+                  },
+                  "audio_path": {
+                    "type": "string"
+                  },
+                  "output_path": {
+                    "type": "string"
+                  },
+                  "max_new_tokens": {
+                    "type": "number"
+                  },
+                  "do_sample": {
+                    "type": "boolean"
+                  },
+                  "top_k": {
+                    "type": "number"
+                  },
+                  "top_p": {
+                    "type": "number"
+                  },
+                  "temperature": {
+                    "type": "number"
+                  },
+                  "repetition_penalty": {
+                    "type": "number"
+                  },
+                  "subtalker_dosample": {
+                    "type": "boolean"
+                  },
+                  "subtalker_top_k": {
+                    "type": "number"
+                  },
+                  "subtalker_top_p": {
+                    "type": "number"
+                  },
+                  "subtalker_temperature": {
+                    "type": "number"
+                  }
                 },
-                "required": ["text", "speaker"],
+                "required": [
+                  "text",
+                  "speaker"
+                ],
                 "additionalProperties": true
               },
               {
@@ -243,9 +443,15 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "text": { "type": "string" },
-                    "target_language": { "type": "string" },
-                    "language": { "type": "string" },
+                    "text": {
+                      "type": "string"
+                    },
+                    "target_language": {
+                      "type": "string"
+                    },
+                    "language": {
+                      "type": "string"
+                    },
                     "speaker": {
                       "type": "string",
                       "enum": [
@@ -260,31 +466,68 @@
                         "Sohee"
                       ]
                     },
-                    "instruct": { "type": "string" },
-                    "audio_path": { "type": "string" },
-                    "output_path": { "type": "string" },
-                    "max_new_tokens": { "type": "number" },
-                    "do_sample": { "type": "boolean" },
-                    "top_k": { "type": "number" },
-                    "top_p": { "type": "number" },
-                    "temperature": { "type": "number" },
-                    "repetition_penalty": { "type": "number" },
-                    "subtalker_dosample": { "type": "boolean" },
-                    "subtalker_top_k": { "type": "number" },
-                    "subtalker_top_p": { "type": "number" },
-                    "subtalker_temperature": { "type": "number" }
+                    "instruct": {
+                      "type": "string"
+                    },
+                    "audio_path": {
+                      "type": "string"
+                    },
+                    "output_path": {
+                      "type": "string"
+                    },
+                    "max_new_tokens": {
+                      "type": "number"
+                    },
+                    "do_sample": {
+                      "type": "boolean"
+                    },
+                    "top_k": {
+                      "type": "number"
+                    },
+                    "top_p": {
+                      "type": "number"
+                    },
+                    "temperature": {
+                      "type": "number"
+                    },
+                    "repetition_penalty": {
+                      "type": "number"
+                    },
+                    "subtalker_dosample": {
+                      "type": "boolean"
+                    },
+                    "subtalker_top_k": {
+                      "type": "number"
+                    },
+                    "subtalker_top_p": {
+                      "type": "number"
+                    },
+                    "subtalker_temperature": {
+                      "type": "number"
+                    }
                   },
-                  "required": ["text", "speaker"],
+                  "required": [
+                    "text",
+                    "speaker"
+                  ],
                   "additionalProperties": true
                 }
               }
             ]
           },
-          "device": { "type": "string" },
-          "nvidiaLibsPath": { "type": "string" },
-          "torchPath": { "type": "string" }
+          "device": {
+            "type": "string"
+          },
+          "nvidiaLibsPath": {
+            "type": "string"
+          },
+          "torchPath": {
+            "type": "string"
+          }
         },
-        "required": ["tasks"]
+        "required": [
+          "tasks"
+        ]
       }
     },
     "designThenSynthesize": {
@@ -297,40 +540,99 @@
               {
                 "type": "object",
                 "properties": {
-                  "design_text": { "type": "string" },
-                  "design_language": { "type": "string" },
-                  "design_instruct": { "type": "string" },
-                  "texts": { "type": "array", "items": { "type": "string" } },
+                  "design_text": {
+                    "type": "string"
+                  },
+                  "design_language": {
+                    "type": "string"
+                  },
+                  "design_instruct": {
+                    "type": "string"
+                  },
+                  "texts": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "languages": {
                     "type": "array",
-                    "items": { "type": "string" }
+                    "items": {
+                      "type": "string"
+                    }
                   },
                   "output_paths": {
                     "type": "array",
-                    "items": { "type": "string" }
+                    "items": {
+                      "type": "string"
+                    }
                   },
-                  "design_max_new_tokens": { "type": "number" },
-                  "design_do_sample": { "type": "boolean" },
-                  "design_top_k": { "type": "number" },
-                  "design_top_p": { "type": "number" },
-                  "design_temperature": { "type": "number" },
-                  "design_repetition_penalty": { "type": "number" },
-                  "design_subtalker_dosample": { "type": "boolean" },
-                  "design_subtalker_top_k": { "type": "number" },
-                  "design_subtalker_top_p": { "type": "number" },
-                  "design_subtalker_temperature": { "type": "number" },
-                  "max_new_tokens": { "type": "number" },
-                  "do_sample": { "type": "boolean" },
-                  "top_k": { "type": "number" },
-                  "top_p": { "type": "number" },
-                  "temperature": { "type": "number" },
-                  "repetition_penalty": { "type": "number" },
-                  "subtalker_dosample": { "type": "boolean" },
-                  "subtalker_top_k": { "type": "number" },
-                  "subtalker_top_p": { "type": "number" },
-                  "subtalker_temperature": { "type": "number" }
+                  "design_max_new_tokens": {
+                    "type": "number"
+                  },
+                  "design_do_sample": {
+                    "type": "boolean"
+                  },
+                  "design_top_k": {
+                    "type": "number"
+                  },
+                  "design_top_p": {
+                    "type": "number"
+                  },
+                  "design_temperature": {
+                    "type": "number"
+                  },
+                  "design_repetition_penalty": {
+                    "type": "number"
+                  },
+                  "design_subtalker_dosample": {
+                    "type": "boolean"
+                  },
+                  "design_subtalker_top_k": {
+                    "type": "number"
+                  },
+                  "design_subtalker_top_p": {
+                    "type": "number"
+                  },
+                  "design_subtalker_temperature": {
+                    "type": "number"
+                  },
+                  "max_new_tokens": {
+                    "type": "number"
+                  },
+                  "do_sample": {
+                    "type": "boolean"
+                  },
+                  "top_k": {
+                    "type": "number"
+                  },
+                  "top_p": {
+                    "type": "number"
+                  },
+                  "temperature": {
+                    "type": "number"
+                  },
+                  "repetition_penalty": {
+                    "type": "number"
+                  },
+                  "subtalker_dosample": {
+                    "type": "boolean"
+                  },
+                  "subtalker_top_k": {
+                    "type": "number"
+                  },
+                  "subtalker_top_p": {
+                    "type": "number"
+                  },
+                  "subtalker_temperature": {
+                    "type": "number"
+                  }
                 },
-                "required": ["design_text", "texts", "output_paths"],
+                "required": [
+                  "design_text",
+                  "texts",
+                  "output_paths"
+                ],
                 "additionalProperties": true
               },
               {
@@ -338,53 +640,117 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "design_text": { "type": "string" },
-                    "design_language": { "type": "string" },
-                    "design_instruct": { "type": "string" },
+                    "design_text": {
+                      "type": "string"
+                    },
+                    "design_language": {
+                      "type": "string"
+                    },
+                    "design_instruct": {
+                      "type": "string"
+                    },
                     "texts": {
                       "type": "array",
-                      "items": { "type": "string" }
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "languages": {
                       "type": "array",
-                      "items": { "type": "string" }
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "output_paths": {
                       "type": "array",
-                      "items": { "type": "string" }
+                      "items": {
+                        "type": "string"
+                      }
                     },
-                    "design_max_new_tokens": { "type": "number" },
-                    "design_do_sample": { "type": "boolean" },
-                    "design_top_k": { "type": "number" },
-                    "design_top_p": { "type": "number" },
-                    "design_temperature": { "type": "number" },
-                    "design_repetition_penalty": { "type": "number" },
-                    "design_subtalker_dosample": { "type": "boolean" },
-                    "design_subtalker_top_k": { "type": "number" },
-                    "design_subtalker_top_p": { "type": "number" },
-                    "design_subtalker_temperature": { "type": "number" },
-                    "max_new_tokens": { "type": "number" },
-                    "do_sample": { "type": "boolean" },
-                    "top_k": { "type": "number" },
-                    "top_p": { "type": "number" },
-                    "temperature": { "type": "number" },
-                    "repetition_penalty": { "type": "number" },
-                    "subtalker_dosample": { "type": "boolean" },
-                    "subtalker_top_k": { "type": "number" },
-                    "subtalker_top_p": { "type": "number" },
-                    "subtalker_temperature": { "type": "number" }
+                    "design_max_new_tokens": {
+                      "type": "number"
+                    },
+                    "design_do_sample": {
+                      "type": "boolean"
+                    },
+                    "design_top_k": {
+                      "type": "number"
+                    },
+                    "design_top_p": {
+                      "type": "number"
+                    },
+                    "design_temperature": {
+                      "type": "number"
+                    },
+                    "design_repetition_penalty": {
+                      "type": "number"
+                    },
+                    "design_subtalker_dosample": {
+                      "type": "boolean"
+                    },
+                    "design_subtalker_top_k": {
+                      "type": "number"
+                    },
+                    "design_subtalker_top_p": {
+                      "type": "number"
+                    },
+                    "design_subtalker_temperature": {
+                      "type": "number"
+                    },
+                    "max_new_tokens": {
+                      "type": "number"
+                    },
+                    "do_sample": {
+                      "type": "boolean"
+                    },
+                    "top_k": {
+                      "type": "number"
+                    },
+                    "top_p": {
+                      "type": "number"
+                    },
+                    "temperature": {
+                      "type": "number"
+                    },
+                    "repetition_penalty": {
+                      "type": "number"
+                    },
+                    "subtalker_dosample": {
+                      "type": "boolean"
+                    },
+                    "subtalker_top_k": {
+                      "type": "number"
+                    },
+                    "subtalker_top_p": {
+                      "type": "number"
+                    },
+                    "subtalker_temperature": {
+                      "type": "number"
+                    }
                   },
-                  "required": ["design_text", "texts", "output_paths"],
+                  "required": [
+                    "design_text",
+                    "texts",
+                    "output_paths"
+                  ],
                   "additionalProperties": true
                 }
               }
             ]
           },
-          "device": { "type": "string" },
-          "nvidiaLibsPath": { "type": "string" },
-          "torchPath": { "type": "string" }
+          "device": {
+            "type": "string"
+          },
+          "nvidiaLibsPath": {
+            "type": "string"
+          },
+          "torchPath": {
+            "type": "string"
+          }
         },
-        "required": ["tasks"]
+        "required": [
+          "tasks"
+        ]
       }
     }
   }

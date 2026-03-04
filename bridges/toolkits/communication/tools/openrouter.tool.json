@@ -4,6 +4,7 @@
   "toolkit_id": "communication",
   "name": "OpenRouter",
   "description": "A tool for interacting with various LLMs through the OpenRouter API gateway.",
+  "icon_name": "route",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -23,28 +24,49 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "role": { "type": "string" },
-                    "content": { "type": "string" }
+                    "role": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    }
                   },
-                  "required": ["role", "content"],
+                  "required": [
+                    "role",
+                    "content"
+                  ],
                   "additionalProperties": false
                 }
               },
-              "model": { "type": "string" },
-              "temperature": { "type": "number" },
-              "max_tokens": { "type": "number" },
-              "system_prompt": { "type": "string" },
-              "use_structured_output": { "type": "boolean" },
+              "model": {
+                "type": "string"
+              },
+              "temperature": {
+                "type": "number"
+              },
+              "max_tokens": {
+                "type": "number"
+              },
+              "system_prompt": {
+                "type": "string"
+              },
+              "use_structured_output": {
+                "type": "boolean"
+              },
               "json_schema": {
                 "type": "object",
                 "additionalProperties": true
               }
             },
-            "required": ["messages"],
+            "required": [
+              "messages"
+            ],
             "additionalProperties": false
           }
         },
-        "required": ["options"]
+        "required": [
+          "options"
+        ]
       }
     },
     "completion": {
@@ -55,22 +77,38 @@
           "options": {
             "type": "object",
             "properties": {
-              "prompt": { "type": "string" },
-              "model": { "type": "string" },
-              "temperature": { "type": "number" },
-              "max_tokens": { "type": "number" },
-              "system_prompt": { "type": "string" },
-              "use_structured_output": { "type": "boolean" },
+              "prompt": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "temperature": {
+                "type": "number"
+              },
+              "max_tokens": {
+                "type": "number"
+              },
+              "system_prompt": {
+                "type": "string"
+              },
+              "use_structured_output": {
+                "type": "boolean"
+              },
               "json_schema": {
                 "type": "object",
                 "additionalProperties": true
               }
             },
-            "required": ["prompt"],
+            "required": [
+              "prompt"
+            ],
             "additionalProperties": false
           }
         },
-        "required": ["options"]
+        "required": [
+          "options"
+        ]
       }
     },
     "structuredCompletion": {
@@ -81,21 +119,36 @@
           "options": {
             "type": "object",
             "properties": {
-              "prompt": { "type": "string" },
+              "prompt": {
+                "type": "string"
+              },
               "json_schema": {
                 "type": "object",
                 "additionalProperties": true
               },
-              "model": { "type": "string" },
-              "temperature": { "type": "number" },
-              "max_tokens": { "type": "number" },
-              "system_prompt": { "type": "string" }
+              "model": {
+                "type": "string"
+              },
+              "temperature": {
+                "type": "number"
+              },
+              "max_tokens": {
+                "type": "number"
+              },
+              "system_prompt": {
+                "type": "string"
+              }
             },
-            "required": ["prompt", "json_schema"],
+            "required": [
+              "prompt",
+              "json_schema"
+            ],
             "additionalProperties": false
           }
         },
-        "required": ["options"]
+        "required": [
+          "options"
+        ]
       }
     },
     "listModels": {

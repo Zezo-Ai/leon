@@ -4,6 +4,7 @@
   "toolkit_id": "music_audio",
   "name": "ElevenLabs Audio",
   "description": "A tool for audio processing using ElevenLabs's API.",
+  "icon_name": "sound-module",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -15,13 +16,26 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "inputPath": { "type": "string" },
-          "outputPath": { "type": "string" },
-          "apiKey": { "type": "string" },
-          "model": { "type": "string" },
-          "diarize": { "type": "boolean" }
+          "inputPath": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "diarize": {
+            "type": "boolean"
+          }
         },
-        "required": ["inputPath", "outputPath"]
+        "required": [
+          "inputPath",
+          "outputPath"
+        ]
       }
     },
     "createDubbing": {
@@ -29,14 +43,30 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "inputPath": { "type": "string" },
-          "targetLang": { "type": "string" },
-          "apiKey": { "type": "string" },
-          "sourceLang": { "type": "string" },
-          "numSpeakers": { "type": "number" },
-          "watermark": { "type": "boolean" }
+          "inputPath": {
+            "type": "string"
+          },
+          "targetLang": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string"
+          },
+          "sourceLang": {
+            "type": "string"
+          },
+          "numSpeakers": {
+            "type": "number"
+          },
+          "watermark": {
+            "type": "boolean"
+          }
         },
-        "required": ["inputPath", "targetLang", "apiKey"]
+        "required": [
+          "inputPath",
+          "targetLang",
+          "apiKey"
+        ]
       }
     },
     "getDubbingStatus": {
@@ -44,10 +74,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "dubbingId": { "type": "string" },
-          "apiKey": { "type": "string" }
+          "dubbingId": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string"
+          }
         },
-        "required": ["dubbingId", "apiKey"]
+        "required": [
+          "dubbingId",
+          "apiKey"
+        ]
       }
     },
     "downloadDubbedFile": {
@@ -55,12 +92,25 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "dubbingId": { "type": "string" },
-          "targetLang": { "type": "string" },
-          "outputPath": { "type": "string" },
-          "apiKey": { "type": "string" }
+          "dubbingId": {
+            "type": "string"
+          },
+          "targetLang": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string"
+          }
         },
-        "required": ["dubbingId", "targetLang", "outputPath", "apiKey"]
+        "required": [
+          "dubbingId",
+          "targetLang",
+          "outputPath",
+          "apiKey"
+        ]
       }
     }
   }

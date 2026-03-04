@@ -4,6 +4,7 @@
   "toolkit_id": "music_audio",
   "name": "ECAPA",
   "description": "A tool for voice gender classification using ECAPA-TDNN model.",
+  "icon_name": "voice-recognition",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -28,10 +29,16 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "inputPath": { "type": "string" },
-          "device": { "type": "string" }
+          "inputPath": {
+            "type": "string"
+          },
+          "device": {
+            "type": "string"
+          }
         },
-        "required": ["inputPath"]
+        "required": [
+          "inputPath"
+        ]
       }
     }
   }

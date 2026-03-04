@@ -4,6 +4,7 @@
   "toolkit_id": "structured_knowledge",
   "name": "Context",
   "description": "Read and search Leon context files.",
+  "icon_name": "file-list-3",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -15,8 +16,12 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "query": { "type": "string" },
-          "limit": { "type": "number" }
+          "query": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "number"
+          }
         },
         "additionalProperties": false
       }
@@ -49,13 +54,19 @@
           "options": {
             "type": "object",
             "properties": {
-              "offsetChars": { "type": "number" },
-              "maxChars": { "type": "number" }
+              "offsetChars": {
+                "type": "number"
+              },
+              "maxChars": {
+                "type": "number"
+              }
             },
             "additionalProperties": false
           }
         },
-        "required": ["filename"],
+        "required": [
+          "filename"
+        ],
         "additionalProperties": false
       }
     },
@@ -64,21 +75,31 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "query": { "type": "string" },
+          "query": {
+            "type": "string"
+          },
           "options": {
             "type": "object",
             "properties": {
               "filenames": {
                 "type": "array",
-                "items": { "type": "string" }
+                "items": {
+                  "type": "string"
+                }
               },
-              "topK": { "type": "number" },
-              "snippetChars": { "type": "number" }
+              "topK": {
+                "type": "number"
+              },
+              "snippetChars": {
+                "type": "number"
+              }
             },
             "additionalProperties": false
           }
         },
-        "required": ["query"],
+        "required": [
+          "query"
+        ],
         "additionalProperties": false
       }
     }

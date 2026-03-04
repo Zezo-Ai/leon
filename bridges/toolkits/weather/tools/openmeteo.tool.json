@@ -15,7 +15,9 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "location": { "type": "string" },
+          "location": {
+            "type": "string"
+          },
           "start_date": {
             "type": "string",
             "description": "Start date in YYYY-MM-DD format."
@@ -25,7 +27,11 @@
             "description": "End date in YYYY-MM-DD format."
           }
         },
-        "required": ["location", "start_date", "end_date"]
+        "required": [
+          "location",
+          "start_date",
+          "end_date"
+        ]
       }
     }
   }

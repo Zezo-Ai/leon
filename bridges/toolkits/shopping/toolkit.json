@@ -2,6 +2,7 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Shopping",
   "description": "Tools for shopping and product research.",
+  "icon_name": "shopping-cart-2",
   "context_files": [],
   "tools": []
 }

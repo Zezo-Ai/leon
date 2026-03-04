@@ -4,6 +4,7 @@
   "toolkit_id": "music_audio",
   "name": "OpenAI Audio",
   "description": "A tool for audio processing using OpenAI's API.",
+  "icon_name": "openai",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -15,12 +16,23 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "inputPath": { "type": "string" },
-          "outputPath": { "type": "string" },
-          "apiKey": { "type": "string" },
-          "model": { "type": "string" }
+          "inputPath": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          }
         },
-        "required": ["inputPath", "outputPath"]
+        "required": [
+          "inputPath",
+          "outputPath"
+        ]
       }
     }
   }

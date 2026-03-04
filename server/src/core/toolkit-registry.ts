@@ -9,6 +9,7 @@ interface ToolkitToolDefinition {
   toolkit_id: string
   name: string
   description: string
+  icon_name?: string
   binaries?: Record<string, string>
   resources?: Record<string, string[]>
   functions: Record<
@@ -25,23 +26,28 @@ interface FlattenedToolkitTool {
   toolkitId: string
   toolkitName: string
   toolkitDescription: string
+  toolkitIconName: string
   toolId: string
   toolName: string
   toolDescription: string
+  toolIconName: string
 }
 
 interface ResolvedToolkitTool {
   toolkitId: string
   toolkitName: string
+  toolkitIconName: string
   toolId: string
   toolName: string
   toolDescription: string
+  toolIconName: string
 }
 
 interface ToolkitDefinition {
   id: string
   name: string
   description: string
+  iconName: string
   contextFiles?: string[]
   tools?: Record<string, ToolkitToolDefinition>
 }
@@ -89,9 +95,11 @@ export default class ToolkitRegistry {
           toolkitId: toolkit.id,
           toolkitName: toolkit.name,
           toolkitDescription: toolkit.description,
+          toolkitIconName: toolkit.iconName,
           toolId,
           toolName: tool.name,
-          toolDescription: tool.description
+          toolDescription: tool.description,
+          toolIconName: tool.icon_name || toolkit.iconName
         })
       }
     }
@@ -123,9 +131,11 @@ export default class ToolkitRegistry {
       return {
         toolkitId: toolkit.id,
         toolkitName: toolkit.name,
+        toolkitIconName: toolkit.iconName,
         toolId: normalizedToolId,
         toolName: tool.name,
-        toolDescription: tool.description
+        toolDescription: tool.description,
+        toolIconName: tool.icon_name || toolkit.iconName
       }
     }
 
@@ -149,9 +159,11 @@ export default class ToolkitRegistry {
       return {
         toolkitId: toolkit.id,
         toolkitName: toolkit.name,
+        toolkitIconName: toolkit.iconName,
         toolId: toolKey,
         toolName: tool.name,
-        toolDescription: tool.description
+        toolDescription: tool.description,
+        toolIconName: tool.icon_name || toolkit.iconName
       }
     }
 
@@ -166,9 +178,11 @@ export default class ToolkitRegistry {
         matches.push({
           toolkitId: toolkit.id,
           toolkitName: toolkit.name,
+          toolkitIconName: toolkit.iconName,
           toolId: normalizedToolId,
           toolName: tool.name,
-          toolDescription: tool.description
+          toolDescription: tool.description,
+          toolIconName: tool.icon_name || toolkit.iconName
         })
       }
     }
@@ -263,6 +277,7 @@ export default class ToolkitRegistry {
           const toolkitConfig = JSON.parse(toolkitConfigRaw) as {
             name: string
             description: string
+            icon_name: string
             context_files?: string[]
             tools?: string[]
           }
@@ -318,6 +333,7 @@ export default class ToolkitRegistry {
             id: toolkitId,
             name: toolkitConfig.name,
             description: toolkitConfig.description,
+            iconName: toolkitConfig.icon_name,
             contextFiles,
             tools: toolkitTools
           })

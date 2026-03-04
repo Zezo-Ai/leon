@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import { SOCKET_SERVER } from '@/core'
+import { SOCKET_SERVER, TOOLKIT_REGISTRY } from '@/core'
 
 import type { TrackedPlanStep } from './types'
 
@@ -16,11 +16,55 @@ export const widgetId = (prefix: string): string =>
  */
 export function buildPlanComponentTree(
   steps: TrackedPlanStep[],
-  _justCompletedIndex: number | null
+  _justCompletedIndex: number | null,
+  currentExecutingFunction: string | null = null
 ): Record<string, unknown> {
   void _justCompletedIndex
 
-  const listItems = steps.map((step, i) => {
+  const getToolDisplay = (
+    fullFunctionName: string
+  ): { name: string, iconName: string, functionName: string } => {
+    const segments = fullFunctionName
+      .split('.')
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0)
+    const toolkitId = segments[0] ?? ''
+    const toolId = segments[1] ?? ''
+    const functionName = segments.slice(2).join('.') || 'unknown'
+    const fallbackToolkitIcon =
+      TOOLKIT_REGISTRY.toolkits.find((toolkit) => toolkit.id === toolkitId)?.iconName ||
+      'settings-3'
+
+    if (toolkitId && toolId) {
+      const resolved = TOOLKIT_REGISTRY.resolveToolById(toolId, toolkitId)
+      if (resolved?.toolName) {
+        return {
+          name: resolved.toolName,
+          iconName: resolved.toolIconName || resolved.toolkitIconName,
+          functionName
+        }
+      }
+    }
+
+    if (toolId) {
+      const resolved = TOOLKIT_REGISTRY.resolveToolById(toolId)
+      if (resolved?.toolName) {
+        return {
+          name: resolved.toolName,
+          iconName: resolved.toolIconName || resolved.toolkitIconName,
+          functionName
+        }
+      }
+    }
+
+    return {
+      name: toolId || fullFunctionName || 'Unknown tool',
+      iconName: fallbackToolkitIcon,
+      functionName
+    }
+  }
+
+  const planStepItems = steps.map((step, i) => {
     let child: Record<string, unknown>
 
     if (step.status === 'in_progress') {
@@ -76,6 +120,90 @@ export function buildPlanComponentTree(
     }
   })
 
+  const areAllStepsCompleted =
+    steps.length > 0 && steps.every((step) => step.status === 'completed')
+
+  const executionInfoItem: Record<string, unknown> | null =
+    steps.length > 0 && (Boolean(currentExecutingFunction) || areAllStepsCompleted)
+      ? ((): Record<string, unknown> => {
+          if (areAllStepsCompleted) {
+            return {
+              component: 'ListItem',
+              id: widgetId('listitem'),
+              props: {
+                align: 'center',
+                children: [
+                  {
+                    component: 'Flexbox',
+                    id: widgetId('flexbox'),
+                    props: {
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'row',
+                      children: [
+                        {
+                          component: 'Icon',
+                          id: widgetId('icon'),
+                          props: {
+                            size: 'sm',
+                            bgShape: 'circle',
+                            bgColor: 'transparent-green',
+                            color: 'green',
+                            type: 'fill',
+                            iconName: 'check'
+                          },
+                          events: []
+                        }
+                      ]
+                    },
+                    events: []
+                  }
+                ]
+              },
+              events: []
+            }
+          }
+
+          const toolDisplay = getToolDisplay(currentExecutingFunction || '')
+
+          return {
+            component: 'ListItem',
+            id: widgetId('listitem'),
+            props: {
+              align: 'center',
+              children: [
+                {
+                  component: 'Flexbox',
+                  id: widgetId('flexbox'),
+                  props: {
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'row',
+                    children: [
+                      {
+                        component: 'Status',
+                        id: widgetId('status'),
+                        props: {
+                          iconName: toolDisplay.iconName,
+                          iconType: 'line',
+                          children: `${toolDisplay.name} ⇢ ${toolDisplay.functionName}`
+                        },
+                        events: []
+                      }
+                    ]
+                  },
+                  events: []
+                }
+              ]
+            },
+            events: []
+          }
+        })()
+      : null
+  const listItems = executionInfoItem
+    ? [...planStepItems, executionInfoItem]
+    : planStepItems
+
   return {
     component: 'WidgetWrapper',
     id: widgetId('widgetwrapper'),
@@ -103,9 +231,14 @@ export function emitPlanWidget(
   steps: TrackedPlanStep[],
   justCompletedIndex: number | null,
   planWidgetId: string,
-  isUpdate: boolean
+  isUpdate: boolean,
+  currentExecutingFunction: string | null = null
 ): void {
-  const componentTree = buildPlanComponentTree(steps, justCompletedIndex)
+  const componentTree = buildPlanComponentTree(
+    steps,
+    justCompletedIndex,
+    currentExecutingFunction
+  )
   const widgetData: Record<string, unknown> = {
     id: planWidgetId,
     widget: 'PlanWidget',

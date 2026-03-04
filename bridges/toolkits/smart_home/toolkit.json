@@ -2,6 +2,7 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Smart Home",
   "description": "Tools for smart home devices and automation.",
+  "icon_name": "home-smile-2",
   "context_files": [],
   "tools": []
 }

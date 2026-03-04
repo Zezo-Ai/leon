@@ -1807,7 +1807,7 @@ No markdown. No explanation.`
       this.lastStorageMaintenanceAt = nowTs
 
       LogHelper.title('Memory Manager')
-      LogHelper.debug(
+      LogHelper.info(
         `Storage maintenance completed: discussion_deleted=${discussionRetentionDeleted} daily_deleted=${dailyRetentionDeleted} discussion_archived_warm=${discussionArchiveStats.warmArchived} discussion_archived_cold=${discussionArchiveStats.coldArchived} discussion_warm_compacted=${discussionArchiveStats.warmCompactedToCold} persistent_files_removed=${removedPersistentMirrorFiles} purged=${purged} memory_db_before=${beforeSnapshot.memoryDbBytes} memory_db_after=${afterSnapshot.memoryDbBytes} qmd_db_before=${beforeSnapshot.qmdDbBytes} qmd_db_after=${afterSnapshot.qmdDbBytes}`
       )
     } catch (error) {

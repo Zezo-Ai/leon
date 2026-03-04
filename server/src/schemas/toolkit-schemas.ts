@@ -6,6 +6,7 @@ export const toolkitSchemaObject = Type.Strict(
     $schema: Type.String({ minLength: 1 }),
     name: Type.String({ minLength: 1 }),
     description: Type.String({ minLength: 8, maxLength: 256 }),
+    icon_name: Type.String({ minLength: 1 }),
     context_files: Type.Array(
       Type.String({
         minLength: 1,

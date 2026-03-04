@@ -4,6 +4,7 @@
   "toolkit_id": "music_audio",
   "name": "Faster Whisper",
   "description": "A tool for speech recognition and audio transcription using the Faster Whisper model.",
+  "icon_name": "mic-2",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -31,14 +32,29 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "inputPath": { "type": "string" },
-          "outputPath": { "type": "string" },
-          "device": { "type": "string" },
-          "cpuThreads": { "type": "number" },
-          "downloadRoot": { "type": "string" },
-          "localFilesOnly": { "type": "boolean" }
+          "inputPath": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          },
+          "device": {
+            "type": "string"
+          },
+          "cpuThreads": {
+            "type": "number"
+          },
+          "downloadRoot": {
+            "type": "string"
+          },
+          "localFilesOnly": {
+            "type": "boolean"
+          }
         },
-        "required": ["inputPath", "outputPath"]
+        "required": [
+          "inputPath",
+          "outputPath"
+        ]
       }
     }
   }

@@ -4,6 +4,7 @@
   "toolkit_id": "coding_development",
   "name": "OpenCode",
   "description": "An AI-powered coding agent tool that generates skills using multiple LLM providers (Cerebras, MiniMax, Anthropic, OpenAI, Gemini).",
+  "icon_name": "code-box",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -22,11 +23,20 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "provider": { "type": "string" },
-          "apiKey": { "type": "string" },
-          "model": { "type": "string" }
+          "provider": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          }
         },
-        "required": ["provider", "apiKey"]
+        "required": [
+          "provider",
+          "apiKey"
+        ]
       }
     },
     "getConfiguredProviders": {
@@ -48,9 +58,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "provider": { "type": "string" }
+          "provider": {
+            "type": "string"
+          }
         },
-        "required": ["provider"]
+        "required": [
+          "provider"
+        ]
       }
     },
     "generateSkill": {
@@ -58,16 +72,39 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "description": { "type": "string" },
-          "provider": { "type": "string" },
-          "model": { "type": "string" },
-          "api_key": { "type": "string" },
-          "target_path": { "type": "string" },
-          "context_files": { "type": "array", "items": { "type": "string" } },
-          "system_prompt": { "type": "string" },
-          "bridge": { "type": "string" }
+          "description": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "target_path": {
+            "type": "string"
+          },
+          "context_files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "system_prompt": {
+            "type": "string"
+          },
+          "bridge": {
+            "type": "string"
+          }
         },
-        "required": ["description", "provider", "target_path"]
+        "required": [
+          "description",
+          "provider",
+          "target_path"
+        ]
       }
     }
   }

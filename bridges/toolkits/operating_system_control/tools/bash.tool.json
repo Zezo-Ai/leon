@@ -4,6 +4,7 @@
   "toolkit_id": "operating_system_control",
   "name": "Bash",
   "description": "A tool for executing bash commands on the operating system.",
+  "icon_name": "terminal",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -15,18 +16,28 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "command": { "type": "string" },
+          "command": {
+            "type": "string"
+          },
           "options": {
             "type": "object",
             "properties": {
-              "cwd": { "type": "string" },
-              "timeout": { "type": "number" },
-              "captureOutput": { "type": "boolean" }
+              "cwd": {
+                "type": "string"
+              },
+              "timeout": {
+                "type": "number"
+              },
+              "captureOutput": {
+                "type": "boolean"
+              }
             },
             "additionalProperties": false
           }
         },
-        "required": ["command"]
+        "required": [
+          "command"
+        ]
       }
     },
     "isSafeCommand": {
@@ -34,9 +45,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "command": { "type": "string" }
+          "command": {
+            "type": "string"
+          }
         },
-        "required": ["command"]
+        "required": [
+          "command"
+        ]
       }
     },
     "getCommandRiskLevel": {
@@ -44,9 +59,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "command": { "type": "string" }
+          "command": {
+            "type": "string"
+          }
         },
-        "required": ["command"]
+        "required": [
+          "command"
+        ]
       }
     }
   }

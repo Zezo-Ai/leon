@@ -2,6 +2,7 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Operating System Control",
   "description": "Tools for interacting with and controlling the operating system.",
+  "icon_name": "terminal-box",
   "context_files": [
     "LEON.md",
     "ARCHITECTURE.md",
@@ -10,5 +11,7 @@
     "SYSTEM_RESOURCES.md",
     "STORAGE.md"
   ],
-  "tools": ["bash"]
+  "tools": [
+    "bash"
+  ]
 }

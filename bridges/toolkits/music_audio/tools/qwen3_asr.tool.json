@@ -4,6 +4,7 @@
   "toolkit_id": "music_audio",
   "name": "Qwen3-ASR",
   "description": "A tool for speech recognition and timestamped transcription using the Qwen3 ASR models.",
+  "icon_name": "qwen-ai",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -46,19 +47,44 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "inputPath": { "type": "string" },
-          "outputPath": { "type": "string" },
-          "device": { "type": "string" },
-          "batchSize": { "type": "number" },
-          "language": { "type": "string" },
-          "returnTimestamps": { "type": "boolean" },
-          "useForcedAligner": { "type": "boolean" },
-          "cudaRuntimePath": { "type": "string" },
-          "torchPath": { "type": "string" },
-          "chunkDuration": { "type": "number" },
-          "cpuBatchSize": { "type": "number" }
+          "inputPath": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          },
+          "device": {
+            "type": "string"
+          },
+          "batchSize": {
+            "type": "number"
+          },
+          "language": {
+            "type": "string"
+          },
+          "returnTimestamps": {
+            "type": "boolean"
+          },
+          "useForcedAligner": {
+            "type": "boolean"
+          },
+          "cudaRuntimePath": {
+            "type": "string"
+          },
+          "torchPath": {
+            "type": "string"
+          },
+          "chunkDuration": {
+            "type": "number"
+          },
+          "cpuBatchSize": {
+            "type": "number"
+          }
         },
-        "required": ["inputPath", "outputPath"]
+        "required": [
+          "inputPath",
+          "outputPath"
+        ]
       }
     }
   }

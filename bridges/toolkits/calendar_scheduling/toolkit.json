@@ -2,6 +2,7 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Calendar & Scheduling",
   "description": "Tools for calendars and scheduling.",
+  "icon_name": "calendar-2",
   "context_files": [],
   "tools": []
 }

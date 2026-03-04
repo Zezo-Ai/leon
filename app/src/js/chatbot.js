@@ -405,7 +405,7 @@ export default class Chatbot {
       block.className = 'reasoning-block'
       header.className = 'reasoning-header'
       header.innerHTML = `
-        <i class="ri-brain-line reasoning-icon"></i>
+        <i class="ri-brain-ai-3-line reasoning-icon"></i>
         <span class="reasoning-title">Reasoning</span>
       `
       content.className = 'reasoning-content'

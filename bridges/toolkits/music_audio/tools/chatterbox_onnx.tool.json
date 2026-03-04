@@ -4,6 +4,7 @@
   "toolkit_id": "music_audio",
   "name": "Chatterbox ONNX",
   "description": "A tool for text-to-speech synthesis and voice cloning using the Chatterbox ONNX model.",
+  "icon_name": "chat-voice",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -42,17 +43,38 @@
               {
                 "type": "object",
                 "properties": {
-                  "text": { "type": "string" },
-                  "target_language": { "type": "string" },
-                  "audio_path": { "type": "string" },
-                  "voice_name": { "type": "string" },
-                  "speaker_reference_path": { "type": "string" },
-                  "cfg_strength": { "type": "number" },
-                  "exaggeration": { "type": "number" },
-                  "temperature": { "type": "number" },
-                  "auto_split": { "type": "boolean" }
+                  "text": {
+                    "type": "string"
+                  },
+                  "target_language": {
+                    "type": "string"
+                  },
+                  "audio_path": {
+                    "type": "string"
+                  },
+                  "voice_name": {
+                    "type": "string"
+                  },
+                  "speaker_reference_path": {
+                    "type": "string"
+                  },
+                  "cfg_strength": {
+                    "type": "number"
+                  },
+                  "exaggeration": {
+                    "type": "number"
+                  },
+                  "temperature": {
+                    "type": "number"
+                  },
+                  "auto_split": {
+                    "type": "boolean"
+                  }
                 },
-                "required": ["text", "audio_path"],
+                "required": [
+                  "text",
+                  "audio_path"
+                ],
                 "additionalProperties": false
               },
               {
@@ -60,25 +82,50 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "text": { "type": "string" },
-                    "target_language": { "type": "string" },
-                    "audio_path": { "type": "string" },
-                    "voice_name": { "type": "string" },
-                    "speaker_reference_path": { "type": "string" },
-                    "cfg_strength": { "type": "number" },
-                    "exaggeration": { "type": "number" },
-                    "temperature": { "type": "number" },
-                    "auto_split": { "type": "boolean" }
+                    "text": {
+                      "type": "string"
+                    },
+                    "target_language": {
+                      "type": "string"
+                    },
+                    "audio_path": {
+                      "type": "string"
+                    },
+                    "voice_name": {
+                      "type": "string"
+                    },
+                    "speaker_reference_path": {
+                      "type": "string"
+                    },
+                    "cfg_strength": {
+                      "type": "number"
+                    },
+                    "exaggeration": {
+                      "type": "number"
+                    },
+                    "temperature": {
+                      "type": "number"
+                    },
+                    "auto_split": {
+                      "type": "boolean"
+                    }
                   },
-                  "required": ["text", "audio_path"],
+                  "required": [
+                    "text",
+                    "audio_path"
+                  ],
                   "additionalProperties": false
                 }
               }
             ]
           },
-          "cudaRuntimePath": { "type": "string" }
+          "cudaRuntimePath": {
+            "type": "string"
+          }
         },
-        "required": ["tasks"]
+        "required": [
+          "tasks"
+        ]
       }
     }
   }

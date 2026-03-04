@@ -2,6 +2,7 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Media Generation",
   "description": "Tools for media generation and creative workflows.",
+  "icon_name": "sparkling-2",
   "context_files": [],
   "tools": []
 }

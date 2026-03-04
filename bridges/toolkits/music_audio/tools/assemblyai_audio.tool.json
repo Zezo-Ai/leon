@@ -4,6 +4,7 @@
   "toolkit_id": "music_audio",
   "name": "AssemblyAI Audio",
   "description": "A tool for audio processing using AssemblyAI's API.",
+  "icon_name": "mic-2",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -15,12 +16,23 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "inputPath": { "type": "string" },
-          "outputPath": { "type": "string" },
-          "apiKey": { "type": "string" },
-          "speakerLabels": { "type": "boolean" }
+          "inputPath": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string"
+          },
+          "speakerLabels": {
+            "type": "boolean"
+          }
         },
-        "required": ["inputPath", "outputPath"]
+        "required": [
+          "inputPath",
+          "outputPath"
+        ]
       }
     }
   }

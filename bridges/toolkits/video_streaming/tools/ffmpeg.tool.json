@@ -4,6 +4,7 @@
   "toolkit_id": "video_streaming",
   "name": "FFmpeg",
   "description": "A tool for video/audio processing, conversion, and manipulation. Use this for encoding, decoding, transcoding, muxing, demuxing, streaming, filtering, and playing media files. For analyzing or extracting metadata without modifying files, use ffprobe instead.",
+  "icon_name": "film",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -22,10 +23,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "inputPath": { "type": "string" },
-          "outputPath": { "type": "string" }
+          "inputPath": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          }
         },
-        "required": ["inputPath", "outputPath"]
+        "required": [
+          "inputPath",
+          "outputPath"
+        ]
       }
     },
     "extractAudio": {
@@ -33,10 +41,17 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "videoPath": { "type": "string" },
-          "audioPath": { "type": "string" }
+          "videoPath": {
+            "type": "string"
+          },
+          "audioPath": {
+            "type": "string"
+          }
         },
-        "required": ["videoPath", "audioPath"]
+        "required": [
+          "videoPath",
+          "audioPath"
+        ]
       }
     },
     "trimMedia": {
@@ -44,12 +59,25 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "inputPath": { "type": "string" },
-          "outputPath": { "type": "string" },
-          "startTime": { "type": "string" },
-          "endTime": { "type": "string" }
+          "inputPath": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          },
+          "startTime": {
+            "type": "string"
+          },
+          "endTime": {
+            "type": "string"
+          }
         },
-        "required": ["inputPath", "outputPath", "startTime", "endTime"]
+        "required": [
+          "inputPath",
+          "outputPath",
+          "startTime",
+          "endTime"
+        ]
       }
     },
     "resizeVideo": {
@@ -57,12 +85,25 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "inputPath": { "type": "string" },
-          "outputPath": { "type": "string" },
-          "width": { "type": "number" },
-          "height": { "type": "number" }
+          "inputPath": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          }
         },
-        "required": ["inputPath", "outputPath", "width", "height"]
+        "required": [
+          "inputPath",
+          "outputPath",
+          "width",
+          "height"
+        ]
       }
     },
     "combineVideoAndAudio": {
@@ -70,11 +111,21 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "videoPath": { "type": "string" },
-          "audioPath": { "type": "string" },
-          "outputPath": { "type": "string" }
+          "videoPath": {
+            "type": "string"
+          },
+          "audioPath": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          }
         },
-        "required": ["videoPath", "audioPath", "outputPath"]
+        "required": [
+          "videoPath",
+          "audioPath",
+          "outputPath"
+        ]
       }
     },
     "replaceVideoAudio": {
@@ -82,11 +133,21 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "videoPath": { "type": "string" },
-          "audioPath": { "type": "string" },
-          "outputPath": { "type": "string" }
+          "videoPath": {
+            "type": "string"
+          },
+          "audioPath": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          }
         },
-        "required": ["videoPath", "audioPath", "outputPath"]
+        "required": [
+          "videoPath",
+          "audioPath",
+          "outputPath"
+        ]
       }
     },
     "compressVideo": {
@@ -94,11 +155,21 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "inputPath": { "type": "string" },
-          "outputPath": { "type": "string" },
-          "bitrate": { "type": "string" }
+          "inputPath": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          },
+          "bitrate": {
+            "type": "string"
+          }
         },
-        "required": ["inputPath", "outputPath", "bitrate"]
+        "required": [
+          "inputPath",
+          "outputPath",
+          "bitrate"
+        ]
       }
     },
     "adjustTempo": {
@@ -106,12 +177,24 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "inputPath": { "type": "string" },
-          "outputPath": { "type": "string" },
-          "speedFactor": { "type": "number" },
-          "sampleRate": { "type": "number" }
+          "inputPath": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          },
+          "speedFactor": {
+            "type": "number"
+          },
+          "sampleRate": {
+            "type": "number"
+          }
         },
-        "required": ["inputPath", "outputPath", "speedFactor"]
+        "required": [
+          "inputPath",
+          "outputPath",
+          "speedFactor"
+        ]
       }
     },
     "mergeAudio": {
@@ -119,11 +202,21 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "firstAudioPath": { "type": "string" },
-          "secondAudioPath": { "type": "string" },
-          "outputPath": { "type": "string" }
+          "firstAudioPath": {
+            "type": "string"
+          },
+          "secondAudioPath": {
+            "type": "string"
+          },
+          "outputPath": {
+            "type": "string"
+          }
         },
-        "required": ["firstAudioPath", "secondAudioPath", "outputPath"]
+        "required": [
+          "firstAudioPath",
+          "secondAudioPath",
+          "outputPath"
+        ]
       }
     },
     "assembleAudioSegments": {
@@ -136,18 +229,35 @@
             "items": {
               "type": "object",
               "properties": {
-                "path": { "type": "string" },
-                "startMs": { "type": "number" }
+                "path": {
+                  "type": "string"
+                },
+                "startMs": {
+                  "type": "number"
+                }
               },
-              "required": ["path", "startMs"],
+              "required": [
+                "path",
+                "startMs"
+              ],
               "additionalProperties": false
             }
           },
-          "outputPath": { "type": "string" },
-          "totalDurationMs": { "type": "number" },
-          "sampleRate": { "type": "number" }
+          "outputPath": {
+            "type": "string"
+          },
+          "totalDurationMs": {
+            "type": "number"
+          },
+          "sampleRate": {
+            "type": "number"
+          }
         },
-        "required": ["segments", "outputPath", "totalDurationMs"]
+        "required": [
+          "segments",
+          "outputPath",
+          "totalDurationMs"
+        ]
       }
     }
   }

@@ -4,6 +4,7 @@
   "toolkit_id": "video_streaming",
   "name": "FFprobe",
   "description": "A tool for analyzing and extracting metadata from video and audio files. Use this for inspecting media properties like duration, bitrate, codec information, stream details, and format data without modifying the files. For processing or converting media, use ffmpeg instead.",
+  "icon_name": "radar",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
@@ -22,9 +23,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "filePath": { "type": "string" }
+          "filePath": {
+            "type": "string"
+          }
         },
-        "required": ["filePath"]
+        "required": [
+          "filePath"
+        ]
       }
     },
     "listStreams": {
@@ -32,9 +37,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "filePath": { "type": "string" }
+          "filePath": {
+            "type": "string"
+          }
         },
-        "required": ["filePath"]
+        "required": [
+          "filePath"
+        ]
       }
     },
     "getVideoSteamInfo": {
@@ -42,9 +51,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "filePath": { "type": "string" }
+          "filePath": {
+            "type": "string"
+          }
         },
-        "required": ["filePath"]
+        "required": [
+          "filePath"
+        ]
       }
     },
     "getAudioStreamInfo": {
@@ -52,9 +65,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "filePath": { "type": "string" }
+          "filePath": {
+            "type": "string"
+          }
         },
-        "required": ["filePath"]
+        "required": [
+          "filePath"
+        ]
       }
     },
     "countFrames": {
@@ -62,9 +79,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "filePath": { "type": "string" }
+          "filePath": {
+            "type": "string"
+          }
         },
-        "required": ["filePath"]
+        "required": [
+          "filePath"
+        ]
       }
     },
     "getFramesInfo": {
@@ -72,9 +93,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "filePath": { "type": "string" }
+          "filePath": {
+            "type": "string"
+          }
         },
-        "required": ["filePath"]
+        "required": [
+          "filePath"
+        ]
       }
     },
     "getDuration": {
@@ -82,9 +107,13 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "filePath": { "type": "string" }
+          "filePath": {
+            "type": "string"
+          }
         },
-        "required": ["filePath"]
+        "required": [
+          "filePath"
+        ]
       }
     }
   }

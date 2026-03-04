@@ -2,6 +2,7 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Games",
   "description": "Tools for games and entertainment.",
+  "icon_name": "gamepad",
   "context_files": [],
   "tools": []
 }

@@ -2,10 +2,14 @@
   "$schema": "../../../schemas/toolkit-schemas/toolkit.json",
   "name": "Communication",
   "description": "Tools for communication and language model interactions.",
+  "icon_name": "chat-3",
   "context_files": [
     "LEON.md",
     "ARCHITECTURE.md",
     "MEDIA_PROFILE.md"
   ],
-  "tools": ["openrouter", "cerebras"]
+  "tools": [
+    "openrouter",
+    "cerebras"
+  ]
 }
