@@ -2,6 +2,12 @@ import { PERSONA } from '@/core'
 
 import type { ReactPhase } from './types'
 
+export interface ExecutionThinkingRule {
+  toolkitId: string
+  toolId: string
+  functionNames?: string[]
+}
+
 export interface ReactPhasePolicy {
   // Inject the persona style/voice block into the system prompt.
   includePersonality: boolean
@@ -15,6 +21,8 @@ export interface ReactPhasePolicy {
   streamToUser: boolean
   // Forward streamed reasoning chunks to reasoning logs/UI widgets.
   emitReasoning: boolean
+  // Execution-only overrides for enabling thinking by tool/function.
+  executionThinkingRules?: ExecutionThinkingRule[]
 }
 
 const REACT_PHASE_POLICIES: Record<ReactPhase, ReactPhasePolicy> = {
@@ -32,7 +40,23 @@ const REACT_PHASE_POLICIES: Record<ReactPhase, ReactPhasePolicy> = {
     thinkingEnabled: false,
     streamToProvider: true,
     streamToUser: false,
-    emitReasoning: true
+    emitReasoning: true,
+    executionThinkingRules: [
+      {
+        toolkitId: 'structured_knowledge',
+        toolId: 'memory',
+        functionNames: ['read']
+      },
+      {
+        toolkitId: 'structured_knowledge',
+        toolId: 'context',
+        functionNames: ['searchContext', 'readContextFile', 'listContextFiles']
+      },
+      {
+        toolkitId: 'operating_system_control',
+        toolId: 'bash'
+      }
+    ]
   },
   recovery: {
     includePersonality: false,
@@ -58,6 +82,27 @@ export function getPhasePolicy(phase?: ReactPhase): ReactPhasePolicy {
   }
 
   return REACT_PHASE_POLICIES[phase]
+}
+
+export function shouldEnableThinkingForExecution(params: {
+  toolkitId: string
+  toolId: string
+  functionName: string
+}): boolean {
+  const executionPolicy = getPhasePolicy('execution')
+  const rules = executionPolicy.executionThinkingRules || []
+
+  return rules.some((rule) => {
+    if (rule.toolkitId !== params.toolkitId || rule.toolId !== params.toolId) {
+      return false
+    }
+
+    if (!rule.functionNames || rule.functionNames.length === 0) {
+      return true
+    }
+
+    return rule.functionNames.includes(params.functionName)
+  })
 }
 
 export function buildPhaseSystemPrompt(

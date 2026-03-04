@@ -176,6 +176,65 @@ function namespaceRecallWeight(namespace: KnowledgeNamespace): number {
   }
 }
 
+function extractOverlapCount(queryTokens: Set<string>, hit: QMDHit): number {
+  if (queryTokens.size === 0) {
+    return 0
+  }
+
+  const hitText = `${hit.title} ${path.basename(hit.path || '')} ${hit.content.slice(0, 1_000)}`
+  const hitTokens = new Set(tokenizeQuery(hitText))
+  if (hitTokens.size === 0) {
+    return 0
+  }
+
+  let overlapCount = 0
+  for (const token of queryTokens) {
+    if (hitTokens.has(token)) {
+      overlapCount += 1
+    }
+  }
+
+  return overlapCount
+}
+
+function computeRecencyBoost(hit: QMDHit): number {
+  if (
+    hit.namespace !== 'memory_daily' &&
+    hit.namespace !== 'memory_discussion' &&
+    hit.namespace !== 'conversation_daily'
+  ) {
+    return 0
+  }
+
+  const basename = path.basename(hit.path || '')
+  const dayKeyMatch = basename.match(/^(\d{4}-\d{2}-\d{2})\.md(?:\.gz)?$/i)
+  if (!dayKeyMatch || !dayKeyMatch[1]) {
+    return 0
+  }
+
+  const dayTs = Date.parse(`${dayKeyMatch[1]}T00:00:00.000Z`)
+  if (!Number.isFinite(dayTs)) {
+    return 0
+  }
+
+  const ageDays = Math.max(
+    0,
+    Math.floor((Date.now() - dayTs) / (24 * 60 * 60 * 1_000))
+  )
+
+  if (ageDays <= 1) {
+    return 0.3
+  }
+  if (ageDays <= 7) {
+    return 0.18
+  }
+  if (ageDays <= 30) {
+    return 0.08
+  }
+
+  return 0
+}
+
 function computeLexicalBoost(queryTokens: Set<string>, hit: QMDHit): number {
   if (queryTokens.size === 0) {
     return 0
@@ -209,8 +268,17 @@ function computeRankingScore(
 ): number {
   const weightedBase = hit.score * namespaceRecallWeight(hit.namespace)
   const lexicalBoost = computeLexicalBoost(queryTokens, hit)
+  const overlapCount = extractOverlapCount(queryTokens, hit)
+  const recencyBoost = computeRecencyBoost(hit)
+  let sparseOverlapPenalty = 0
 
-  return weightedBase + lexicalBoost
+  if (queryTokens.size >= 4 && overlapCount === 0) {
+    sparseOverlapPenalty = 0.3
+  } else if (queryTokens.size >= 5 && overlapCount <= 1) {
+    sparseOverlapPenalty = 0.18
+  }
+
+  return weightedBase + lexicalBoost + recencyBoost - sparseOverlapPenalty
 }
 
 function buildAdaptiveQueryTokenSet(
@@ -603,6 +671,210 @@ export default class MemoryTool extends Tool {
       perNamespaceLimit * Math.max(1, collectionNames.length)
     )
 
+    const rankHitsByQuery = (
+      hitsInput: QMDHit[]
+    ): Array<{ hit: QMDHit, rankingScore: number, overlapCount: number }> => {
+      const deduped = new Map<string, QMDHit>()
+      for (const hit of hitsInput) {
+        const key = `${hit.namespace}|${hit.path}|${hit.content}`
+        const existing = deduped.get(key)
+        if (!existing || hit.score > existing.score) {
+          deduped.set(key, hit)
+        }
+      }
+
+      const dedupedHits = [...deduped.values()]
+      const adaptiveQueryTokens = buildAdaptiveQueryTokenSet(
+        queryTokens,
+        dedupedHits
+      )
+
+      return dedupedHits
+        .map((hit) => ({
+          hit,
+          overlapCount: extractOverlapCount(adaptiveQueryTokens, hit),
+          rankingScore: computeRankingScore(hit, adaptiveQueryTokens)
+        }))
+        .sort((a, b) => b.rankingScore - a.rankingScore)
+    }
+
+    const shouldRunSecondPass = (
+      rankedHitsInput: Array<{
+        hit: QMDHit
+        rankingScore: number
+        overlapCount: number
+      }>
+    ): boolean => {
+      if (rankedHitsInput.length === 0) {
+        return true
+      }
+
+      const topWindow = rankedHitsInput.slice(0, Math.min(6, rankedHitsInput.length))
+      const maxOverlap = topWindow.reduce(
+        (maxValue, current) => Math.max(maxValue, current.overlapCount),
+        0
+      )
+      const bestScore = topWindow[0]?.rankingScore || 0
+      const nonPersistentCount = topWindow.filter(
+        (rankedHit) => rankedHit.hit.namespace !== 'memory_persistent'
+      ).length
+      const hasStrongNonPersistentMatch = topWindow.some(
+        (rankedHit) =>
+          rankedHit.hit.namespace !== 'memory_persistent' &&
+          rankedHit.overlapCount >= 2
+      )
+
+      if (maxOverlap === 0) {
+        return true
+      }
+
+      if (bestScore < 1 && maxOverlap <= 1) {
+        return true
+      }
+
+      if (
+        nonPersistentCount <= 1 &&
+        !hasStrongNonPersistentMatch &&
+        maxOverlap <= 1
+      ) {
+        return true
+      }
+
+      return false
+    }
+
+    const buildDiscriminativeSecondPassQuery = (hitsInput: QMDHit[]): string | null => {
+      if (queryTokens.size < 2 || hitsInput.length === 0) {
+        return null
+      }
+
+      const tokenDocumentFrequency = new Map<string, number>(
+        [...queryTokens].map((token) => [token, 0])
+      )
+
+      for (const hit of hitsInput) {
+        const hitText = `${hit.title} ${path.basename(hit.path || '')} ${hit.content.slice(0, 1_000)}`
+        const hitTokens = new Set(tokenizeQuery(hitText))
+        for (const token of queryTokens) {
+          if (hitTokens.has(token)) {
+            tokenDocumentFrequency.set(
+              token,
+              (tokenDocumentFrequency.get(token) || 0) + 1
+            )
+          }
+        }
+      }
+
+      const hitCount = Math.max(1, hitsInput.length)
+      const discriminativeTokens = [...queryTokens]
+        .map((token) => {
+          const frequency = tokenDocumentFrequency.get(token) || 0
+          const inverseDocumentFrequency = Math.log((hitCount + 1) / (frequency + 1))
+          const lengthBonus = Math.min(0.35, tokenLength(token) / 20)
+          return {
+            token,
+            score: inverseDocumentFrequency + lengthBonus
+          }
+        })
+        .sort((entryA, entryB) => entryB.score - entryA.score)
+        .map((entry) => entry.token)
+
+      const selectedTokens = discriminativeTokens.slice(
+        0,
+        Math.min(8, discriminativeTokens.length)
+      )
+      if (selectedTokens.length < 2) {
+        return null
+      }
+
+      const rewrittenQuery = selectedTokens.join(' ').trim()
+      if (!rewrittenQuery) {
+        return null
+      }
+
+      return rewrittenQuery.toLowerCase() === normalizedQuery.toLowerCase()
+        ? null
+        : rewrittenQuery
+    }
+
+    const appendRows = (
+      rowsToAppend: Array<Record<string, unknown>>,
+      usedMode: QMDSearchMode
+    ): void => {
+      for (const row of rowsToAppend) {
+        const sourcePath = normalizePath(
+          pickStringDeep(row, [
+            'filepath',
+            'path',
+            'file',
+            'source',
+            'doc_path',
+            'document_path',
+            'docPath',
+            'uri'
+          ])
+        )
+        const title =
+          pickStringDeep(row, ['title', 'name']) ||
+          (sourcePath ? path.basename(sourcePath) : '')
+        const content = extractContent(row)
+        const id =
+          pickStringDeep(row, ['docid', 'id']) ||
+          sourcePath ||
+          title
+
+        if (!id || !content) {
+          continue
+        }
+
+        const explicitCollection = pickStringDeep(row, [
+          'collection',
+          'collection_name',
+          'collectionName'
+        ])
+        const collectionFromQmdPathMatch = sourcePath.match(/^qmd:\/\/([^/]+)\//i)
+        const collectionFromQmdPath = collectionFromQmdPathMatch?.[1] || ''
+        const collectionFromAbsolutePath = collectionNames.find((collectionName) => {
+          const collectionPath = collectionPathByName.get(collectionName)
+          if (!collectionPath || !sourcePath) {
+            return false
+          }
+
+          return sourcePath.startsWith(collectionPath)
+        })
+        const resolvedCollectionName =
+          explicitCollection ||
+          collectionFromQmdPath ||
+          collectionFromAbsolutePath ||
+          (collectionNames.length === 1 ? collectionNames[0] : '')
+        const mappedNamespaces = namespaceByCollection.get(resolvedCollectionName) || []
+        const namespace =
+          namespaces.find((candidate) => mappedNamespaces.includes(candidate)) ||
+          (namespaces.length === 1 ? namespaces[0] : null)
+        if (!namespace) {
+          continue
+        }
+
+        if (namespace === 'context' && allowedContextFilenames.size > 0) {
+          const allowed =
+            allowedContextFilenames.has(normalizeFilename(sourcePath)) ||
+            allowedContextFilenames.has(normalizeFilename(title))
+          if (!allowed) {
+            continue
+          }
+        }
+
+        rawHits.push({
+          id,
+          path: sourcePath,
+          title,
+          content,
+          score: extractScore(row) + (usedMode === 'query' ? 0.03 : 0.01),
+          namespace
+        })
+      }
+    }
+
     let rows = await this.runSearchMode(
       'query',
       normalizedQuery,
@@ -620,77 +892,35 @@ export default class MemoryTool extends Tool {
       modeUsed = 'search'
     }
 
-    for (const row of rows) {
-      const sourcePath = normalizePath(
-        pickStringDeep(row, [
-          'filepath',
-          'path',
-          'file',
-          'source',
-          'doc_path',
-          'document_path',
-          'docPath',
-          'uri'
-        ])
+    appendRows(rows, modeUsed)
+
+    const missingNamespaces = namespaces.filter(
+      (namespace) => !rawHits.some((hit) => hit.namespace === namespace)
+    )
+    for (const missingNamespace of missingNamespaces) {
+      const collectionName = COLLECTIONS[missingNamespace]?.name
+      if (!collectionName) {
+        continue
+      }
+
+      let scopedRows = await this.runSearchMode(
+        'query',
+        normalizedQuery,
+        [collectionName],
+        perNamespaceLimit
       )
-      const title =
-        pickStringDeep(row, ['title', 'name']) ||
-        (sourcePath ? path.basename(sourcePath) : '')
-      const content = extractContent(row)
-      const id =
-        pickStringDeep(row, ['docid', 'id']) ||
-        sourcePath ||
-        title
-
-      if (!id || !content) {
-        continue
+      let scopedMode: QMDSearchMode = 'query'
+      if (scopedRows.length === 0) {
+        scopedRows = await this.runSearchMode(
+          'search',
+          normalizedQuery,
+          [collectionName],
+          perNamespaceLimit
+        )
+        scopedMode = 'search'
       }
 
-      const explicitCollection = pickStringDeep(row, [
-        'collection',
-        'collection_name',
-        'collectionName'
-      ])
-      const collectionFromQmdPathMatch = sourcePath.match(/^qmd:\/\/([^/]+)\//i)
-      const collectionFromQmdPath = collectionFromQmdPathMatch?.[1] || ''
-      const collectionFromAbsolutePath = collectionNames.find((collectionName) => {
-        const collectionPath = collectionPathByName.get(collectionName)
-        if (!collectionPath || !sourcePath) {
-          return false
-        }
-
-        return sourcePath.startsWith(collectionPath)
-      })
-      const resolvedCollectionName =
-        explicitCollection ||
-        collectionFromQmdPath ||
-        collectionFromAbsolutePath ||
-        (collectionNames.length === 1 ? collectionNames[0] : '')
-      const mappedNamespaces = namespaceByCollection.get(resolvedCollectionName) || []
-      const namespace =
-        namespaces.find((candidate) => mappedNamespaces.includes(candidate)) ||
-        (namespaces.length === 1 ? namespaces[0] : null)
-      if (!namespace) {
-        continue
-      }
-
-      if (namespace === 'context' && allowedContextFilenames.size > 0) {
-        const allowed =
-          allowedContextFilenames.has(normalizeFilename(sourcePath)) ||
-          allowedContextFilenames.has(normalizeFilename(title))
-        if (!allowed) {
-          continue
-        }
-      }
-
-      rawHits.push({
-        id,
-        path: sourcePath,
-        title,
-        content,
-        score: extractScore(row) + (modeUsed === 'query' ? 0.03 : 0.01),
-        namespace
-      })
+      appendRows(scopedRows, scopedMode)
     }
 
     if (!rawHits.some((hit) => hit.namespace === 'memory_persistent')) {
@@ -704,35 +934,73 @@ export default class MemoryTool extends Tool {
       }
     }
 
+    const relatedPersistentLimit = Math.max(2, Math.floor(topK / 2))
     const relatedPersistentHits = this.readRelatedPersistentFallback(
       rawHits,
-      Math.max(topK, 8)
+      relatedPersistentLimit
     )
     for (const relatedHit of relatedPersistentHits) {
       rawHits.push(relatedHit)
     }
 
-    const deduped = new Map<string, QMDHit>()
-    for (const hit of rawHits) {
-      const key = `${hit.namespace}|${hit.path}|${hit.content}`
-      const existing = deduped.get(key)
-      if (!existing || hit.score > existing.score) {
-        deduped.set(key, hit)
+    let rankedHits = rankHitsByQuery(rawHits)
+    if (shouldRunSecondPass(rankedHits)) {
+      const secondPassQuery = buildDiscriminativeSecondPassQuery(
+        rankedHits.map((rankedHit) => rankedHit.hit)
+      )
+
+      if (secondPassQuery) {
+        let secondPassRows = await this.runSearchMode(
+          'query',
+          secondPassQuery,
+          collectionNames,
+          globalLimit
+        )
+        let secondPassMode: QMDSearchMode = 'query'
+        if (secondPassRows.length === 0) {
+          secondPassRows = await this.runSearchMode(
+            'search',
+            secondPassQuery,
+            collectionNames,
+            globalLimit
+          )
+          secondPassMode = 'search'
+        }
+
+        appendRows(secondPassRows, secondPassMode)
+
+        const stillMissingNamespaces = namespaces.filter(
+          (namespace) => !rawHits.some((hit) => hit.namespace === namespace)
+        )
+        for (const missingNamespace of stillMissingNamespaces) {
+          const collectionName = COLLECTIONS[missingNamespace]?.name
+          if (!collectionName) {
+            continue
+          }
+
+          let scopedRows = await this.runSearchMode(
+            'query',
+            secondPassQuery,
+            [collectionName],
+            perNamespaceLimit
+          )
+          let scopedMode: QMDSearchMode = 'query'
+          if (scopedRows.length === 0) {
+            scopedRows = await this.runSearchMode(
+              'search',
+              secondPassQuery,
+              [collectionName],
+              perNamespaceLimit
+            )
+            scopedMode = 'search'
+          }
+
+          appendRows(scopedRows, scopedMode)
+        }
+
+        rankedHits = rankHitsByQuery(rawHits)
       }
     }
-
-    const dedupedHits = [...deduped.values()]
-    const adaptiveQueryTokens = buildAdaptiveQueryTokenSet(queryTokens, dedupedHits)
-
-    const rankedHits = dedupedHits
-      .map((hit) => ({
-        hit,
-        rankingScore: computeRankingScore(
-          hit,
-          adaptiveQueryTokens
-        )
-      }))
-      .sort((a, b) => b.rankingScore - a.rankingScore)
 
     const selected: Array<{
       namespace: KnowledgeNamespace
@@ -781,6 +1049,18 @@ export default class MemoryTool extends Tool {
       selectedKeys.add(hitKey)
       usedTokenEstimate += clipped.tokens
       return true
+    }
+
+    const namespaceCoverageQueue: KnowledgeNamespace[] = [...new Set(namespaces)]
+    for (const namespace of namespaceCoverageQueue) {
+      const firstByNamespace = rankedHits.find(
+        (rankedHit) => rankedHit.hit.namespace === namespace
+      )
+      if (!firstByNamespace) {
+        continue
+      }
+
+      addHit(firstByNamespace.hit, firstByNamespace.rankingScore)
     }
 
     for (const rankedHit of rankedHits) {

@@ -42,7 +42,10 @@ import {
   buildPreviouslyUsedInputsSection,
   buildToolkitContextSection
 } from './phase-helpers'
-import { buildPhaseSystemPrompt } from './phase-policy'
+import {
+  buildPhaseSystemPrompt,
+  shouldEnableThinkingForExecution
+} from './phase-policy'
 
 async function buildExecutionMemorySection(
   _caller: LLMCaller,
@@ -697,6 +700,11 @@ async function executeFunctionWithNativeTools(
   let toolFailureRetries = 0
   let lastFailedToolInput: string | null = null
   const attemptedInputsInCurrentStep = new Set<string>()
+  const shouldAllowExecutionThinking = shouldEnableThinkingForExecution({
+    toolkitId,
+    toolId,
+    functionName
+  })
 
   const runValidatedToolInput = async (
     toolInputRaw: string
@@ -778,6 +786,15 @@ async function executeFunctionWithNativeTools(
   }
 
   while (retries <= MAX_RETRIES_PER_FUNCTION) {
+    const enableThinkingForRetry =
+      retries > 0 &&
+      shouldAllowExecutionThinking
+    if (enableThinkingForRetry) {
+      LogHelper.title(DUTY_NAME)
+      LogHelper.debug(
+        `Execution retry thinking enabled (native tools) for "${qualifiedName}" at attempt ${retries + 1}/${MAX_RETRIES_PER_FUNCTION + 1}`
+      )
+    }
     const retryNote = lastError
       ? `\n\nPrevious attempt failed: ${lastError}.${lastFailedToolInput ? `\nPrevious failed tool_input: ${lastFailedToolInput}\nDo not reuse the same tool_input. Change the arguments to address the failure.` : ' Please fix the arguments.'}`
       : ''
@@ -801,7 +818,8 @@ async function executeFunctionWithNativeTools(
         tools: [tool]
       }),
       {
-        phase: 'execution'
+        phase: 'execution',
+        ...(enableThinkingForRetry ? { disableThinking: false } : {})
       }
     )
 
@@ -982,8 +1000,22 @@ async function executeFunctionWithJSONMode(
   let toolFailureRetries = 0
   let lastFailedToolInput: string | null = null
   const attemptedInputsInCurrentStep = new Set<string>()
+  const shouldAllowExecutionThinking = shouldEnableThinkingForExecution({
+    toolkitId,
+    toolId,
+    functionName
+  })
 
   while (retries <= MAX_RETRIES_PER_FUNCTION) {
+    const enableThinkingForRetry =
+      retries > 0 &&
+      shouldAllowExecutionThinking
+    if (enableThinkingForRetry) {
+      LogHelper.title(DUTY_NAME)
+      LogHelper.debug(
+        `Execution retry thinking enabled (json mode) for "${qualifiedName}" at attempt ${retries + 1}/${MAX_RETRIES_PER_FUNCTION + 1}`
+      )
+    }
     const retryNote = lastError
       ? `\n\nPrevious attempt failed: ${lastError}.${lastFailedToolInput ? `\nPrevious failed tool_input: ${lastFailedToolInput}\nDo not reuse the same tool_input. Change the arguments to address the failure.` : ' Please fix the tool_input.'}`
       : ''
@@ -1005,7 +1037,8 @@ async function executeFunctionWithJSONMode(
         schema: executeSchema
       }),
       {
-        phase: 'execution'
+        phase: 'execution',
+        ...(enableThinkingForRetry ? { disableThinking: false } : {})
       }
     )
     if (!completionResult) {
