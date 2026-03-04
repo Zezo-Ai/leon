@@ -39,6 +39,9 @@ Memory vs context tool usage:
 - For environment-state questions (for example VPN, network, hardware, browser history), prefer structured_knowledge.context before structured_knowledge.memory.read.
 - Proactively use memory/context tools when they materially improve personalization or factual accuracy, even without an explicit request.
 - Use structured_knowledge.memory.read to personalize answers when necessary.
+- For questions about preferences, past discussions, past events, facts, commitments, or "what do you know/remember", call structured_knowledge.memory.read unless the answer is already explicit in current context/history.
+- If uncertain and the answer may exist in memory, do not guess or deny; first call structured_knowledge.memory.read, then answer from retrieved results.
+- Do not answer "I don't know" or "we never discussed that" about owner history before attempting structured_knowledge.memory.read when memory is relevant.
 
 For straightforward operational tasks (file listing, command execution, media transforms, API fetches), do not add memory/context reads unless they are required.
 
@@ -139,5 +142,5 @@ export const TOOL_CALL_WAIT_NOTICE_DELAY_MS = 45_000
 export const TOOL_CALL_DIAGNOSIS_DELAY_MS = 90_000
 export const PLANNING_WAIT_NOTICE_DELAY_MS = 1_500
 
-export const REACT_LOCAL_PROVIDER_HISTORY_LOGS = 8
-export const REACT_REMOTE_PROVIDER_HISTORY_LOGS = 16
+export const REACT_LOCAL_PROVIDER_HISTORY_LOGS = 16
+export const REACT_REMOTE_PROVIDER_HISTORY_LOGS = 48
