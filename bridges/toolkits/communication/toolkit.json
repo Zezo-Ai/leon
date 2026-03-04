@@ -8,8 +8,5 @@
     "ARCHITECTURE.md",
     "MEDIA_PROFILE.md"
   ],
-  "tools": [
-    "openrouter",
-    "cerebras"
-  ]
+  "tools": []
 }

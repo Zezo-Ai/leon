@@ -63,6 +63,7 @@ import {
   buildCatalog,
   runPlanningPhase,
   runRecoveryPlanningPhase,
+  runContinuationPlanningPhase,
   runExecutionStep,
   runFinalAnswerPhase
 } from './react-llm-duty/phases'
@@ -643,6 +644,77 @@ export class ReActLLMDuty extends LLMDuty {
               true,
               currentExecutingFunction
             )
+          }
+        }
+
+        if (
+          stepResult.execution.status === 'success' &&
+          pendingSteps.length === 0
+        ) {
+          if (replanCount >= MAX_REPLANS) {
+            LogHelper.title(this.name)
+            LogHelper.warning(
+              'Continuation replanning skipped: max re-plans reached'
+            )
+            continue
+          }
+
+          const continuationPlanResult = await runContinuationPlanningPhase(
+            caller,
+            catalog,
+            history,
+            executionHistory
+          )
+
+          if (continuationPlanResult?.type === 'final') {
+            LogHelper.title(this.name)
+            LogHelper.debug(
+              `Continuation planning returned final answer: "${continuationPlanResult.answer}"`
+            )
+
+            return this.makeDutyResult(continuationPlanResult.answer)
+          }
+
+          if (
+            continuationPlanResult?.type === 'plan' &&
+            continuationPlanResult.steps.length > 0
+          ) {
+            replanCount += 1
+            pendingSteps = [...continuationPlanResult.steps]
+
+            LogHelper.title(this.name)
+            LogHelper.debug(
+              `Continuation re-plan ${replanCount}/${MAX_REPLANS}: ${pendingSteps.map((s) => s.function).join(' -> ')}`
+            )
+            if (continuationPlanResult.summary) {
+              LogHelper.debug(
+                `Continuation plan summary: "${continuationPlanResult.summary}"`
+              )
+              await this.emitProgress(
+                this.toProgressiveMessage(continuationPlanResult.summary)
+              )
+            }
+
+            const appendStartIndex = trackedSteps.length
+            const appendedSteps: TrackedPlanStep[] = pendingSteps.map((s) => ({
+              label: s.label,
+              status: 'pending' as PlanStepStatus
+            }))
+            if (appendedSteps.length > 0) {
+              appendedSteps[0]!.status = 'in_progress'
+            }
+            trackedSteps = [...trackedSteps, ...appendedSteps]
+            currentStepIndex = appendStartIndex
+
+            currentExecutingFunction = null
+            emitPlanWidget(
+              trackedSteps,
+              null,
+              planWidgetIdValue,
+              true,
+              currentExecutingFunction
+            )
+            continue
           }
         }
       }

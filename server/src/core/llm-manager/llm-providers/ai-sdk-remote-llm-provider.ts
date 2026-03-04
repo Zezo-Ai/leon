@@ -388,7 +388,7 @@ export default class AISDKRemoteLLMProvider {
         }
       } else {
         providerOptions['openaiCompatible'] = {
-          reasoningEffort: 'medium'
+          reasoningEffort: 'high'
         }
       }
     } else if (this.config.flavor === 'anthropic') {
@@ -416,7 +416,7 @@ export default class AISDKRemoteLLMProvider {
             reasoningEffort: 'low'
           }
         : {
-            reasoningEffort: 'medium'
+            reasoningEffort: 'high'
           }
     } else if (this.config.flavor === 'cerebras') {
       providerOptions['cerebras'] = completionParams.disableThinking === true
@@ -424,7 +424,7 @@ export default class AISDKRemoteLLMProvider {
             reasoningEffort: 'low'
           }
         : {
-            reasoningEffort: 'medium'
+            reasoningEffort: 'high'
           }
     } else if (this.config.flavor === 'groq') {
       providerOptions['groq'] = completionParams.disableThinking === true
