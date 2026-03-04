@@ -11,11 +11,11 @@
     "url": "https://twitter.com/grenlouis"
   },
   "binaries": {
-    "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.21/yt-dlp_2026.02.21-linux-x86_64",
-    "linux-aarch64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.21/yt-dlp_2026.02.21-linux-aarch64",
-    "macosx-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.21/yt-dlp_2026.02.21-macosx-x86_64",
-    "macosx-arm64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.21/yt-dlp_2026.02.21-macosx-arm64",
-    "win-amd64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.02.21/yt-dlp_2026.02.21-win-amd64.exe"
+    "linux-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.03.03/yt-dlp_2026.03.03-linux-x86_64",
+    "linux-aarch64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.03.03/yt-dlp_2026.03.03-linux-aarch64",
+    "macosx-x86_64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.03.03/yt-dlp_2026.03.03-macosx-x86_64",
+    "macosx-arm64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.03.03/yt-dlp_2026.03.03-macosx-arm64",
+    "win-amd64": "https://github.com/leon-ai/leon-binaries/releases/download/yt-dlp-v2026.03.03/yt-dlp_2026.03.03-win-amd64.exe"
   },
   "functions": {
     "downloadVideo": {
