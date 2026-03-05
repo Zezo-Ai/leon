@@ -1,6 +1,5 @@
 export { buildCatalog } from './catalog'
 export { runPlanningPhase } from './planning'
 export { runRecoveryPlanningPhase } from './recovery-planning'
-export { runContinuationPlanningPhase } from './continuation-planning'
-export { runExecutionStep, runToolExecution } from './execution'
+export { runExecutionStep, runToolExecution, runExecutionSelfObservationPhase } from './execution'
 export { runFinalAnswerPhase } from './final-answer'

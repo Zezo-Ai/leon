@@ -188,7 +188,7 @@ Create a revised plan from this point to complete the user request.`
       prompt,
       recoverySystemPrompt,
       planTools,
-      { type: 'function', function: { name: 'create_plan' } },
+      'auto',
       history,
       false,
       buildRecoveryPromptSections({

@@ -404,6 +404,17 @@ export default class LLMProvider {
     return nextParams
   }
 
+  private shouldDisableThinkingForForcedToolChoice(
+    completionParams: CompletionParams
+  ): boolean {
+    return (
+      Array.isArray(completionParams.tools) &&
+      completionParams.tools.length > 0 &&
+      completionParams.toolChoice !== undefined &&
+      completionParams.toolChoice !== 'auto'
+    )
+  }
+
   private isRetryablePromptError(error: unknown): boolean {
     if (axios.isAxiosError(error)) {
       const status = error.response?.status
@@ -1667,6 +1678,17 @@ export default class LLMProvider {
       delete completionParams.toolChoice
     }
 
+    if (
+      this.shouldDisableThinkingForForcedToolChoice(completionParams) &&
+      completionParams.disableThinking !== true
+    ) {
+      completionParams.disableThinking = true
+      LogHelper.title('LLM Provider')
+      LogHelper.debug(
+        'Tool-calling compatibility: disabled thinking because tool_choice is forced.'
+      )
+    }
+
     const isJSONMode = completionParams.data !== null
     const shouldStreamOutput = completionParams.shouldStream === true
 
@@ -1781,6 +1803,19 @@ export default class LLMProvider {
         !completionParams.relaxForcedToolChoice &&
         remainingRetries > 0
       ) {
+        if (completionParams.disableThinking !== true) {
+          LogHelper.title('LLM Provider')
+          LogHelper.warning(
+            'Provider rejected forced tool_choice with thinking enabled; retrying with thinking disabled while keeping tool_choice'
+          )
+
+          return this.prompt(promptOrChatHistory, {
+            ...completionParams,
+            disableThinking: true,
+            maxRetries: remainingRetries - 1
+          })
+        }
+
         LogHelper.title('LLM Provider')
         LogHelper.warning(
           'Provider rejected forced tool_choice with thinking enabled; retrying without tool_choice'

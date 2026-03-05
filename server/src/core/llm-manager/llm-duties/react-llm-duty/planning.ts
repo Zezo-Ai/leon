@@ -22,8 +22,8 @@ import {
   extractPlanResultFromCreatePlanArgs
 } from './utils'
 import {
-  stripInlineToolMarkup,
   shouldTreatPlanningTextAsFinalAnswer,
+  extractPlanningMarkedFinalAnswer,
   createPlanFromUnexpectedToolCall
 } from './phase-helpers'
 import {
@@ -121,7 +121,7 @@ export async function runPlanningPhase(
         function: {
           name: 'create_plan',
           description:
-            'Create either an execution plan or a direct conversational answer. Use type="plan" when tools are needed, or type="final" for purely conversational messages. For type="final", answer must be directly user-facing (not meta reasoning about what you will do).',
+            'Create either an execution plan or a direct conversational answer. Use type="plan" when tools are needed, or type="final" for purely conversational messages. For type="final", answer must be directly user-facing (not meta reasoning about what you will do). If you do not call this tool, output plain text prefixed with "FINAL_ANSWER:".',
           parameters: {
             type: 'object',
             properties: {
@@ -173,7 +173,7 @@ export async function runPlanningPhase(
       prompt,
       planSystemPrompt,
       planTools,
-      { type: 'function', function: { name: 'create_plan' } },
+      'auto',
       history,
       false,
       buildPlanningPromptSections({
@@ -203,6 +203,8 @@ export async function runPlanningPhase(
     }
 
     const textFallback = toolResult?.textContent?.trim() || ''
+    const markedTextFallbackFinalAnswer =
+      extractPlanningMarkedFinalAnswer(textFallback)
     const missingCreatePlanToolCall =
       !toolResult?.toolCall && !toolResult?.unexpectedToolCall
 
@@ -351,6 +353,16 @@ export async function runPlanningPhase(
         textFallback &&
         shouldTreatPlanningTextAsFinalAnswer(textFallback)
       ) {
+        if (markedTextFallbackFinalAnswer) {
+          LogHelper.debug(
+            'Planning: returning direct final answer from marked text fallback'
+          )
+          return {
+            type: 'final',
+            answer: markedTextFallbackFinalAnswer
+          }
+        }
+
         LogHelper.debug(
           'Planning: plain text fallback received without tool call; skipping direct final answer and attempting JSON fallback first'
         )
@@ -423,16 +435,14 @@ export async function runPlanningPhase(
       textFallback &&
       shouldTreatPlanningTextAsFinalAnswer(textFallback)
     ) {
-      LogHelper.debug(
-        'Planning: treating plain text fallback as final conversational answer'
-      )
-      const forcedPlan = await attemptForcedPlanOnlyFallback()
-      if (forcedPlan) {
-        return forcedPlan
-      }
-      return {
-        type: 'final',
-        answer: stripInlineToolMarkup(textFallback) || textFallback
+      if (markedTextFallbackFinalAnswer) {
+        LogHelper.debug(
+          'Planning: using marked text fallback as final conversational answer'
+        )
+        return {
+          type: 'final',
+          answer: markedTextFallbackFinalAnswer
+        }
       }
     }
 
@@ -463,7 +473,10 @@ export async function runPlanningPhase(
         if (forcedPlan) {
           return forcedPlan
         }
-        return { type: 'final', answer: stripInlineToolMarkup(raw) || raw }
+        const markedRawAnswer = extractPlanningMarkedFinalAnswer(raw)
+        if (markedRawAnswer) {
+          return { type: 'final', answer: markedRawAnswer }
+        }
       }
     }
 
@@ -472,12 +485,9 @@ export async function runPlanningPhase(
       if (forcedPlan) {
         return forcedPlan
       }
-      const sanitizedTextFallback = stripInlineToolMarkup(textFallback)
       return {
         type: 'final',
-        answer:
-          sanitizedTextFallback ||
-          'I could not produce a structured plan. Please rephrase your request.'
+        answer: 'I could not produce a structured plan. Please rephrase your request.'
       }
     }
 

@@ -63,7 +63,7 @@ import {
   buildCatalog,
   runPlanningPhase,
   runRecoveryPlanningPhase,
-  runContinuationPlanningPhase,
+  runExecutionSelfObservationPhase,
   runExecutionStep,
   runFinalAnswerPhase
 } from './react-llm-duty/phases'
@@ -654,44 +654,47 @@ export class ReActLLMDuty extends LLMDuty {
           if (replanCount >= MAX_REPLANS) {
             LogHelper.title(this.name)
             LogHelper.warning(
-              'Continuation replanning skipped: max re-plans reached'
+              'Execution self-observation replanning skipped: max re-plans reached'
             )
             continue
           }
 
-          const continuationPlanResult = await runContinuationPlanningPhase(
+          const selfObservationResult = await runExecutionSelfObservationPhase(
             caller,
-            catalog,
-            history,
             executionHistory
           )
 
-          if (continuationPlanResult?.type === 'final') {
+          if (selfObservationResult?.type === 'final') {
             LogHelper.title(this.name)
             LogHelper.debug(
-              `Continuation planning returned final answer: "${continuationPlanResult.answer}"`
+              `Execution self-observation returned final answer: "${selfObservationResult.answer}"`
             )
 
-            return this.makeDutyResult(continuationPlanResult.answer)
+            return this.makeDutyResult(selfObservationResult.answer)
           }
 
           if (
-            continuationPlanResult?.type === 'plan' &&
-            continuationPlanResult.steps.length > 0
+            selfObservationResult?.type === 'replan' &&
+            selfObservationResult.functions.length > 0
           ) {
             replanCount += 1
-            pendingSteps = [...continuationPlanResult.steps]
+            pendingSteps = selfObservationResult.functions.map((f) => ({
+              function: f,
+              label: f
+            }))
 
             LogHelper.title(this.name)
             LogHelper.debug(
-              `Continuation re-plan ${replanCount}/${MAX_REPLANS}: ${pendingSteps.map((s) => s.function).join(' -> ')}`
+              `Execution self-observation re-plan ${replanCount}/${MAX_REPLANS}: ${pendingSteps.map((s) => s.function).join(' -> ')}`
             )
-            if (continuationPlanResult.summary) {
+            if (selfObservationResult.reason) {
               LogHelper.debug(
-                `Continuation plan summary: "${continuationPlanResult.summary}"`
+                `Execution self-observation reason: "${selfObservationResult.reason}"`
               )
               await this.emitProgress(
-                this.toProgressiveMessage(continuationPlanResult.summary)
+                this.toProgressiveMessage(
+                  `${selfObservationResult.reason.trim().replace(/[.]+$/, '')}...`
+                )
               )
             }
 
@@ -1109,6 +1112,10 @@ export class ReActLLMDuty extends LLMDuty {
   } | null> {
     const phase = options?.phase ?? 'execution'
     const phasePolicy = getPhasePolicy(phase)
+    // Keep tool_choice explicit at call sites. This avoids hidden behavior and
+    // lets phases decide when forcing a tool is worth disabling thinking.
+    const effectiveToolChoice: OpenAIToolChoice | undefined =
+      tools.length === 0 ? undefined : toolChoice
     const disableThinking =
       options?.disableThinking ?? !phasePolicy.thinkingEnabled
     const shouldEmitReasoning =
@@ -1118,13 +1125,6 @@ export class ReActLLMDuty extends LLMDuty {
     const shouldStreamEffective =
       (options?.streamToProvider ?? phasePolicy.streamToProvider) &&
       LLM_PROVIDER_NAME !== LLMProviders.Local
-
-    const effectiveToolChoice: OpenAIToolChoice | undefined =
-      tools.length <= 1
-        ? undefined
-        : typeof toolChoice === 'string'
-          ? toolChoice
-          : 'auto'
 
     const toolNames = tools.map((t) => t.function.name).join(', ')
     const choiceLabel =

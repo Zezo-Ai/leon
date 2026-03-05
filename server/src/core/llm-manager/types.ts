@@ -105,7 +105,8 @@ export interface CompletionParams {
   shouldStream?: boolean
   /**
    * Optional provider hint to disable thinking/reasoning for a request.
-   * This is never auto-enabled by the core retry path.
+   * The core may also enable this proactively for compatibility when
+   * tool_choice is forced.
    */
   disableThinking?: boolean
   /**

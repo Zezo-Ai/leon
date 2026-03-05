@@ -104,6 +104,109 @@ function buildExecutionPromptSections(params: {
   return sections
 }
 
+export async function runExecutionSelfObservationPhase(
+  caller: LLMCaller,
+  executionHistory: ExecutionRecord[]
+): Promise<
+  | { type: 'final', answer: string }
+  | { type: 'replan', reason: string, functions: string[] }
+  | null
+> {
+  const historySection = formatExecutionHistory(executionHistory)
+  const systemPrompt = buildPhaseSystemPrompt(
+    `You are evaluating whether execution should continue after the current plan finished.
+
+Use only the user request and collected observations.
+
+Return ONLY one of:
+- {"type":"final","answer":"..."} when the request is fully completed.
+- {"type":"replan","functions":["toolkit_id.tool_id.function_name",...],"reason":"..."} when more tool steps are still needed.
+
+Rules:
+- Base your decision strictly on observations, not assumptions.
+- If unsure, choose "replan" and provide the minimum next functions needed.
+- "answer" must be directly user-facing, not process/meta narration.`,
+    'execution'
+  )
+  const prompt = `${historySection}\n\nUser Request: "${caller.input}"\n\nCurrent plan status: no pending steps remain.\nDecide whether to finish now or continue with additional steps.`
+
+  const schema = {
+    type: 'object',
+    properties: {
+      type: { type: 'string', enum: ['final', 'replan'] },
+      answer: {
+        anyOf: [{ type: 'string' }, { type: 'null' }]
+      },
+      functions: {
+        anyOf: [
+          {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          { type: 'null' }
+        ]
+      },
+      reason: {
+        anyOf: [{ type: 'string' }, { type: 'null' }]
+      }
+    },
+    required: ['type', 'answer', 'functions', 'reason'],
+    additionalProperties: false
+  }
+
+  const completion = await caller.callLLM(
+    prompt,
+    systemPrompt,
+    schema,
+    caller.history,
+    buildExecutionPromptSections({
+      prompt,
+      systemPrompt,
+      promptSource:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/execution.ts',
+      systemPromptSource:
+        'server/src/core/llm-manager/llm-duties/react-llm-duty/execution.ts',
+      schema
+    }),
+    {
+      phase: 'execution',
+      disableThinking: false
+    }
+  )
+
+  if (!completion) {
+    const providerError = caller.consumeProviderErrorMessage()
+    if (providerError) {
+      return { type: 'final', answer: providerError }
+    }
+    return null
+  }
+
+  const parsed = parseOutput(completion.output)
+  if (!parsed) {
+    return null
+  }
+
+  if (parsed['type'] === 'final' && typeof parsed['answer'] === 'string') {
+    const answer = parsed['answer'].trim()
+    if (answer) {
+      return { type: 'final', answer }
+    }
+  }
+
+  if (parsed['type'] === 'replan') {
+    return {
+      type: 'replan',
+      reason: (parsed['reason'] as string) || 'More steps are needed',
+      functions: Array.isArray(parsed['functions'])
+        ? (parsed['functions'] as string[])
+        : []
+    }
+  }
+
+  return null
+}
+
 export async function runExecutionStep(
   caller: LLMCaller,
   step: PlanStep,
@@ -496,40 +599,40 @@ async function resolveToolFunctionWithJSONMode(
   const prompt = `Tool: ${effectiveToolkitId}.${effectiveToolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\nAvailable Functions:\n${functionsSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide tool_input.`
 
   const resolveSchema = {
-    oneOf: [
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['execute'] },
-          function_name: { type: 'string' },
-          tool_input: { type: 'string' }
-        },
-        required: ['type', 'function_name', 'tool_input'],
-        additionalProperties: false
+    type: 'object',
+    properties: {
+      type: { type: 'string', enum: ['execute', 'replan', 'final'] },
+      function_name: {
+        anyOf: [{ type: 'string' }, { type: 'null' }]
       },
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['replan'] },
-          functions: {
+      tool_input: {
+        anyOf: [{ type: 'string' }, { type: 'null' }]
+      },
+      functions: {
+        anyOf: [
+          {
             type: 'array',
             items: { type: 'string' }
           },
-          reason: { type: 'string' }
-        },
-        required: ['type', 'functions', 'reason'],
-        additionalProperties: false
+          { type: 'null' }
+        ]
       },
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['final'] },
-          answer: { type: 'string' }
-        },
-        required: ['type', 'answer'],
-        additionalProperties: false
+      reason: {
+        anyOf: [{ type: 'string' }, { type: 'null' }]
+      },
+      answer: {
+        anyOf: [{ type: 'string' }, { type: 'null' }]
       }
-    ]
+    },
+    required: [
+      'type',
+      'function_name',
+      'tool_input',
+      'functions',
+      'reason',
+      'answer'
+    ],
+    additionalProperties: false
   }
 
   const completionResult = await caller.callLLM(
@@ -959,40 +1062,40 @@ async function executeFunctionWithJSONMode(
   )
 
   const executeSchema = {
-    oneOf: [
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['execute'] },
-          function_name: { type: 'string' },
-          tool_input: { type: 'string' }
-        },
-        required: ['type', 'function_name', 'tool_input'],
-        additionalProperties: false
+    type: 'object',
+    properties: {
+      type: { type: 'string', enum: ['execute', 'replan', 'final'] },
+      function_name: {
+        anyOf: [{ type: 'string' }, { type: 'null' }]
       },
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['replan'] },
-          functions: {
+      tool_input: {
+        anyOf: [{ type: 'string' }, { type: 'null' }]
+      },
+      functions: {
+        anyOf: [
+          {
             type: 'array',
             items: { type: 'string' }
           },
-          reason: { type: 'string' }
-        },
-        required: ['type', 'functions', 'reason'],
-        additionalProperties: false
+          { type: 'null' }
+        ]
       },
-      {
-        type: 'object',
-        properties: {
-          type: { type: 'string', enum: ['final'] },
-          answer: { type: 'string' }
-        },
-        required: ['type', 'answer'],
-        additionalProperties: false
+      reason: {
+        anyOf: [{ type: 'string' }, { type: 'null' }]
+      },
+      answer: {
+        anyOf: [{ type: 'string' }, { type: 'null' }]
       }
-    ]
+    },
+    required: [
+      'type',
+      'function_name',
+      'tool_input',
+      'functions',
+      'reason',
+      'answer'
+    ],
+    additionalProperties: false
   }
 
   let retries = 0

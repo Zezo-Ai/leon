@@ -287,6 +287,21 @@ export function shouldTreatPlanningTextAsFinalAnswer(text: string): boolean {
   return true
 }
 
+export function extractPlanningMarkedFinalAnswer(text: string): string | null {
+  const sanitized = stripInlineToolMarkup(text)
+  if (!sanitized) {
+    return null
+  }
+
+  const match = sanitized.match(/^FINAL_ANSWER:\s*(.+)$/is)
+  if (!match) {
+    return null
+  }
+
+  const answer = match[1]?.trim() || ''
+  return answer || null
+}
+
 function humanizeIdentifier(value: string): string {
   return value
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')

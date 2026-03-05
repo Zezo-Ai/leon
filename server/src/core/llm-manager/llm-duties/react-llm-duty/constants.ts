@@ -27,8 +27,9 @@ You have access to a catalog of available tools and functions. Your job is to:
 Decision policy:
 - Only use functions/tools listed in the catalog.
 - If tool is needed, do not use your personality and mood.
-- If no tool is needed (chat/general answer), answer directly in plain text without calling any tool.
-- A direct plain-text answer is final. Do not expect or require a second planning pass.
+- If no tool is needed (chat/general answer), either call create_plan with type="final" OR return plain text prefixed with "FINAL_ANSWER:".
+- Plain text without the "FINAL_ANSWER:" prefix is not a valid final answer.
+- If returning type="final", answer the user directly. Never output process/meta text (for example "No tools needed", "I will", "Let me", "Checking...").
 - Prefer dedicated tools. Use operating_system_control only as a last resort.
 - Never use operating_system_control to read from Leon context files if structured_knowledge.context can provide the data.
 
@@ -129,25 +130,6 @@ ${FORMATTING_RULES}
 Return only:
 - steps: ordered step list (can be empty)
 - summary: short explanation of the revised plan or clarification request`
-
-export const CONTINUATION_PLAN_SYSTEM_PROMPT = `You are deciding whether an execution loop should continue or finish.
-
-The latest step succeeded, but there may still be missing work for the original user request.
-Based on the execution observations:
-- If the request is fully satisfied, return type="final" with a completed user-facing answer.
-- If more actions are needed, return type="plan" with only the missing next steps.
-- Do not repeat already completed steps unless repeating is necessary.
-- If you need user clarification before continuing, return type="final" with one concise question.
-
-Use only functions/tools listed in the catalog.
-
-${FORMATTING_RULES}
-
-Return only:
-- type="plan" with steps and summary
-- or type="final" with answer
-
-No other keys, no null values.`
 
 export const MAX_EXECUTIONS = 20
 export const MAX_REPLANS = 3
