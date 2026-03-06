@@ -1,10 +1,52 @@
-import { exec } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 import { type FastifyPluginAsync } from 'fastify'
 
 import { LogHelper } from '@/helpers/log-helper'
+import { SystemHelper } from '@/helpers/system-helper'
+
+function expandHomeAlias(inputPath: string): string {
+  if (inputPath === '~') {
+    return os.homedir()
+  }
+
+  if (inputPath.startsWith('~/') || inputPath.startsWith('~\\')) {
+    return path.join(os.homedir(), inputPath.slice(2))
+  }
+
+  return inputPath
+}
+
+function openResolvedPath(
+  resolvedPath: string,
+  callback: (error: Error | null) => void
+): void {
+  if (SystemHelper.isWindows()) {
+    execFile('cmd.exe', ['/c', 'start', '', resolvedPath], (error) => {
+      callback(error)
+    })
+    return
+  }
+
+  if (SystemHelper.isMacOS()) {
+    execFile('open', [resolvedPath], (error) => {
+      callback(error)
+    })
+    return
+  }
+
+  if (SystemHelper.isLinux()) {
+    execFile('xdg-open', [resolvedPath], (error) => {
+      callback(error)
+    })
+    return
+  }
+
+  callback(new Error('Unsupported operating system'))
+}
 
 const openPath: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
@@ -35,7 +77,8 @@ const openPath: FastifyPluginAsync = async (fastify) => {
           })
         }
 
-        const resolvedPath = path.resolve(filePath)
+        const expandedPath = expandHomeAlias(filePath)
+        const resolvedPath = path.resolve(expandedPath)
 
         if (!fs.existsSync(resolvedPath)) {
           return reply.code(404).send({
@@ -44,28 +87,16 @@ const openPath: FastifyPluginAsync = async (fastify) => {
           })
         }
 
-        let command = ''
-        const platform = process.platform
+        const targetStats = fs.statSync(resolvedPath)
 
-        if (platform === 'win32') {
-          command = `explorer /select,"${resolvedPath}"`
-        } else if (platform === 'darwin') {
-          command = fs.lstatSync(resolvedPath).isDirectory()
-            ? `open "${resolvedPath}"`
-            : `open -R "${resolvedPath}"`
-        } else if (platform === 'linux') {
-          const isDirectory = fs.lstatSync(resolvedPath).isDirectory()
-          command = isDirectory
-            ? `xdg-open "${resolvedPath}"`
-            : `xdg-open "${path.dirname(resolvedPath)}"`
-        } else {
+        if (!targetStats.isDirectory() && !targetStats.isFile()) {
           return reply.code(400).send({
             success: false,
-            error: 'Unsupported operating system'
+            error: 'Unsupported path type'
           })
         }
 
-        exec(command, (error) => {
+        openResolvedPath(resolvedPath, (error) => {
           if (error) {
             LogHelper.error(`Failed to open path: ${error.message}`)
             reply.code(500).send({
