@@ -23,6 +23,7 @@ import {
 import {
   LLMDuties,
   LLMProviders,
+  type LLMPromptAbortReason,
   type OpenAITool,
   type OpenAIToolCall,
   type OpenAIToolChoice
@@ -39,6 +40,7 @@ import {
   CHARS_PER_TOKEN,
   TOOL_CALL_WAIT_NOTICE_DELAY_MS,
   TOOL_CALL_DIAGNOSIS_DELAY_MS,
+  TOOL_CALL_DIAGNOSIS_RETRY_DELAY_MS,
   REACT_HISTORY_COMPACTION_MAX_TOKENS,
   REACT_HISTORY_COMPACTION_RETRY_MAX_TOKENS,
   REACT_HISTORY_COMPACTION_SYSTEM_PROMPT,
@@ -1723,6 +1725,8 @@ export class ReActLLMDuty extends LLMDuty {
     let completed = false
     let waitNoticeTimer: NodeJS.Timeout | null = null
     let diagnosisTimer: NodeJS.Timeout | null = null
+    let diagnosisRetryTimer: NodeJS.Timeout | null = null
+    const toolCallAbortController = new AbortController()
 
     const delayReason = this.buildLongToolCallReason(
       prompt,
@@ -1750,6 +1754,7 @@ export class ReActLLMDuty extends LLMDuty {
       if (completed) {
         return
       }
+
       void this.runLongToolCallDiagnosis(
         prompt,
         systemPrompt,
@@ -1757,6 +1762,26 @@ export class ReActLLMDuty extends LLMDuty {
         toolChoice,
         history
       )
+
+      diagnosisRetryTimer = setTimeout(() => {
+        if (completed || toolCallAbortController.signal.aborted) {
+          return
+        }
+
+        const abortReason: LLMPromptAbortReason = {
+          shouldRetry: true,
+          retryStrategy: 'timeout',
+          source: 'react_tool_call_diagnosis',
+          delayMs: TOOL_CALL_DIAGNOSIS_RETRY_DELAY_MS
+        }
+
+        LogHelper.title(this.name)
+        LogHelper.warning(
+          `callLLMWithTools: diagnosis grace period exceeded (${TOOL_CALL_DIAGNOSIS_RETRY_DELAY_MS}ms); canceling in-flight request and retrying`
+        )
+
+        toolCallAbortController.abort(abortReason)
+      }, TOOL_CALL_DIAGNOSIS_RETRY_DELAY_MS)
     }, TOOL_CALL_DIAGNOSIS_DELAY_MS)
 
     try {
@@ -1810,6 +1835,7 @@ export class ReActLLMDuty extends LLMDuty {
         ...(effectiveToolChoice !== undefined
           ? { toolChoice: effectiveToolChoice }
           : {}),
+        signal: toolCallAbortController.signal,
         ...(history ? { history } : {})
       })
     } finally {
@@ -1819,6 +1845,9 @@ export class ReActLLMDuty extends LLMDuty {
       }
       if (diagnosisTimer) {
         clearTimeout(diagnosisTimer)
+      }
+      if (diagnosisRetryTimer) {
+        clearTimeout(diagnosisRetryTimer)
       }
     }
 

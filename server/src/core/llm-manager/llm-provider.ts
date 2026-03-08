@@ -6,6 +6,7 @@ import axios, { type AxiosResponse } from 'axios'
 
 import {
   type CompletionParams,
+  type LLMPromptAbortReason,
   type LLMDuties,
   type OpenAIToolCall,
   type PromptOrChatHistory,
@@ -50,6 +51,9 @@ interface NormalizedCompletionResult {
   usedOutputTokens: number
   toolCalls?: OpenAIToolCall[]
   reasoning?: string
+}
+interface PromptAbortError extends Error {
+  promptAbortReason?: LLMPromptAbortReason
 }
 type Provider =
   | LocalLLMProvider
@@ -481,6 +485,11 @@ export default class LLMProvider {
   }
 
   private isTimeoutLikeError(error: unknown): boolean {
+    const promptAbortReason = this.getPromptAbortReason(error)
+    if (promptAbortReason?.retryStrategy === 'timeout') {
+      return true
+    }
+
     if (axios.isAxiosError(error)) {
       const status = error.response?.status
       if (status === 408 || status === 504) {
@@ -593,6 +602,50 @@ export default class LLMProvider {
     }
 
     return this.truncateForLog(this.safeSerialize(details))
+  }
+
+  private isPromptAbortReason(value: unknown): value is LLMPromptAbortReason {
+    if (!value || typeof value !== 'object') {
+      return false
+    }
+
+    const reason = value as Record<string, unknown>
+    return (
+      reason['shouldRetry'] === true &&
+      reason['retryStrategy'] === 'timeout' &&
+      reason['source'] === 'react_tool_call_diagnosis' &&
+      typeof reason['delayMs'] === 'number'
+    )
+  }
+
+  private getPromptAbortReason(error: unknown): LLMPromptAbortReason | null {
+    if (!error || typeof error !== 'object') {
+      return null
+    }
+
+    const promptAbortReason = (error as PromptAbortError).promptAbortReason
+    return this.isPromptAbortReason(promptAbortReason)
+      ? promptAbortReason
+      : null
+  }
+
+  private createPromptAbortError(reason: LLMPromptAbortReason): PromptAbortError {
+    const error = new Error(
+      `Prompt aborted by caller after ${reason.delayMs}ms grace period`
+    ) as PromptAbortError
+    error.name = 'LLMPromptAbortError'
+    error.promptAbortReason = reason
+
+    return error
+  }
+
+  private omitCompletionSignal(
+    completionParams: CompletionParams
+  ): Omit<CompletionParams, 'signal'> {
+    const { signal, ...retryParams } = completionParams
+    void signal
+
+    return retryParams
   }
 
   private buildProviderErrorMessage(
@@ -1712,6 +1765,7 @@ export default class LLMProvider {
     const abortController = new AbortController()
     let timeoutHandle: NodeJS.Timeout | null = null
     let hasStartedStreaming = false
+    const callerAbortSignal = completionParams.signal
     const userOnToken = completionParams.onToken
     const userOnReasoningToken = completionParams.onReasoningToken
 
@@ -1751,6 +1805,51 @@ export default class LLMProvider {
       signal: abortController.signal
     }
 
+    let callerAbortListener: (() => void) | null = null
+    const removeCallerAbortListener = (): void => {
+      if (!callerAbortSignal || !callerAbortListener) {
+        return
+      }
+
+      callerAbortSignal.removeEventListener('abort', callerAbortListener)
+      callerAbortListener = null
+    }
+    const callerAbortPromise = new Promise((_, reject) => {
+      if (!callerAbortSignal) {
+        return
+      }
+
+      const rejectWithAbortReason = (): void => {
+        if (!abortController.signal.aborted) {
+          abortController.abort(callerAbortSignal.reason)
+        }
+
+        if (this.isPromptAbortReason(callerAbortSignal.reason)) {
+          reject(this.createPromptAbortError(callerAbortSignal.reason))
+          return
+        }
+
+        reject(
+          callerAbortSignal.reason instanceof Error
+            ? callerAbortSignal.reason
+            : new Error('Prompt aborted by caller')
+        )
+      }
+
+      if (callerAbortSignal.aborted) {
+        rejectWithAbortReason()
+        return
+      }
+
+      callerAbortListener = (): void => {
+        rejectWithAbortReason()
+      }
+
+      callerAbortSignal.addEventListener('abort', callerAbortListener, {
+        once: true
+      })
+    })
+
     let rawResultPromise: Promise<unknown>
     try {
       rawResultPromise = Promise.resolve(
@@ -1760,6 +1859,7 @@ export default class LLMProvider {
         )
       )
     } catch (e) {
+      removeCallerAbortListener()
       LogHelper.title('LLM Provider')
       LogHelper.error(`Error to complete prompt: ${String(e)}`)
       LogHelper.timeEnd(measureExecutionTimeLabel)
@@ -1797,11 +1897,16 @@ export default class LLMProvider {
     let rawResultString
 
     try {
-      rawResult = await Promise.race([rawResultPromise, timeoutPromise])
+      rawResult = await Promise.race([
+        rawResultPromise,
+        timeoutPromise,
+        callerAbortPromise
+      ])
       if (timeoutHandle) {
         clearTimeout(timeoutHandle)
       }
     } catch (e) {
+      removeCallerAbortListener()
       if (timeoutHandle) {
         clearTimeout(timeoutHandle)
       }
@@ -1815,6 +1920,7 @@ export default class LLMProvider {
       const isThinkingToolChoiceConflict =
         this.isThinkingToolChoiceConflictError(e)
       const isUnsupportedToolChoice = this.isUnsupportedToolChoiceError(e)
+      const promptAbortReason = this.getPromptAbortReason(e)
       const remainingRetries = completionParams.maxRetries ?? 0
       const remainingRemoteProviderErrorRetries =
         completionParams.remoteProviderErrorRetries ?? 0
@@ -1909,6 +2015,9 @@ export default class LLMProvider {
         const nextTimeout = isTimeoutError
           ? (completionParams.timeout ?? 0) + TIMEOUT_RETRY_INCREMENT_MS
           : completionParams.timeout
+        const retryParams = promptAbortReason?.shouldRetry
+          ? this.omitCompletionSignal(completionParams)
+          : completionParams
 
         if (!isTimeoutError) {
           await this.waitForRetry(RETRYABLE_ERROR_RETRY_DELAY_MS)
@@ -1922,7 +2031,7 @@ export default class LLMProvider {
         )
 
         return this.prompt(promptOrChatHistory, {
-          ...completionParams,
+          ...retryParams,
           timeout: nextTimeout,
           maxRetries: remainingRetries - 1
         })
@@ -1966,6 +2075,8 @@ export default class LLMProvider {
         return null
       }*/
     }
+
+    removeCallerAbortListener()
 
     let usedInputTokens = 0
     let usedOutputTokens = 0

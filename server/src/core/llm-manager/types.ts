@@ -88,6 +88,13 @@ export interface OpenAIToolCall {
 
 export type LLMReasoningMode = 'off' | 'guarded' | 'on'
 
+export interface LLMPromptAbortReason {
+  shouldRetry: boolean
+  retryStrategy: 'timeout'
+  source: 'react_tool_call_diagnosis'
+  delayMs: number
+}
+
 export interface CompletionParams {
   dutyType: LLMDuties
   systemPrompt: string
