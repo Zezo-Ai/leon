@@ -141,7 +141,7 @@ Create a revised plan from this point to complete the user request.`
 
   const planSchema = PLAN_RESPONSE_SCHEMA
 
-  LogHelper.title(DUTY_NAME)
+  LogHelper.title(`${DUTY_NAME} / recovery`)
   LogHelper.debug(
     `Recovery planning triggered after failed step "${failedStep.label}" (${failedStep.function})`
   )
@@ -190,7 +190,7 @@ Create a revised plan from this point to complete the user request.`
               answer: {
                 type: 'string',
                 description:
-                  'For type="final", draft plain text for the final answer phase. For type="plan", set to null or omit.'
+                  'For type="final", provide a short semantic handoff note for the final answer phase. Keep it content-focused and tone-neutral. Do not write polished user-facing wording. For type="plan", set to null or omit.'
               },
               intent: {
                 type: 'string',
@@ -230,7 +230,7 @@ Create a revised plan from this point to complete the user request.`
       }
     }
 
-    LogHelper.title(DUTY_NAME)
+    LogHelper.title(`${DUTY_NAME} / recovery`)
     LogHelper.debug(
       `Recovery planning tool result: ${JSON.stringify(toolResult)}`
     )

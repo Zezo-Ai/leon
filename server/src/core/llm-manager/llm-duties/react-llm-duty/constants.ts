@@ -59,12 +59,15 @@ For example, if the user asks to "find a file and process it", include ALL steps
 "steps", "summary", "answer", and "intent" must always be present.
 - For type="plan": use "steps" + "summary", set "answer" and "intent" to null.
 - For type="final": use "answer" + "intent", set "steps" and "summary" to null.
+- For type="final": "answer" is a short semantic handoff note for the final_answer phase. It is not the final user-facing wording.
+- Keep that handoff note content-focused and tone-neutral. Describe what the response should convey, not how it should sound.
 
 "steps" is an ordered array of functions to call. Each step has:
   - "function": the fully qualified name (toolkit_id.tool_id.function_name). If the catalog only lists tools, use toolkit_id.tool_id.
   - "label": a very short user-facing description of what this step does. Must start with a verb (e.g. "Search for video files", "Download the page", "List matching items"). Keep it under 8 words.
 "summary" is a short natural language description of the plan for the user.
 "summary" must be a progress update in present progressive form and end with "...". Example: "Checking your network status...".
+"answer" for type="final" should look like internal handoff notes, not polished chat prose.
 
 No other keys.`
 

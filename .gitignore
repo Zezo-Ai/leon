@@ -9,6 +9,10 @@ test/coverage/
 **/tmp/*
 **/src/.venv/*
 logs/*
+!logs/.gitkeep
+!logs/prompts/
+logs/prompts/*
+!logs/prompts/.gitkeep
 core/context/*[.md, .json]
 !core/context/LEON.md
 !core/context/ARCHITECTURE.md

@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
 import type { ChatHistoryItem, LlamaContext } from 'node-llama-cpp'
 import { LlamaChatSession } from 'node-llama-cpp'
 
@@ -29,7 +32,7 @@ import {
   type OpenAIToolChoice
 } from '@/core/llm-manager/types'
 import { ContextStateStore } from '@/core/context-manager/context-state-store'
-import { LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
+import { LLM_PROVIDER as LLM_PROVIDER_NAME, LOGS_PATH } from '@/constants'
 import type { MessageLog } from '@/types'
 
 import {
@@ -60,7 +63,8 @@ import type {
   LLMCaller,
   PromptLogSection,
   LLMCallOptions,
-  FinalResponseSignal
+  FinalResponseSignal,
+  ReactPhase
 } from './react-llm-duty/types'
 import { widgetId, emitPlanWidget } from './react-llm-duty/plan-widget'
 import {
@@ -89,6 +93,7 @@ const REACT_CONTINUATION_STATE_FILENAME = '.react-execution-continuation-state.j
 const REACT_HISTORY_COMPACTION_STATE_FILENAME =
   '.react-history-compaction-state.json'
 const REACT_CONTINUATION_MAX_AGE_MS = 30 * 60 * 1_000
+const REACT_PROMPTS_LOG_DIR = path.join(LOGS_PATH, 'prompts')
 
 type ReactHistoryCompactionScope = 'local' | 'remote'
 
@@ -341,7 +346,7 @@ export class ReActLLMDuty extends LLMDuty {
         hasPlanningWidget = true
       } else {
         // --- Phase 1: Planning ---
-        LogHelper.title(this.name)
+        this.logTitle('planning')
         LogHelper.debug('Phase 1: Planning...')
 
         let planningUiSteps: TrackedPlanStep[] = [
@@ -385,14 +390,14 @@ export class ReActLLMDuty extends LLMDuty {
               true
             )
           }
-          LogHelper.title(this.name)
+          this.logTitle('planning')
           LogHelper.debug(
             `Planning returned handoff signal: intent="${planResult.signal.intent}"`
           )
           return await finalizeFromSignal(planResult.signal)
         }
 
-        LogHelper.title(this.name)
+        this.logTitle('planning')
         LogHelper.debug(
           `Plan created with ${planResult.steps.length} step(s): ${planResult.steps.map((s) => s.function).join(' -> ')}`
         )
@@ -427,7 +432,7 @@ export class ReActLLMDuty extends LLMDuty {
       }
 
       // --- Phase 2: Execution loop ---
-      LogHelper.title(this.name)
+      this.logTitle('execution')
       LogHelper.debug('Phase 2: Execution loop...')
 
       while (pendingSteps.length > 0 && executionCount < MAX_EXECUTIONS) {
@@ -816,7 +821,7 @@ export class ReActLLMDuty extends LLMDuty {
       }
 
       // --- Phase 3: Final answer synthesis ---
-      LogHelper.title(this.name)
+      this.logTitle('final_answer')
       LogHelper.debug(`Phase 3: Final answer synthesis (${executionHistory.length} execution(s) completed)`)
 
       // Mark all steps as completed in the widget
@@ -1459,6 +1464,7 @@ export class ReActLLMDuty extends LLMDuty {
       : null
 
     this.logPromptDispatch({
+      phase,
       channel: 'json',
       prompt,
       systemPrompt,
@@ -1506,11 +1512,12 @@ export class ReActLLMDuty extends LLMDuty {
       this.totalInputTokens += result.usedInputTokens ?? 0
       this.totalOutputTokens += result.usedOutputTokens ?? 0
       this.logPromptUsage(
+        phase,
         'json',
         result.usedInputTokens ?? 0,
         result.usedOutputTokens ?? 0
       )
-      this.logPromptReasoning('json', result.reasoning)
+      this.logPromptReasoning(phase, 'json', result.reasoning)
     }
 
     return result
@@ -1550,6 +1557,7 @@ export class ReActLLMDuty extends LLMDuty {
       : null
 
     this.logPromptDispatch({
+      phase,
       channel: 'text',
       prompt,
       systemPrompt,
@@ -1629,11 +1637,12 @@ export class ReActLLMDuty extends LLMDuty {
     this.totalInputTokens += result.usedInputTokens ?? 0
     this.totalOutputTokens += result.usedOutputTokens ?? 0
     this.logPromptUsage(
+      phase,
       'text',
       result.usedInputTokens ?? 0,
       result.usedOutputTokens ?? 0
     )
-    this.logPromptReasoning('text', result.reasoning)
+    this.logPromptReasoning(phase, 'text', result.reasoning)
 
     return {
       output:
@@ -1703,11 +1712,12 @@ export class ReActLLMDuty extends LLMDuty {
         })
       : null
 
-    LogHelper.title(this.name)
+    this.logTitle(phase)
     LogHelper.debug(
       `callLLMWithTools: tools=[${toolNames}] | choice=${choiceLabel}`
     )
     this.logPromptDispatch({
+      phase,
       channel: 'tools',
       prompt,
       systemPrompt,
@@ -1739,7 +1749,7 @@ export class ReActLLMDuty extends LLMDuty {
       if (completed) {
         return
       }
-      LogHelper.title(this.name)
+      this.logTitle(phase)
       LogHelper.warning(
         `callLLMWithTools: pending > ${TOOL_CALL_WAIT_NOTICE_DELAY_MS}ms`
       )
@@ -1775,7 +1785,7 @@ export class ReActLLMDuty extends LLMDuty {
           delayMs: TOOL_CALL_DIAGNOSIS_RETRY_DELAY_MS
         }
 
-        LogHelper.title(this.name)
+        this.logTitle(phase)
         LogHelper.warning(
           `callLLMWithTools: diagnosis grace period exceeded (${TOOL_CALL_DIAGNOSIS_RETRY_DELAY_MS}ms); canceling in-flight request and retrying`
         )
@@ -1859,11 +1869,12 @@ export class ReActLLMDuty extends LLMDuty {
     this.totalInputTokens += completionResult.usedInputTokens ?? 0
     this.totalOutputTokens += completionResult.usedOutputTokens ?? 0
     this.logPromptUsage(
+      phase,
       'tools',
       completionResult.usedInputTokens ?? 0,
       completionResult.usedOutputTokens ?? 0
     )
-    this.logPromptReasoning('tools', completionResult.reasoning)
+    this.logPromptReasoning(phase, 'tools', completionResult.reasoning)
 
     // Check if the model responded with tool calls
     const toolCalls = (
@@ -1877,7 +1888,7 @@ export class ReActLLMDuty extends LLMDuty {
         allowedToolNames
       )
       if (!resolvedToolName) {
-        LogHelper.title(this.name)
+        this.logTitle(phase)
         LogHelper.warning(
           `callLLMWithTools: unexpected tool call "${firstCall.function.name}" (allowed: ${[...allowedToolNames].join(', ') || 'none'})`
         )
@@ -1900,12 +1911,12 @@ export class ReActLLMDuty extends LLMDuty {
         }
       }
       if (resolvedToolName !== firstCall.function.name) {
-        LogHelper.title(this.name)
+        this.logTitle(phase)
         LogHelper.debug(
           `callLLMWithTools: normalized tool call "${firstCall.function.name}" -> "${resolvedToolName}"`
         )
       }
-      LogHelper.title(this.name)
+      this.logTitle(phase)
       LogHelper.debug(
         `callLLMWithTools: tool call received — ${resolvedToolName}(${firstCall.function.arguments})`
       )
@@ -1927,7 +1938,7 @@ export class ReActLLMDuty extends LLMDuty {
       typeof completionResult.output === 'string'
         ? completionResult.output
         : ''
-    LogHelper.title(this.name)
+    this.logTitle(phase)
     LogHelper.debug(
       `callLLMWithTools: no tool call, text response: "${textContent}"`
     )
@@ -2016,7 +2027,73 @@ export class ReActLLMDuty extends LLMDuty {
     return Math.ceil(historyChars / CHARS_PER_TOKEN)
   }
 
+  private buildLogTitle(context?: string): string {
+    return context ? `${this.name} / ${context}` : this.name
+  }
+
+  private logTitle(context?: string): void {
+    LogHelper.title(this.buildLogTitle(context))
+  }
+
+  private writePhasePromptLog(params: {
+    phase: ReactPhase
+    channel: 'json' | 'text' | 'tools'
+    sections: PromptLogSection[]
+    phasePolicySummary?: string
+    shouldStream?: boolean
+    tools?: OpenAITool[]
+    toolChoice?: OpenAIToolChoice
+  }): void {
+    try {
+      fs.mkdirSync(REACT_PROMPTS_LOG_DIR, { recursive: true })
+
+      const promptLogFilePath = path.join(
+        REACT_PROMPTS_LOG_DIR,
+        `${params.phase}.log`
+      )
+      const headerLines = [
+        `=== ${new Date().toISOString()} ===`,
+        `phase=${params.phase}`,
+        `channel=${params.channel}`,
+        `stream=${params.shouldStream === true ? 'true' : 'false'}`,
+        ...(params.phasePolicySummary
+          ? [`policy=${params.phasePolicySummary}`]
+          : []),
+        ...(params.tools
+          ? [
+              `tool_count=${params.tools.length}`,
+              `tool_choice=${
+                params.toolChoice === undefined
+                  ? 'omitted'
+                  : typeof params.toolChoice === 'string'
+                    ? params.toolChoice
+                    : params.toolChoice.function.name
+              }`
+            ]
+          : []),
+        ''
+      ]
+      const sectionLines = params.sections.flatMap((section) => [
+        `--- ${section.name} (${section.source}) ---`,
+        section.content ?? '',
+        ''
+      ])
+
+      fs.writeFileSync(
+        promptLogFilePath,
+        `${[...headerLines, ...sectionLines].join('\n')}\n`,
+        'utf8'
+      )
+    } catch (error) {
+      this.logTitle(params.phase)
+      LogHelper.warning(
+        `Failed to write prompt log file: ${String(error)}`
+      )
+    }
+  }
+
   private logPromptDispatch(params: {
+    phase: ReactPhase
     channel: 'json' | 'text' | 'tools'
     prompt: string
     systemPrompt: string
@@ -2037,7 +2114,7 @@ export class ReActLLMDuty extends LLMDuty {
     const totalEstimated =
       promptTokens + systemTokens + historyTokens + schemaTokens
 
-    LogHelper.title(this.name)
+    this.logTitle(params.phase)
     LogHelper.debug(
       `Prompt dispatch [${params.channel}] est_tokens=${totalEstimated} (prompt=${promptTokens}, system=${systemTokens}, history=${historyTokens}${schemaTokens > 0 ? `, schema=${schemaTokens}` : ''})${
         params.shouldStream === true ? ' | stream=true' : ''
@@ -2059,6 +2136,22 @@ export class ReActLLMDuty extends LLMDuty {
       params.promptSections && params.promptSections.length > 0
         ? params.promptSections
         : this.buildDefaultPromptSections(params)
+    this.writePhasePromptLog({
+      phase: params.phase,
+      channel: params.channel,
+      sections,
+      ...(params.phasePolicySummary !== undefined
+        ? { phasePolicySummary: params.phasePolicySummary }
+        : {}),
+      ...(params.shouldStream !== undefined
+        ? { shouldStream: params.shouldStream }
+        : {}),
+      ...(params.tools ? { tools: params.tools } : {}),
+      ...(params.toolChoice !== undefined
+        ? { toolChoice: params.toolChoice }
+        : {})
+    })
+
     if (sections.length > 0) {
       LogHelper.debug(
         `Prompt sections [${params.channel}]:\n${sections
@@ -2133,21 +2226,23 @@ export class ReActLLMDuty extends LLMDuty {
   }
 
   private logPromptUsage(
+    phase: ReactPhase,
     channel: 'json' | 'text' | 'tools',
     usedInputTokens: number,
     usedOutputTokens: number
   ): void {
-    LogHelper.title(this.name)
+    this.logTitle(phase)
     LogHelper.debug(
       `Prompt usage [${channel}] input=${usedInputTokens} output=${usedOutputTokens} | total=${this.totalInputTokens}+${this.totalOutputTokens}=${this.totalInputTokens + this.totalOutputTokens}`
     )
   }
 
   private logPromptReasoning(
+    phase: ReactPhase,
     channel: 'json' | 'text' | 'tools',
     reasoning?: string
   ): void {
-    LogHelper.title(this.name)
+    this.logTitle(phase)
     if (reasoning && reasoning.trim()) {
       LogHelper.debug(`Prompt reasoning [${channel}]:\n${reasoning.trim()}`)
       return
@@ -2212,7 +2307,7 @@ export class ReActLLMDuty extends LLMDuty {
       '{{ history_tokens }}': String(historyTokens)
     })
 
-    LogHelper.title(this.name)
+    this.logTitle('execution')
     LogHelper.warning(
       `Long tool-call diagnosis (> ${TOOL_CALL_DIAGNOSIS_DELAY_MS}ms): ${diagnosisMessage}`
     )
@@ -2228,7 +2323,7 @@ export class ReActLLMDuty extends LLMDuty {
     try {
       await BRAIN.talk(message)
     } catch (error) {
-      LogHelper.title(this.name)
+      this.logTitle('execution')
       LogHelper.warning(
         `Failed to emit intermediate progress message: ${String(error)}`
       )
@@ -2263,7 +2358,7 @@ export class ReActLLMDuty extends LLMDuty {
       this.emitSyntheticTokenStream(normalizedOutput)
     }
 
-    LogHelper.title(this.name)
+    this.logTitle('final_answer')
     LogHelper.success('Duty executed')
     LogHelper.success(`Output — ${normalizedOutput}`)
     LogHelper.debug(

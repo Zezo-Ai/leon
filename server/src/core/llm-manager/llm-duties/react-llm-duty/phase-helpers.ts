@@ -245,7 +245,7 @@ export function buildToolkitContextSection(
     contextCharCount / CHARS_PER_TOKEN
   )
 
-  LogHelper.title(DUTY_NAME)
+  LogHelper.title(`${DUTY_NAME} / execution`)
   LogHelper.debug(
     `Toolkit context injection [${toolkitId}] files=${injectedContextFiles.length > 0 ? injectedContextFiles.join(', ') : 'none'} | chars=${contextCharCount} | est_tokens=${estimatedContextTokens}`
   )

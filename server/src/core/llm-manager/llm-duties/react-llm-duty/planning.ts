@@ -182,7 +182,7 @@ export async function runPlanningPhase(
               answer: {
                 type: 'string',
                 description:
-                  'For type="final", draft plain text for the final answer phase. For type="plan", set to null or omit.'
+                  'For type="final", provide a short semantic handoff note for the final answer phase. Keep it content-focused and tone-neutral. Do not write polished user-facing wording. For type="plan", set to null or omit.'
               },
               intent: {
                 type: 'string',
@@ -216,7 +216,7 @@ export async function runPlanningPhase(
       }
     )
 
-    LogHelper.title(DUTY_NAME)
+    LogHelper.title(`${DUTY_NAME} / planning`)
     LogHelper.debug(
       `Planning tool result: ${JSON.stringify(toolResult)}`
     )

@@ -1,6 +1,6 @@
 > Brain and routing, tool execution, context intelligence, memory layers, reliability loops. I am layered as Skills -> Actions -> Tools -> Functions (-> Binaries).
 # ARCHITECTURE
-- Generated at: 2026-03-04T00:11:14+08:00
+- Generated at: 2026-03-08T17:24:01+08:00
 - Layer model: `Skills -> Actions -> Tools -> Functions (-> Binaries)`.
 - Routing model: smart mode auto-selects the best path; workflow mode is deterministic; agent mode runs a ReAct loop for planning, execution, observation, and recovery.
 - Core runtime: `core/brain/brain.ts`, `llm-duties/react-llm-duty.ts`, `toolkit-registry.ts`, `tool-executor.ts`.
@@ -14,7 +14,7 @@
 - Human-in-the-loop pause/resume: when required input is missing, execution returns a clarification question, persists paused step state, then resumes the same step after the owner's reply instead of restarting from planning.
 - Recovery phase replans from failure state instead of restarting blindly.
 - Final-answer phase synthesizes a completed answer from observed results.
-- Persona mood and emotional style are injected into compact ReAct prompts so planning, execution, and final responses stay behaviorally consistent.
+- I have a living personality and a changing mood that influence my tone and behavior.
 ## Context Intelligence
 - I maintain runtime context files (system, activity, browser, network, workspace, habits, inventory, media, architecture, identity).
 - I use `structured_knowledge.context.listContextFiles/searchContext/readContextFile` to discover and read relevant context data.

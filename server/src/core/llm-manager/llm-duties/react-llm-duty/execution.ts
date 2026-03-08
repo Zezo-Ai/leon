@@ -52,7 +52,7 @@ async function buildExecutionMemorySection(
   _caller: LLMCaller,
   toolkitId: string
 ): Promise<string> {
-  LogHelper.title(DUTY_NAME)
+  LogHelper.title(`${DUTY_NAME} / execution`)
   LogHelper.debug(
     `Execution memory injection disabled [${toolkitId}] (use structured_knowledge.memory.read when memory is needed)`
   )
@@ -375,7 +375,7 @@ async function runToolLevelExecution(
   const toolkitId = parts[0] || ''
   const toolId = parts[1] || parts[0] || ''
 
-  LogHelper.title(DUTY_NAME)
+  LogHelper.title(`${DUTY_NAME} / execution`)
   LogHelper.debug(`Tool-level execution: resolving "${qualifiedName}"`)
 
   // Try to resolve the tool
@@ -928,7 +928,7 @@ async function executeFunctionWithNativeTools(
         ? `"${duplicateInputMatch.stepLabel}"`
         : '(no label)'
       lastError = `tool_input duplicates Step ${duplicateInputMatch.stepNumber} ${previousStepLabel}; provide different arguments for the current step`
-      LogHelper.title(DUTY_NAME)
+      LogHelper.title(`${DUTY_NAME} / execution`)
       LogHelper.debug(
         `Rejected duplicate tool_input for "${qualifiedName}" at step ${currentStepNumber}: matches step ${duplicateInputMatch.stepNumber}`
       )
@@ -943,7 +943,7 @@ async function executeFunctionWithNativeTools(
     ) {
       retries += 1
       lastError = 'tool_input duplicates a previous attempt for the current step'
-      LogHelper.title(DUTY_NAME)
+      LogHelper.title(`${DUTY_NAME} / execution`)
       LogHelper.debug(
         `Rejected duplicate retry tool_input for "${qualifiedName}" at step ${currentStepNumber}`
       )
@@ -1012,7 +1012,7 @@ async function executeFunctionWithNativeTools(
     if (!result) {
       const providerError = caller.consumeProviderErrorMessage()
       if (providerError) {
-        LogHelper.title(DUTY_NAME)
+        LogHelper.title(`${DUTY_NAME} / execution`)
         LogHelper.warning(
           `Execution aborted for "${qualifiedName}": ${providerError}`
         )
@@ -1028,7 +1028,7 @@ async function executeFunctionWithNativeTools(
 
       const providerFailureObservation =
         'Provider did not return a response (timeout or network issue).'
-      LogHelper.title(DUTY_NAME)
+      LogHelper.title(`${DUTY_NAME} / execution`)
       LogHelper.warning(
         `Execution aborted for "${qualifiedName}": ${providerFailureObservation}`
       )
@@ -1244,7 +1244,7 @@ async function executeFunctionWithJSONMode(
     if (!completionResult) {
       const providerFailureObservation =
         'Provider did not return a response (timeout or network issue).'
-      LogHelper.title(DUTY_NAME)
+      LogHelper.title(`${DUTY_NAME} / execution`)
       LogHelper.warning(
         `Execution aborted for "${qualifiedName}": ${providerFailureObservation}`
       )
@@ -1329,7 +1329,7 @@ async function executeFunctionWithJSONMode(
           ? `"${duplicateInputMatch.stepLabel}"`
           : '(no label)'
         lastError = `tool_input duplicates Step ${duplicateInputMatch.stepNumber} ${previousStepLabel}; provide different arguments for the current step`
-        LogHelper.title(DUTY_NAME)
+        LogHelper.title(`${DUTY_NAME} / execution`)
         LogHelper.debug(
           `Rejected duplicate tool_input for "${qualifiedName}" at step ${currentStepNumber}: matches step ${duplicateInputMatch.stepNumber}`
         )
@@ -1345,7 +1345,7 @@ async function executeFunctionWithJSONMode(
         retries += 1
         lastError =
           'tool_input duplicates a previous attempt for the current step'
-        LogHelper.title(DUTY_NAME)
+        LogHelper.title(`${DUTY_NAME} / execution`)
         LogHelper.debug(
           `Rejected duplicate retry tool_input for "${qualifiedName}" at step ${currentStepNumber}`
         )
@@ -1461,7 +1461,7 @@ export async function runToolExecution(
     )
   }
 
-  LogHelper.title(DUTY_NAME)
+  LogHelper.title(`${DUTY_NAME} / execution`)
   LogHelper.debug(`Running tool: ${qualifiedName}`)
   LogHelper.debug(`Tool input: ${toolInput}`)
 
@@ -1489,7 +1489,7 @@ export async function runToolExecution(
     (hasDomainFailure && (nestedResultError || toolOutputError)) ||
     toolExecutionResult.message
 
-  LogHelper.title(DUTY_NAME)
+  LogHelper.title(`${DUTY_NAME} / execution`)
   if (hasDomainFailure) {
     LogHelper.warning(
       'Tool result normalized to [error]: tool output reported success=false'

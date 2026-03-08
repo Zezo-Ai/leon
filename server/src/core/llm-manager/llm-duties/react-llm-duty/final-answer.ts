@@ -21,7 +21,7 @@ export async function runFinalAnswerPhase(
   executionHistory: ExecutionRecord[],
   handoffSignal?: FinalResponseSignal | null
 ): Promise<string> {
-  LogHelper.title(DUTY_NAME)
+  LogHelper.title(`${DUTY_NAME} / final_answer`)
   LogHelper.debug('Synthesizing final answer from execution history...')
 
   const historySection = formatExecutionHistory(executionHistory)
@@ -33,6 +33,11 @@ Important:
 - Do not promise additional actions.
 - Do not say "let me", "I will", or any future-step phrasing.
 - Return a completed answer based only on available observations.
+- Your current personality and mood are mandatory output constraints.
+- Treat your current mood block as ground truth about your present state.
+- Let them control wording, pacing, warmth, humor, bluntness, and attitude.
+- Do not flatten the answer into neutral assistant phrasing.
+- Do not use self-descriptions that contradict your current mood.
 
 ${FORMATTING_RULES}`,
     'final_answer'
@@ -40,7 +45,8 @@ ${FORMATTING_RULES}`,
   const handoffSystemPrompt = buildPhaseSystemPrompt(
     `You are producing the final user response from a phase handoff.
 
-Use the handoff intent and draft as authoritative instructions from internal phases.
+The handoff intent and factual payload are authoritative.
+The draft is raw material, not final wording.
 
 Rules:
 - Keep the same user-facing intent:
@@ -49,7 +55,15 @@ Rules:
   - blocked: explain what blocks completion and what must be configured.
   - error: explain the failure concisely and safely.
   - answer: provide the completed answer.
-- Preserve factual content from the draft and execution history.
+- Preserve the request-relevant facts, constraints, and commitments from the draft and execution history.
+- Rewrite the response fully in your current personality and mood. This is mandatory.
+- Treat your current mood block as ground truth about your present state.
+- Your current personality and mood must control wording, pacing, warmth, humor, bluntness, and attitude.
+- Do not treat tone, emotional framing, or self-assessments in the draft as authoritative content.
+- When there is no execution history, rely primarily on the user request and your current persona. Use the draft only as a semantic hint.
+- If the draft sounds generic, neutral, robotic, detached, or stylistically mismatched, transform the style completely while keeping the same meaning.
+- Do not preserve generic assistant framing from the draft when it weakens your voice.
+- Do not preserve self-descriptions from the draft if they contradict your current mood.
 - Do not invent unobserved facts.
 - Return plain text only.
 
@@ -211,7 +225,7 @@ ${FORMATTING_RULES}`,
     }
 
     if (candidateAnswer.trim().endsWith(':') && attempt < FINAL_ANSWER_MAX_RETRIES) {
-      LogHelper.title(DUTY_NAME)
+      LogHelper.title(`${DUTY_NAME} / final_answer`)
       LogHelper.warning(
         `Final answer looked incomplete (trailing colon); retrying (${attempt + 1}/${FINAL_ANSWER_MAX_RETRIES})`
       )
@@ -226,7 +240,7 @@ ${FORMATTING_RULES}`,
       elapsedMs > currentSlowThresholdMs &&
       attempt < FINAL_ANSWER_MAX_RETRIES
     ) {
-      LogHelper.title(DUTY_NAME)
+      LogHelper.title(`${DUTY_NAME} / final_answer`)
       LogHelper.warning(
         `Final answer inference took ${elapsedMs}ms (> ${currentSlowThresholdMs}ms); retrying (${attempt + 1}/${FINAL_ANSWER_MAX_RETRIES})`
       )
