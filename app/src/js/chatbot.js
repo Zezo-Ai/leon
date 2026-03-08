@@ -187,6 +187,10 @@ export default class Chatbot {
     return null
   }
 
+  isPlanWidgetData(data) {
+    return Boolean(data && typeof data === 'object' && data.widget === 'PlanWidget')
+  }
+
   loadFeed() {
     return new Promise(async (resolve) => {
       if (this.parsedBubbles === null || this.parsedBubbles.length === 0) {
@@ -527,6 +531,7 @@ export default class Chatbot {
     const existingBubble = document.querySelector(
       `[data-message-id="${replaceMessageId}"]`
     )
+    const isPlanWidget = this.isPlanWidgetData(newData)
     const nextSibling = existingBubble ? existingBubble.nextSibling : null
 
     if (existingBubble) {
@@ -543,30 +548,12 @@ export default class Chatbot {
     const widgetString =
       typeof newData === 'string' ? newData : JSON.stringify(newData)
 
-    let beforeElement = nextSibling
-
-    // Keep plan updates visually after the reasoning block when transitioning
-    // from "Thinking..." to concrete tool-call steps, but only when this
-    // widget was originally placed before that reasoning block.
-    if (newData && typeof newData === 'object' && newData.widget === 'PlanWidget') {
-      const latestReasoningContainer = this.getLatestReasoningContainer()
-      const isWidgetBeforeReasoning =
-        !!existingBubble &&
-        !!latestReasoningContainer &&
-        Boolean(
-          existingBubble.compareDocumentPosition(latestReasoningContainer) &
-            Node.DOCUMENT_POSITION_FOLLOWING
-        )
-
-      if (latestReasoningContainer && isWidgetBeforeReasoning) {
-        beforeElement = latestReasoningContainer.nextSibling
-      }
-    }
+    const beforeElement = isPlanWidget ? null : nextSibling
 
     this.createBubble({
       who: 'leon',
       string: widgetString,
-      save: false,
+      save: isPlanWidget,
       messageId: replaceMessageId,
       beforeElement
     })
