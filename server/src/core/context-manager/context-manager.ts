@@ -1,38 +1,33 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 
-import { CONTEXT_PATH, LEON_DISABLED_CONTEXT_FILES } from '@/constants'
+import {
+  CONTEXT_PATH,
+  LEON_DISABLED_CONTEXT_FILES,
+  TSX_CLI_PATH
+} from '@/constants'
 import { TOOLKIT_REGISTRY, LLM_PROVIDER } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
+import {
+  createContextFiles,
+  DEFAULT_CONTEXT_REFRESH_TTL_MS
+} from '@/core/context-manager/context-file-factory'
 import { ContextProbeHelper } from '@/core/context-manager/context-probe-helper'
-import { HomeContextFile } from '@/core/context-manager/context-files/home-context-file'
-import { HostSystemContextFile } from '@/core/context-manager/context-files/host-system-context-file'
-import { GpuComputeContextFile } from '@/core/context-manager/context-files/gpu-compute-context-file'
-import { StorageContextFile } from '@/core/context-manager/context-files/storage-context-file'
-import { SystemResourcesContextFile } from '@/core/context-manager/context-files/system-resources-context-file'
-import { BrowserHistoryContextFile } from '@/core/context-manager/context-files/browser-history-context-file'
-import { LeonRuntimeContextFile } from '@/core/context-manager/context-files/leon-runtime-context-file'
-import { ActivityContextFile } from '@/core/context-manager/context-files/activity-context-file'
-import { LocalInventoryContextFile } from '@/core/context-manager/context-files/local-inventory-context-file'
-import { NetworkEcosystemContextFile } from '@/core/context-manager/context-files/network-ecosystem-context-file'
-import { WorkspaceIntelligenceContextFile } from '@/core/context-manager/context-files/workspace-intelligence-context-file'
-import { HabitsContextFile } from '@/core/context-manager/context-files/habits-context-file'
-import { MediaProfileContextFile } from '@/core/context-manager/context-files/media-profile-context-file'
-import { LeonContextFile } from '@/core/context-manager/context-files/leon-context-file'
-import { ArchitectureContextFile } from '@/core/context-manager/context-files/architecture-context-file'
 
 interface ContextFileMetadata {
   lastGeneratedAt: number
 }
 
-const CONTEXT_REFRESH_TTL_MS = 10 * 60 * 1_000
 const CONTEXT_FILES_SOURCE_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   'context-files'
 )
+const CONTEXT_MANAGER_DIR = path.dirname(fileURLToPath(import.meta.url))
 const SOURCE_AWARE_STATIC_CONTEXT_FILES = new Set([
   'LEON.md',
   'ARCHITECTURE.md'
@@ -50,8 +45,16 @@ const BOOT_REFRESH_PRIORITY_FILENAMES = [
 ]
 const BOOT_REFRESH_TIMER_LABEL = 'Context files boot refresh total'
 const PERIODIC_REFRESH_TIMER_LABEL = 'Context files periodic refresh total'
-const MANIFEST_REFRESH_TIMER_LABEL = 'Context files manifest refresh total'
-const MANIFEST_REFRESH_CHECK_INTERVAL_MS = 5_000
+const READ_REFRESH_TIMER_LABEL = 'Context files read refresh total'
+const CONTEXT_REFRESH_WORKER_SRC_PATH = path.join(
+  CONTEXT_MANAGER_DIR,
+  'context-refresh-worker.ts'
+)
+const CONTEXT_REFRESH_WORKER_DIST_PATH = path.join(
+  CONTEXT_MANAGER_DIR,
+  'context-refresh-worker.js'
+)
+const CONTEXT_REFRESH_WORKER_MAX_BUFFER = 1024 * 1024 * 8
 const RETIRED_CONTEXT_FILES = [
   'LOCAL_ECOSYSTEM.md',
   'NETWORK.md',
@@ -64,6 +67,8 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
+const execFileAsync = promisify(execFile)
+
 export default class ContextManager {
   private static instance: ContextManager
 
@@ -72,29 +77,18 @@ export default class ContextManager {
   private refreshIntervalId: NodeJS.Timeout | null = null
   private isBootRefreshInProgress = false
   private isBackgroundRefreshInProgress = false
-  private lastManifestRefreshCheckAt = 0
+  private pendingRefreshReason: 'periodic' | 'read' = 'periodic'
+  private readonly pendingRefreshDefinitions = new Map<string, ContextFile>()
   private readonly metadata = new Map<string, ContextFileMetadata>()
   private readonly probeHelper = new ContextProbeHelper()
-  private readonly allContextFiles: ContextFile[] = [
-    new HomeContextFile(CONTEXT_REFRESH_TTL_MS),
-    new HostSystemContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
-    new GpuComputeContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
-    new StorageContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
-    new SystemResourcesContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
-    new BrowserHistoryContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
-    new ActivityContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
-    new LocalInventoryContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
-    new NetworkEcosystemContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
-    new WorkspaceIntelligenceContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
-    new HabitsContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
-    new MediaProfileContextFile(this.probeHelper, CONTEXT_REFRESH_TTL_MS),
-    new LeonContextFile(),
-    new ArchitectureContextFile(),
-    new LeonRuntimeContextFile(this.probeHelper, {
+  private readonly allContextFiles: ContextFile[] = createContextFiles(
+    this.probeHelper,
+    DEFAULT_CONTEXT_REFRESH_TTL_MS,
+    {
       getAgentLLMName: () => LLM_PROVIDER.agentLLMName,
       getLocalLLMName: () => LLM_PROVIDER.localLLMName
-    }, CONTEXT_REFRESH_TTL_MS)
-  ]
+    }
+  )
   private readonly disabledContextFiles = this.parseContextFileList(
     LEON_DISABLED_CONTEXT_FILES
   )
@@ -148,7 +142,7 @@ export default class ContextManager {
     this.isBootRefreshInProgress = true
     const bootRefreshStartedAt = Date.now()
 
-    const runBootRefreshQueue = (): void => {
+    const runBootRefreshQueue = async (): Promise<void> => {
       LogHelper.time(BOOT_REFRESH_TIMER_LABEL)
       const definitions = [...this.contextFiles].sort((definitionA, definitionB) => {
         const priorityA = this.getBootRefreshPriority(definitionA.filename)
@@ -160,37 +154,22 @@ export default class ContextManager {
         return definitionA.filename.localeCompare(definitionB.filename)
       })
       const updatedFilenames: string[] = []
-
-      let index = 0
-      const refreshNext = (): void => {
-        if (index >= definitions.length) {
-          try {
-            this.logContextFilesUpdated('boot', updatedFilenames)
-            this.manifest = this.buildManifest()
-          } finally {
-            LogHelper.title('Context Manager')
-            LogHelper.timeEnd(BOOT_REFRESH_TIMER_LABEL)
-            this.isBootRefreshInProgress = false
+      try {
+        for (const definition of definitions) {
+          if (await this.refreshContextFileInChildProcess(definition)) {
+            updatedFilenames.push(definition.filename)
           }
-          return
+
+          await this.yieldToEventLoop()
         }
 
-        const definition = definitions[index]
-        if (!definition) {
-          LogHelper.title('Context Manager')
-          LogHelper.timeEnd(BOOT_REFRESH_TIMER_LABEL)
-          this.isBootRefreshInProgress = false
-          return
-        }
-
-        if (this.refreshContextFile(definition)) {
-          updatedFilenames.push(definition.filename)
-        }
-        index += 1
-        setTimeout(refreshNext, 0)
+        this.logContextFilesUpdated('boot', updatedFilenames)
+        this.manifest = this.buildManifest()
+      } finally {
+        LogHelper.title('Context Manager')
+        LogHelper.timeEnd(BOOT_REFRESH_TIMER_LABEL)
+        this.isBootRefreshInProgress = false
       }
-
-      refreshNext()
     }
 
     const scheduleBootRefresh = (delayMs: number): void => {
@@ -201,7 +180,7 @@ export default class ContextManager {
           return
         }
 
-        runBootRefreshQueue()
+        void runBootRefreshQueue()
       }, delayMs)
 
       if (typeof bootRefreshTimer.unref === 'function') {
@@ -221,7 +200,6 @@ export default class ContextManager {
       this.manifest = this.buildManifest()
     }
 
-    this.maybeQueueManifestRefresh()
     return this.manifest
   }
 
@@ -235,9 +213,16 @@ export default class ContextManager {
       return null
     }
 
-    this.refreshContextFile(definition)
-
     const filePath = this.getContextFilePath(definition.filename)
+    const isStale = this.isContextFileStale(definition)
+    if (isStale) {
+      if (fs.existsSync(filePath)) {
+        this.queueRefresh('read', [definition])
+      } else {
+        this.refreshContextFile(definition, true)
+      }
+    }
+
     try {
       return fs.readFileSync(filePath, 'utf-8')
     } catch (e) {
@@ -430,27 +415,92 @@ export default class ContextManager {
     return this.getNormalizedLoadRatio() >= BOOT_REFRESH_DEFER_LOAD_RATIO
   }
 
-  private maybeQueueManifestRefresh(): void {
-    const now = Date.now()
-    if (now - this.lastManifestRefreshCheckAt < MANIFEST_REFRESH_CHECK_INTERVAL_MS) {
-      return
+  private getContextRefreshWorkerArgs(): string[] {
+    if (fs.existsSync(CONTEXT_REFRESH_WORKER_DIST_PATH)) {
+      return [CONTEXT_REFRESH_WORKER_DIST_PATH]
     }
 
-    this.lastManifestRefreshCheckAt = now
-    this.queueRefresh('manifest')
+    return [
+      TSX_CLI_PATH,
+      '--tsconfig',
+      path.join(process.cwd(), 'tsconfig.json'),
+      CONTEXT_REFRESH_WORKER_SRC_PATH
+    ]
   }
 
-  private queueRefresh(reason: 'manifest' | 'periodic'): void {
+  private async refreshContextFileInChildProcess(
+    definition: ContextFile
+  ): Promise<boolean> {
+    if (!this.isContextFileStale(definition)) {
+      return false
+    }
+
+    const workerArgs = [
+      ...this.getContextRefreshWorkerArgs(),
+      '--filename',
+      definition.filename,
+      '--agent-llm-name',
+      LLM_PROVIDER.agentLLMName,
+      '--local-llm-name',
+      LLM_PROVIDER.localLLMName
+    ]
+
+    try {
+      const { stdout } = await execFileAsync(process.execPath, workerArgs, {
+        cwd: process.cwd(),
+        maxBuffer: CONTEXT_REFRESH_WORKER_MAX_BUFFER
+      })
+      const parsed = JSON.parse(String(stdout || '{}')) as {
+        success?: boolean
+        content?: string
+        error?: string
+      }
+
+      if (!parsed.success || typeof parsed.content !== 'string') {
+        throw new Error(parsed.error || 'Context refresh worker returned no content')
+      }
+
+      const filePath = this.getContextFilePath(definition.filename)
+      const content = this.ensureTrailingNewline(parsed.content)
+      fs.mkdirSync(CONTEXT_PATH, { recursive: true })
+      fs.writeFileSync(filePath, content, 'utf-8')
+      this.metadata.set(definition.filename, {
+        lastGeneratedAt: Date.now()
+      })
+      return true
+    } catch (e) {
+      LogHelper.title('Context Manager')
+      LogHelper.error(
+        `Failed to refresh context file "${definition.filename}" in child process: ${String(e)}`
+      )
+      return false
+    }
+  }
+
+  private queueRefresh(
+    reason: 'periodic' | 'read',
+    definitionsOverride?: ContextFile[]
+  ): void {
     if (!this._isLoaded) {
       return
     }
 
-    if (this.isBootRefreshInProgress || this.isBackgroundRefreshInProgress) {
+    const definitions = definitionsOverride
+      ? this.sortContextDefinitions(
+          definitionsOverride.filter((definition) => this.isContextFileStale(definition))
+        )
+      : this.getStaleContextFiles()
+    if (definitions.length === 0) {
       return
     }
 
-    const definitions = this.getStaleContextFiles()
-    if (definitions.length === 0) {
+    if (this.isBootRefreshInProgress || this.isBackgroundRefreshInProgress) {
+      for (const definition of definitions) {
+        this.pendingRefreshDefinitions.set(definition.filename, definition)
+      }
+      if (reason === 'read') {
+        this.pendingRefreshReason = 'read'
+      }
       return
     }
 
@@ -459,19 +509,19 @@ export default class ContextManager {
   }
 
   private async runBackgroundRefresh(
-    reason: 'manifest' | 'periodic',
+    reason: 'periodic' | 'read',
     definitions: ContextFile[]
   ): Promise<void> {
     const timerLabel =
-      reason === 'periodic'
-        ? PERIODIC_REFRESH_TIMER_LABEL
-        : MANIFEST_REFRESH_TIMER_LABEL
+      reason === 'read'
+        ? READ_REFRESH_TIMER_LABEL
+        : PERIODIC_REFRESH_TIMER_LABEL
     LogHelper.time(timerLabel)
 
     const updatedFilenames: string[] = []
     try {
       for (const definition of definitions) {
-        if (this.refreshContextFile(definition)) {
+        if (await this.refreshContextFileInChildProcess(definition)) {
           updatedFilenames.push(definition.filename)
         }
 
@@ -484,21 +534,38 @@ export default class ContextManager {
       LogHelper.title('Context Manager')
       LogHelper.timeEnd(timerLabel)
       this.isBackgroundRefreshInProgress = false
+      if (this.pendingRefreshDefinitions.size > 0) {
+        const nextReason = this.pendingRefreshReason
+        const nextDefinitions = this.sortContextDefinitions([
+          ...this.pendingRefreshDefinitions.values()
+        ]).filter((definition) => this.isContextFileStale(definition))
+        this.pendingRefreshDefinitions.clear()
+        this.pendingRefreshReason = 'periodic'
+
+        if (nextDefinitions.length > 0) {
+          this.isBackgroundRefreshInProgress = true
+          void this.runBackgroundRefresh(nextReason, nextDefinitions)
+        }
+      }
     }
   }
 
   private getStaleContextFiles(): ContextFile[] {
-    return [...this.contextFiles]
-      .filter((definition) => this.isContextFileStale(definition))
-      .sort((definitionA, definitionB) => {
-        const priorityA = this.getBootRefreshPriority(definitionA.filename)
-        const priorityB = this.getBootRefreshPriority(definitionB.filename)
-        if (priorityA !== priorityB) {
-          return priorityA - priorityB
-        }
+    return this.sortContextDefinitions(
+      this.contextFiles.filter((definition) => this.isContextFileStale(definition))
+    )
+  }
 
-        return definitionA.filename.localeCompare(definitionB.filename)
-      })
+  private sortContextDefinitions(definitions: ContextFile[]): ContextFile[] {
+    return [...definitions].sort((definitionA, definitionB) => {
+      const priorityA = this.getBootRefreshPriority(definitionA.filename)
+      const priorityB = this.getBootRefreshPriority(definitionB.filename)
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB
+      }
+
+      return definitionA.filename.localeCompare(definitionB.filename)
+    })
   }
 
   private async yieldToEventLoop(): Promise<void> {
@@ -629,7 +696,7 @@ export default class ContextManager {
       () => {
         this.queueRefresh('periodic')
       },
-      CONTEXT_REFRESH_TTL_MS
+      DEFAULT_CONTEXT_REFRESH_TTL_MS
     )
 
     if (typeof this.refreshIntervalId.unref === 'function') {
