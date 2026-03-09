@@ -21,7 +21,8 @@ import {
   SOCKET_SERVER,
   MEMORY_MANAGER,
   PERSONA,
-  LLM_PROVIDER
+  LLM_PROVIDER,
+  TOOL_CALL_LOGGER
 } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import Conversation from '@/core/nlp/conversation'
@@ -1077,105 +1078,108 @@ export default class NLU {
     // TODO: core rewrite
     // const processingTimeStart = Date.now()
 
-    return new Promise(async (resolve, reject) => {
-      try {
-        LogHelper.title('NLU')
-        LogHelper.info('Processing...')
-        this.hasHandledProviderFailure = false
+    return TOOL_CALL_LOGGER.runOwnerQuery(
+      utterance,
+      async () =>
+        new Promise(async (resolve, reject) => {
+          try {
+            LogHelper.title('NLU')
+            LogHelper.info('Processing...')
+            this.hasHandledProviderFailure = false
 
-        await CONVERSATION_LOGGER.push({
-          who: 'owner',
-          message: utterance
-        })
+            await CONVERSATION_LOGGER.push({
+              who: 'owner',
+              message: utterance
+            })
 
-        await NLUProcessResultUpdater.update({
-          new: {
-            utterance
-          }
-        })
+            await NLUProcessResultUpdater.update({
+              new: {
+                utterance
+              }
+            })
 
-        const routingDecision = this.getRoutingDecision()
-        LogHelper.title('NLU')
-        LogHelper.info(
-          `Routing decision: mode=${routingDecision.mode} route=${routingDecision.route} reason=${routingDecision.reason}`
-        )
+            const routingDecision = this.getRoutingDecision()
+            LogHelper.title('NLU')
+            LogHelper.info(
+              `Routing decision: mode=${routingDecision.mode} route=${routingDecision.route} reason=${routingDecision.reason}`
+            )
 
-        PERSONA.refreshContextInfo()
-        if (routingDecision.route === this.routingRoutes.react) {
-          this.conversation.cleanActiveState()
-          await NLUProcessResultUpdater.update(DEFAULT_NLU_PROCESS_RESULT)
-          await this.runReAct(utterance)
-          return resolve(null)
-        }
-
-        const shouldPickSkillAction = await this.preProcessRoute()
-        if (this.hasHandledProviderFailure) {
-          return resolve(null)
-        }
-
-        if (shouldPickSkillAction) {
-          const chosenSkill = await this.chooseSkill(utterance)
-          if (this.hasHandledProviderFailure) {
-            return resolve(null)
-          }
-
-          const isSkillFound = !!chosenSkill
-
-          if (!isSkillFound) {
-            if (routingDecision.mode === RoutingMode.Smart) {
+            PERSONA.refreshContextInfo()
+            if (routingDecision.route === this.routingRoutes.react) {
+              this.conversation.cleanActiveState()
+              await NLUProcessResultUpdater.update(DEFAULT_NLU_PROCESS_RESULT)
               await this.runReAct(utterance)
               return resolve(null)
             }
 
-            await this.handleSkillOrActionNotFound()
-            return
-          }
+            const shouldPickSkillAction = await this.preProcessRoute()
+            if (this.hasHandledProviderFailure) {
+              return resolve(null)
+            }
 
-          await NLUProcessResultUpdater.update({
-            skillName: chosenSkill
-          })
+            if (shouldPickSkillAction) {
+              const chosenSkill = await this.chooseSkill(utterance)
+              if (this.hasHandledProviderFailure) {
+                return resolve(null)
+              }
 
-          const parsedActionCallingOutputs = await this.chooseSkillAction(
-            utterance,
-            chosenSkill
-          )
-          if (this.hasHandledProviderFailure) {
-            return resolve(null)
-          }
+              const isSkillFound = !!chosenSkill
 
-          if (
-            parsedActionCallingOutputs &&
-            Array.isArray(parsedActionCallingOutputs) &&
-            parsedActionCallingOutputs.length > 0
-          ) {
-            for (const actionCallingOutput of parsedActionCallingOutputs) {
-              if ('status' in actionCallingOutput) {
-                await this.postProcessRoute(actionCallingOutput)
+              if (!isSkillFound) {
+                if (routingDecision.mode === RoutingMode.Smart) {
+                  await this.runReAct(utterance)
+                  return resolve(null)
+                }
+
+                await this.handleSkillOrActionNotFound()
+                return
+              }
+
+              await NLUProcessResultUpdater.update({
+                skillName: chosenSkill
+              })
+
+              const parsedActionCallingOutputs = await this.chooseSkillAction(
+                utterance,
+                chosenSkill
+              )
+              if (this.hasHandledProviderFailure) {
+                return resolve(null)
+              }
+
+              if (
+                parsedActionCallingOutputs &&
+                Array.isArray(parsedActionCallingOutputs) &&
+                parsedActionCallingOutputs.length > 0
+              ) {
+                for (const actionCallingOutput of parsedActionCallingOutputs) {
+                  if ('status' in actionCallingOutput) {
+                    await this.postProcessRoute(actionCallingOutput)
+                  }
+                }
+
+                return
               }
             }
 
-            return
-          }
-        }
+            // TODO: handle error in action calling
 
-        // TODO: handle error in action calling
+            // TODO: core rewrite (need to measure processing time)
+            /*const processingTimeEnd = Date.now()
+            const processingTime = processingTimeEnd - processingTimeStart
 
-        // TODO: core rewrite (need to measure processing time)
-        /*const processingTimeEnd = Date.now()
-        const processingTime = processingTimeEnd - processingTimeStart
+            resolve({
+              processingTime, // In ms, total time
+              ...processedData,
+              newUtterance: utterance,
+              nluProcessingTime:
+                processingTime - (processedData?.executionTime || 0) // In ms, NLU processing time only
+            })*/
 
-        resolve({
-          processingTime, // In ms, total time
-          ...processedData,
-          newUtterance: utterance,
-          nluProcessingTime:
-            processingTime - (processedData?.executionTime || 0) // In ms, NLU processing time only
-        })*/
+            //////////////////////////////////
 
-        //////////////////////////////////
-
-        // TODO: core rewrite delete?
-        /*if (!MODEL_LOADER.hasNlpModels()) {
+            // TODO: core rewrite delete?
+            /*if (!MODEL_LOADER.hasNlpModels()) {
           if (!BRAIN.isMuted) {
             await BRAIN.talk(`${BRAIN.wernicke('random_errors')}!`)
           }
@@ -1343,10 +1347,10 @@ export default class NLU {
         // Pass context entities to the NLU result object
         this._nluResult.entities = this.conversation.activeContext.entities*/
 
-        try {
-          return resolve({})
-          // TODO: core rewrite
-          /*const processedData = await BRAIN.execute(this._nluResult)
+            try {
+              return resolve({})
+              // TODO: core rewrite
+              /*const processedData = await BRAIN.execute(this._nluResult)
 
           // Prepare next action if there is one queuing
           if (processedData.nextAction) {
@@ -1376,22 +1380,23 @@ export default class NLU {
             nluProcessingTime:
               processingTime - (processedData?.executionTime || 0) // In ms, NLU processing time only
           })*/
-        } catch (e) {
-          const errorMessage = `Failed to execute action: ${e}`
+            } catch (e) {
+              const errorMessage = `Failed to execute action: ${e}`
 
-          LogHelper.error(errorMessage)
+              LogHelper.error(errorMessage)
 
-          if (!BRAIN.isMuted) {
-            SOCKET_SERVER.socket?.emit('is-typing', false)
+              if (!BRAIN.isMuted) {
+                SOCKET_SERVER.socket?.emit('is-typing', false)
+              }
+
+              return reject(new Error(errorMessage))
+            }
+          } catch (e) {
+            LogHelper.title('NLU')
+            LogHelper.error(`Failed to process the utterance: ${e}`)
           }
-
-          return reject(new Error(errorMessage))
-        }
-      } catch (e) {
-        LogHelper.title('NLU')
-        LogHelper.error(`Failed to process the utterance: ${e}`)
-      }
-    })
+        })
+    )
   }
 
   // TODO: core rewrite delete?

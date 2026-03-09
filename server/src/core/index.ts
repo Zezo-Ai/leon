@@ -24,6 +24,7 @@ import ContextManager from '@/core/context-manager'
 import MemoryManager from '@/core/memory-manager'
 import ToolExecutor from '@/core/tool-executor'
 import { ConversationLogger } from '@/conversation-logger'
+import { ToolCallLogger } from '@/tool-call-logger'
 
 /**
  * Register core nodes
@@ -56,6 +57,11 @@ export const LOOP_CONVERSATION_LOGGER = new ConversationLogger({
   fileName: 'loop_conversation_log.json',
   nbOfLogsToKeep: 512,
   nbOfLogsToLoad: 96
+})
+export const TOOL_CALL_LOGGER = new ToolCallLogger({
+  loggerName: 'Tool Call Logger',
+  fileName: 'tool-calls.json',
+  nbOfLogsToKeep: 8
 })
 
 export const HTTP_SERVER = new HTTPServer(String(HOST), PORT)

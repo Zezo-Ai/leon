@@ -10,7 +10,7 @@ import {
   NODEJS_BRIDGE_ROOT_PATH,
   TSX_CLI_PATH
 } from '@/constants'
-import { TOOLKIT_REGISTRY } from '@/core'
+import { TOOLKIT_REGISTRY, TOOL_CALL_LOGGER } from '@/core'
 
 const execFileAsync = promisify(execFile)
 
@@ -150,6 +150,13 @@ export default class ToolExecutor {
       toolId: resolvedTool.toolId,
       functionName,
       args: argsArray
+    })
+
+    TOOL_CALL_LOGGER.recordToolCall({
+      toolkitId: resolvedTool.toolkitId,
+      toolId: resolvedTool.toolId,
+      functionName,
+      params: parsedInput
     })
 
     return this.buildResult({
