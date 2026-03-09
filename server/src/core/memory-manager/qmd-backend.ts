@@ -8,11 +8,35 @@ import {
   MEMORY_PATH
 } from '@/constants'
 import { LogHelper } from '@/helpers/log-helper'
+import {
+  buildAdaptiveQueryTokenSet,
+  buildHydratedBacktrackCandidates,
+  buildDiscriminativeSecondPass,
+  buildExpansionQuery,
+  buildFinalSupportTokens,
+  buildFocusedHitContent,
+  buildHydratedRescueBridgeTokens,
+  buildLexicalSearchQuery,
+  buildQueryTokenSet,
+  DEFAULT_QMD_NAMESPACE_WEIGHTS,
+  extractContent,
+  extractScore,
+  normalizeFilename,
+  normalizePath,
+  parsePendingEmbeddingCount,
+  parseRows,
+  pickStringDeep,
+  rankRetrievedHits,
+  resolveRequestedCollectionName,
+  shouldRunAdaptiveSecondPass
+} from '@sdk/tools/memory/qmd-retrieval'
 
 import type { KnowledgeNamespace } from './types'
 
 const QMD_INDEX_NAME = 'leon-memory'
 const QMD_UPDATE_MIN_INTERVAL_MS = 5_000
+const QMD_EMBED_MIN_INTERVAL_MS = 30_000
+const BRIDGE_SOURCE_CONTENT_CAP = 96_000
 
 export interface QMDRecallHit {
   id: string
@@ -55,225 +79,6 @@ const QMD_COLLECTIONS: Record<KnowledgeNamespace, { name: string, dir: string }>
   }
 }
 
-function normalizeFilename(filePath: string): string {
-  return path.basename(filePath).toUpperCase()
-}
-
-function normalizePath(value: string): string {
-  if (!value) {
-    return ''
-  }
-
-  if (!value.startsWith('file://')) {
-    return value
-  }
-
-  try {
-    return decodeURIComponent(new URL(value).pathname)
-  } catch {
-    return value
-  }
-}
-
-function parseRows(raw: string): Array<Record<string, unknown>> {
-  try {
-    const parsed = JSON.parse(raw) as unknown
-    if (Array.isArray(parsed)) {
-      return parsed.filter(
-        (item): item is Record<string, unknown> =>
-          item !== null && typeof item === 'object' && !Array.isArray(item)
-      )
-    }
-
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return []
-    }
-
-    const rows: Array<Record<string, unknown>> = []
-    const queue: unknown[] = [parsed]
-
-    while (queue.length > 0) {
-      const current = queue.shift()
-      if (!current || typeof current !== 'object') {
-        continue
-      }
-
-      const objectValue = current as Record<string, unknown>
-      for (const value of Object.values(objectValue)) {
-        if (Array.isArray(value)) {
-          for (const item of value) {
-            if (item && typeof item === 'object' && !Array.isArray(item)) {
-              rows.push(item as Record<string, unknown>)
-            }
-          }
-        } else if (value && typeof value === 'object') {
-          queue.push(value)
-        }
-      }
-    }
-
-    return rows.length > 0 ? rows : [parsed as Record<string, unknown>]
-  } catch {
-    return []
-  }
-}
-
-function pickStringDeep(
-  row: Record<string, unknown>,
-  keys: string[]
-): string {
-  const queue: unknown[] = [row]
-
-  while (queue.length > 0) {
-    const current = queue.shift()
-    if (!current) {
-      continue
-    }
-
-    if (Array.isArray(current)) {
-      for (const item of current) {
-        queue.push(item)
-      }
-      continue
-    }
-
-    if (typeof current !== 'object') {
-      continue
-    }
-
-    const objectValue = current as Record<string, unknown>
-    for (const key of keys) {
-      const value = objectValue[key]
-      if (typeof value === 'string' && value.trim()) {
-        return value.trim()
-      }
-    }
-
-    for (const value of Object.values(objectValue)) {
-      if (value && typeof value === 'object') {
-        queue.push(value)
-      }
-    }
-  }
-
-  return ''
-}
-
-function pickNumberDeep(
-  row: Record<string, unknown>,
-  keys: string[]
-): number {
-  const queue: unknown[] = [row]
-
-  while (queue.length > 0) {
-    const current = queue.shift()
-    if (!current) {
-      continue
-    }
-
-    if (Array.isArray(current)) {
-      for (const item of current) {
-        queue.push(item)
-      }
-      continue
-    }
-
-    if (typeof current !== 'object') {
-      continue
-    }
-
-    const objectValue = current as Record<string, unknown>
-    for (const key of keys) {
-      const value = objectValue[key]
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        return value
-      }
-      if (typeof value === 'string' && value.trim()) {
-        const parsed = Number(value)
-        if (Number.isFinite(parsed)) {
-          return parsed
-        }
-      }
-    }
-
-    for (const value of Object.values(objectValue)) {
-      if (value && typeof value === 'object') {
-        queue.push(value)
-      }
-    }
-  }
-
-  return 0
-}
-
-function extractContent(row: Record<string, unknown>): string {
-  const direct = pickStringDeep(row, [
-    'snippet',
-    'content',
-    'text',
-    'context',
-    'body'
-  ])
-  if (direct) {
-    return direct
-  }
-
-  const listKeys = ['snippets', 'chunks', 'matches', 'contexts', 'passages']
-  for (const key of listKeys) {
-    const value = row[key]
-    if (!Array.isArray(value)) {
-      continue
-    }
-
-    const lines: string[] = []
-    for (const item of value) {
-      if (typeof item === 'string' && item.trim()) {
-        lines.push(item.trim())
-        continue
-      }
-
-      if (item && typeof item === 'object' && !Array.isArray(item)) {
-        const nested = pickStringDeep(item as Record<string, unknown>, [
-          'snippet',
-          'content',
-          'text',
-          'context',
-          'body'
-        ])
-        if (nested) {
-          lines.push(nested)
-        }
-      }
-    }
-
-    if (lines.length > 0) {
-      return lines.join('\n')
-    }
-  }
-
-  return ''
-}
-
-function extractScore(row: Record<string, unknown>): number {
-  const score = pickNumberDeep(row, [
-    'score',
-    'fused_score',
-    'final_score',
-    'rank_score'
-  ])
-
-  if (score !== 0) {
-    return score
-  }
-
-  const distance = pickNumberDeep(row, ['distance', 'cosine_distance'])
-  if (distance > 0) {
-    return 1 / (1 + distance)
-  }
-
-  return 0
-}
-
 function isContextFilenameAllowed(
   allowedFilenames: Set<string>,
   sourcePath: string,
@@ -292,7 +97,9 @@ function isContextFilenameAllowed(
 export default class QMDBackend {
   private loaded = false
   private lastUpdateAt = 0
+  private lastEmbedAt = 0
   private hybridRetrievalEnabled = false
+  private embeddingRefreshPromise: Promise<void> | null = null
   private readonly dirtyNamespaces = new Set<KnowledgeNamespace>()
 
   public markDirty(namespace: KnowledgeNamespace): void {
@@ -344,6 +151,7 @@ export default class QMDBackend {
 
   public async query(input: QMDQueryInput): Promise<QMDRecallHit[]> {
     await this.refresh()
+    await this.ensureEmbeddings()
 
     const uniqueNamespaces = [...new Set(input.namespaces)]
     if (uniqueNamespaces.length === 0) {
@@ -385,29 +193,163 @@ export default class QMDBackend {
       })
     )
 
+    const queryTokens = buildQueryTokenSet(input.query)
     const hits: QMDRecallHit[] = []
+
+    const runPreferredSearchModes = async (
+      bridgeTerms: string[],
+      scopedCollectionNames: string[],
+      limit: number
+    ): Promise<{
+      rows: Array<Record<string, unknown>>
+      modeUsed: QMDSearchMode
+    }> => {
+      const lexicalQuery = buildLexicalSearchQuery(input.query, bridgeTerms)
+      let rows = parseRows(
+        await this.runQMDSearchMode(
+          'query',
+          buildExpansionQuery(input.query, bridgeTerms),
+          scopedCollectionNames,
+          limit
+        )
+      )
+      if (rows.length > 0) {
+        return {
+          rows,
+          modeUsed: 'query'
+        }
+      }
+
+      rows = parseRows(
+        await this.runQMDSearchMode(
+          'search',
+          lexicalQuery,
+          scopedCollectionNames,
+          limit
+        )
+      )
+
+      return {
+        rows,
+        modeUsed: 'search'
+      }
+    }
+
+    const appendRows = (
+      rowsToAppend: Array<Record<string, unknown>>,
+      modeUsed: QMDSearchMode
+    ): void => {
+      for (const row of rowsToAppend) {
+        const sourcePath = normalizePath(
+          pickStringDeep(row, [
+            'filepath',
+            'path',
+            'file',
+            'source',
+            'doc_path',
+            'document_path',
+            'docPath',
+            'uri'
+          ])
+        )
+        const title =
+          pickStringDeep(row, ['title', 'name']) ||
+          (sourcePath ? path.basename(sourcePath) : '')
+        const content = extractContent(row)
+        const id =
+          pickStringDeep(row, ['docid', 'id']) ||
+          sourcePath ||
+          title
+        if (!id || !content) {
+          continue
+        }
+
+        const explicitCollection = resolveRequestedCollectionName(
+          pickStringDeep(row, ['collection', 'collection_name', 'collectionName']),
+          collectionNames
+        )
+        const collectionFromQmdPathMatch = sourcePath.match(/^qmd:\/\/([^/]+)\//i)
+        const collectionFromQmdPath = resolveRequestedCollectionName(
+          collectionFromQmdPathMatch?.[1] || '',
+          collectionNames
+        )
+        const collectionFromAbsolutePath = collectionNames.find((collectionName) => {
+          const collectionPath = collectionPathByName.get(collectionName)
+          if (!collectionPath || !sourcePath) {
+            return false
+          }
+
+          return sourcePath.startsWith(collectionPath)
+        })
+        const resolvedCollectionName =
+          explicitCollection ||
+          collectionFromQmdPath ||
+          collectionFromAbsolutePath ||
+          (collectionNames.length === 1 ? (collectionNames[0] || '') : '')
+
+        const mappedNamespaces = namespaceByCollection.get(resolvedCollectionName) || []
+        const resolvedNamespace =
+          uniqueNamespaces.find((namespace) => mappedNamespaces.includes(namespace)) ||
+          (uniqueNamespaces.length === 1 ? uniqueNamespaces[0] : null)
+        if (!resolvedNamespace) {
+          continue
+        }
+
+        if (
+          resolvedNamespace === 'context' &&
+          !isContextFilenameAllowed(allowedContextFilenames, sourcePath, title)
+        ) {
+          continue
+        }
+
+        hits.push({
+          id,
+          path: sourcePath,
+          title,
+          content,
+          score: extractScore(row) + (modeUsed === 'query' ? 0.03 : 0.01),
+          namespace: resolvedNamespace
+        })
+      }
+    }
+
+    const rankHitsByQuery = (
+      hitsInput: QMDRecallHit[]
+    ): Array<{ hit: QMDRecallHit, rankingScore: number, overlapCount: number }> => {
+      return rankRetrievedHits(
+        hitsInput,
+        queryTokens,
+        QMD_COLLECTIONS,
+        namespaceWeights,
+        BRIDGE_SOURCE_CONTENT_CAP
+      )
+    }
+    const namespaceWeights: Partial<Record<KnowledgeNamespace, number>> = {
+      ...DEFAULT_QMD_NAMESPACE_WEIGHTS
+    }
+
+    const hasPersistentHit = (): boolean =>
+      hits.some((hit) => hit.namespace === 'memory_persistent')
+    const retrievalStages: string[] = []
+    const rewrittenQueries: string[] = []
+
     let rows: Array<Record<string, unknown>> = []
     let modeUsed: QMDSearchMode | null = null
 
     if (this.hybridRetrievalEnabled) {
       try {
-        rows = parseRows(
-          await this.runQMDSearchMode(
-            'query',
-            input.query,
-            collectionNames,
-            globalLimit
-          )
+        const result = await runPreferredSearchModes(
+          [],
+          collectionNames,
+          globalLimit
         )
-        modeUsed = 'query'
-        LogHelper.title('Memory Manager')
-        LogHelper.debug(
-          `QMD query collections=${collectionNames.join(', ')} rows=${rows.length} query=${JSON.stringify(input.query)}`
-        )
+        rows = result.rows
+        modeUsed = result.modeUsed
+        retrievalStages.push(`initial:${modeUsed}:${rows.length}`)
       } catch (error) {
         LogHelper.title('Memory Manager')
         LogHelper.warning(
-          `QMD query failed for collections=${collectionNames.join(', ')}: ${String(error)}`
+          `QMD preferred search failed for collections=${collectionNames.join(', ')}: ${String(error)}`
         )
       }
     } else {
@@ -420,16 +362,13 @@ export default class QMDBackend {
         rows = parseRows(
           await this.runQMDSearchMode(
             'search',
-            input.query,
+            buildLexicalSearchQuery(input.query),
             collectionNames,
             globalLimit
           )
         )
         modeUsed = 'search'
-        LogHelper.title('Memory Manager')
-        LogHelper.debug(
-          `QMD search fallback collections=${collectionNames.join(', ')} rows=${rows.length} query=${JSON.stringify(input.query)}`
-        )
+        retrievalStages.push(`fallback:search:${rows.length}`)
       } catch (error) {
         LogHelper.title('Memory Manager')
         LogHelper.warning(
@@ -438,87 +377,243 @@ export default class QMDBackend {
       }
     }
 
-    for (const row of rows) {
-      const sourcePath = normalizePath(
-        pickStringDeep(row, [
-          'filepath',
-          'path',
-          'file',
-          'source',
-          'doc_path',
-          'document_path',
-          'docPath',
-          'uri'
-        ])
-      )
-      const title =
-        pickStringDeep(row, ['title', 'name']) ||
-        (sourcePath ? path.basename(sourcePath) : '')
-      const content = extractContent(row)
-      const id =
-        pickStringDeep(row, ['docid', 'id']) ||
-        sourcePath ||
-        title
-      if (!id || !content) {
-        continue
+    if (modeUsed) {
+      appendRows(rows, modeUsed)
+    }
+
+    let rankedHits = rankHitsByQuery(hits)
+    if (!hasPersistentHit() || shouldRunAdaptiveSecondPass(rankedHits)) {
+      try {
+        const enrichmentRows = parseRows(
+          await this.runQMDSearchMode(
+            'search',
+            buildLexicalSearchQuery(input.query),
+            collectionNames,
+            globalLimit
+          )
+        )
+        appendRows(enrichmentRows, 'search')
+        retrievalStages.push(`enrich:search:${enrichmentRows.length}`)
+      } catch (error) {
+        LogHelper.title('Memory Manager')
+        LogHelper.warning(
+          `QMD enrichment search failed for collections=${collectionNames.join(', ')}: ${String(error)}`
+        )
       }
 
-      const explicitCollection = pickStringDeep(row, [
-        'collection',
-        'collection_name',
-        'collectionName'
-      ])
-      const collectionFromQmdPathMatch = sourcePath.match(/^qmd:\/\/([^/]+)\//i)
-      const collectionFromQmdPath = collectionFromQmdPathMatch?.[1] || ''
-      const collectionFromAbsolutePath = collectionNames.find((collectionName) => {
-        const collectionPath = collectionPathByName.get(collectionName)
-        if (!collectionPath || !sourcePath) {
-          return false
+      const missingNamespaces = uniqueNamespaces.filter(
+        (namespace) => !hits.some((hit) => hit.namespace === namespace)
+      )
+      for (const missingNamespace of missingNamespaces) {
+        const collectionName = QMD_COLLECTIONS[missingNamespace]?.name
+        if (!collectionName) {
+          continue
         }
 
-        return sourcePath.startsWith(collectionPath)
-      })
-      const resolvedCollectionName =
-        explicitCollection ||
-        collectionFromQmdPath ||
-        collectionFromAbsolutePath ||
-        (collectionNames.length === 1 ? (collectionNames[0] || '') : '')
-
-      const mappedNamespaces = namespaceByCollection.get(resolvedCollectionName) || []
-      const resolvedNamespace =
-        uniqueNamespaces.find((namespace) => mappedNamespaces.includes(namespace)) ||
-        (uniqueNamespaces.length === 1 ? uniqueNamespaces[0] : null)
-      if (!resolvedNamespace) {
-        continue
+        try {
+          appendRows(
+            parseRows(
+                await this.runQMDSearchMode(
+                  'search',
+                  buildLexicalSearchQuery(input.query),
+                  [collectionName],
+                  perNamespaceLimit
+                )
+            ),
+            'search'
+          )
+        } catch (error) {
+          LogHelper.title('Memory Manager')
+          LogHelper.warning(
+            `QMD scoped enrichment failed for collection=${collectionName}: ${String(error)}`
+          )
+        }
       }
 
-      if (
-        resolvedNamespace === 'context' &&
-        !isContextFilenameAllowed(allowedContextFilenames, sourcePath, title)
-      ) {
-        continue
-      }
-
-      hits.push({
-        id,
-        path: sourcePath,
-        title,
-        content,
-        score: extractScore(row) + (modeUsed === 'query' ? 0.03 : 0.01),
-        namespace: resolvedNamespace
-      })
+      rankedHits = rankHitsByQuery(hits)
     }
 
-    const deduped = new Map<string, QMDRecallHit>()
-    for (const hit of hits) {
-      const key = `${hit.namespace}|${hit.path}|${hit.content}`
-      const existing = deduped.get(key)
-      if (!existing || hit.score > existing.score) {
-        deduped.set(key, hit)
+    let secondPassSupportTokens: string[] = []
+    if (!hasPersistentHit() || shouldRunAdaptiveSecondPass(rankedHits)) {
+      const secondPass = buildDiscriminativeSecondPass(
+        input.query,
+        queryTokens,
+        rankedHits.map((rankedHit) => rankedHit.hit),
+        QMD_COLLECTIONS,
+        BRIDGE_SOURCE_CONTENT_CAP
+      )
+
+      if (secondPass) {
+        secondPassSupportTokens = secondPass.bridgeTokens
+        rewrittenQueries.push(`second_pass=${JSON.stringify(secondPass.lexicalQuery)}`)
+
+        try {
+          const {
+            rows: secondPassRows,
+            modeUsed: secondPassMode
+          } = await runPreferredSearchModes(
+            secondPass.bridgeTokens,
+            collectionNames,
+            globalLimit
+          )
+
+          appendRows(secondPassRows, secondPassMode)
+          retrievalStages.push(`second_pass:${secondPassMode}:${secondPassRows.length}`)
+
+          const stillMissingNamespaces = uniqueNamespaces.filter(
+            (namespace) => !hits.some((hit) => hit.namespace === namespace)
+          )
+          for (const missingNamespace of stillMissingNamespaces) {
+            const collectionName = QMD_COLLECTIONS[missingNamespace]?.name
+            if (!collectionName) {
+              continue
+            }
+
+            try {
+              appendRows(
+                parseRows(
+                  await this.runQMDSearchMode(
+                    'search',
+                    buildLexicalSearchQuery(input.query, secondPass.bridgeTokens),
+                    [collectionName],
+                    perNamespaceLimit
+                  )
+                ),
+                'search'
+              )
+            } catch (error) {
+              LogHelper.title('Memory Manager')
+              LogHelper.warning(
+                `QMD scoped second-pass failed for collection=${collectionName}: ${String(error)}`
+              )
+            }
+          }
+
+          rankedHits = rankHitsByQuery(hits)
+        } catch (error) {
+          LogHelper.title('Memory Manager')
+          LogHelper.warning(
+            `QMD second-pass failed for collections=${collectionNames.join(', ')}: ${String(error)}`
+          )
+        }
       }
     }
 
-    const output = [...deduped.values()].sort((a, b) => b.score - a.score)
+    let rescueSupportTokens: string[] = []
+    const rescueBridgeTokens = buildHydratedRescueBridgeTokens(
+      queryTokens,
+      rankedHits,
+      QMD_COLLECTIONS,
+      BRIDGE_SOURCE_CONTENT_CAP
+    ).filter((token) => !secondPassSupportTokens.includes(token))
+
+    if (rescueBridgeTokens.length > 0) {
+      rescueSupportTokens = rescueBridgeTokens
+      rewrittenQueries.push(
+        `rescue=${JSON.stringify(buildLexicalSearchQuery(input.query, rescueBridgeTokens))}`
+      )
+
+      try {
+        const {
+          rows: rescueRows,
+          modeUsed: rescueMode
+        } = await runPreferredSearchModes(
+          rescueBridgeTokens,
+          collectionNames,
+          globalLimit
+        )
+
+        appendRows(rescueRows, rescueMode)
+        retrievalStages.push(`rescue:${rescueMode}:${rescueRows.length}`)
+
+        const stillMissingNamespaces = uniqueNamespaces.filter(
+          (namespace) => !hits.some((hit) => hit.namespace === namespace)
+        )
+        for (const missingNamespace of stillMissingNamespaces) {
+          const collectionName = QMD_COLLECTIONS[missingNamespace]?.name
+          if (!collectionName) {
+            continue
+          }
+
+          try {
+            appendRows(
+              parseRows(
+                await this.runQMDSearchMode(
+                  'search',
+                  buildLexicalSearchQuery(input.query, rescueBridgeTokens),
+                  [collectionName],
+                  perNamespaceLimit
+                )
+              ),
+              'search'
+            )
+          } catch (error) {
+            LogHelper.title('Memory Manager')
+            LogHelper.warning(
+              `QMD scoped hydrated-rescue failed for collection=${collectionName}: ${String(error)}`
+            )
+          }
+        }
+
+        rankedHits = rankHitsByQuery(hits)
+      } catch (error) {
+        LogHelper.title('Memory Manager')
+        LogHelper.warning(
+          `QMD hydrated-rescue failed for collections=${collectionNames.join(', ')}: ${String(error)}`
+        )
+      }
+    }
+
+    const backtrackCandidates = buildHydratedBacktrackCandidates(
+      queryTokens,
+      rankedHits,
+      QMD_COLLECTIONS,
+      namespaceWeights,
+      BRIDGE_SOURCE_CONTENT_CAP
+    )
+    const existingHitPaths = new Set(hits.map((hit) => `${hit.namespace}|${hit.path}`))
+    const appendedBacktrackHits = backtrackCandidates
+      .filter((candidate) => !existingHitPaths.has(
+        `${candidate.hit.namespace}|${candidate.hit.path}`
+      ))
+      .slice(0, 4)
+
+    if (appendedBacktrackHits.length > 0) {
+      for (const candidate of appendedBacktrackHits) {
+        hits.push({
+          ...candidate.hit,
+          score: Math.max(candidate.hit.score, candidate.rankingScore)
+        })
+      }
+      retrievalStages.push(`backtrack:local:${appendedBacktrackHits.length}`)
+      rankedHits = rankHitsByQuery(hits)
+    }
+
+    const excerptQueryTokens = buildAdaptiveQueryTokenSet(
+      queryTokens,
+      rankedHits.map((rankedHit) => rankedHit.hit),
+      QMD_COLLECTIONS,
+      BRIDGE_SOURCE_CONTENT_CAP
+    )
+
+    const supportTokens = buildFinalSupportTokens(
+      excerptQueryTokens,
+      rankedHits,
+      QMD_COLLECTIONS,
+      BRIDGE_SOURCE_CONTENT_CAP,
+      [...secondPassSupportTokens, ...rescueSupportTokens]
+    )
+
+    const output = rankedHits.map((rankedHit) => ({
+      ...rankedHit.hit,
+      content: buildFocusedHitContent(
+        rankedHit.hit,
+        excerptQueryTokens,
+        supportTokens,
+        QMD_COLLECTIONS,
+        BRIDGE_SOURCE_CONTENT_CAP
+      )
+    }))
 
     if (
       uniqueNamespaces.includes('context') &&
@@ -528,6 +623,14 @@ export default class QMDBackend {
       LogHelper.debug(
         'QMD returned no context candidates for this query; planning may rely on memory-only hits'
       )
+    }
+    LogHelper.title('Memory Manager')
+    LogHelper.debug(
+      `QMD retrieval stages=${retrievalStages.join(' -> ')} final_hits=${output.length}`
+    )
+    if (rewrittenQueries.length > 0) {
+      LogHelper.title('Memory Manager')
+      LogHelper.debug(`QMD retrieval rewritten ${rewrittenQueries.join(' | ')}`)
     }
 
     return output
@@ -577,12 +680,63 @@ export default class QMDBackend {
         '**/*.md'
       ])
     } catch (error) {
-      const message = String(error).toLowerCase()
-      if (message.includes('already exists')) {
+      if (await this.collectionExists(name)) {
         return
       }
       throw error
     }
+  }
+
+  private async collectionExists(name: string): Promise<boolean> {
+    try {
+      await this.runQMD(['--index', QMD_INDEX_NAME, 'ls', name])
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private async ensureEmbeddings(force = false): Promise<void> {
+    const now = Date.now()
+    if (!force && now - this.lastEmbedAt < QMD_EMBED_MIN_INTERVAL_MS) {
+      return
+    }
+
+    if (this.embeddingRefreshPromise) {
+      await this.embeddingRefreshPromise
+      return
+    }
+
+    this.embeddingRefreshPromise = (async (): Promise<void> => {
+      try {
+        const statusOutput = await this.runQMD(['status', '--index', QMD_INDEX_NAME])
+        const pendingEmbeddingCount = parsePendingEmbeddingCount(statusOutput)
+
+        if (pendingEmbeddingCount <= 0) {
+          this.lastEmbedAt = Date.now()
+          return
+        }
+
+        LogHelper.title('Memory Manager')
+        LogHelper.debug(
+          `QMD embeddings pending: ${pendingEmbeddingCount}. Running embed refresh...`
+        )
+
+        await this.runQMD(['embed', '--index', QMD_INDEX_NAME])
+        this.lastEmbedAt = Date.now()
+
+        LogHelper.title('Memory Manager')
+        LogHelper.debug('QMD embeddings refreshed')
+      } catch (error) {
+        this.lastEmbedAt = Date.now()
+        LogHelper.title('Memory Manager')
+        LogHelper.warning(`QMD embedding refresh failed: ${String(error)}`)
+      } finally {
+        this.embeddingRefreshPromise = null
+      }
+    })()
+
+    await this.embeddingRefreshPromise
   }
 
   private async runQMDSearchMode(
@@ -603,16 +757,9 @@ export default class QMDBackend {
     ]
 
     try {
-      return await this.runQMD([...baseArgs, '--full'])
+      return await this.runQMD(baseArgs)
     } catch (error) {
       const message = String(error).toLowerCase()
-      if (
-        message.includes('unknown') &&
-        message.includes('full')
-      ) {
-        return this.runQMD(baseArgs)
-      }
-
       if (mode === 'query' && message.includes('not found')) {
         return this.runQMD(['search', ...baseArgs.slice(1)])
       }

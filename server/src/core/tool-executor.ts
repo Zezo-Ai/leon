@@ -39,6 +39,32 @@ interface ToolExecutionResult {
 export default class ToolExecutor {
   private static instance: ToolExecutor
 
+  private logToolRuntimeMessages(
+    toolkitId: string,
+    toolId: string,
+    runtimeStderr: string
+  ): void {
+    if (
+      toolkitId !== 'structured_knowledge' ||
+      toolId !== 'memory' ||
+      !runtimeStderr
+    ) {
+      return
+    }
+
+    const toolLogLines = runtimeStderr
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('[LEON_TOOL_LOG]'))
+      .map((line) => line.replace('[LEON_TOOL_LOG]', '').trim())
+      .filter(Boolean)
+
+    for (const line of toolLogLines) {
+      LogHelper.title('Memory Tool')
+      LogHelper.debug(line)
+    }
+  }
+
   constructor() {
     if (!ToolExecutor.instance) {
       LogHelper.title('Tool Executor')
@@ -288,13 +314,19 @@ export default class ToolExecutor {
         }
       )
       const output = stdout ? stdout.toString().trim() : ''
+      const runtimeStderr = stderr ? stderr.toString() : ''
+      this.logToolRuntimeMessages(
+        params.toolkitId,
+        params.toolId,
+        runtimeStderr
+      )
       if (!output) {
         return {
           success: false,
           message: 'Tool runtime returned empty output.',
           output: {
             runtime_stdout: stdout ? stdout.toString() : '',
-            runtime_stderr: stderr ? stderr.toString() : ''
+            runtime_stderr: runtimeStderr
           }
         }
       }
@@ -318,7 +350,7 @@ export default class ToolExecutor {
           }`,
           output: {
             runtime_stdout: stdout ? stdout.toString() : '',
-            runtime_stderr: stderr ? stderr.toString() : ''
+            runtime_stderr: runtimeStderr
           }
         }
       }
@@ -329,6 +361,11 @@ export default class ToolExecutor {
       }
       const runtimeStdout = execError.stdout ? execError.stdout.toString() : ''
       const runtimeStderr = execError.stderr ? execError.stderr.toString() : ''
+      this.logToolRuntimeMessages(
+        params.toolkitId,
+        params.toolId,
+        runtimeStderr
+      )
       if (runtimeStdout) {
         try {
           const parsed = JSON.parse(runtimeStdout) as {

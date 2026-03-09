@@ -8,12 +8,40 @@ import type { Database as SQLiteDatabase } from 'better-sqlite3'
 
 import { Tool } from '@sdk/base-tool'
 import { ToolkitConfig } from '@sdk/toolkit-config'
+import {
+  buildAdaptiveQueryTokenSet,
+  buildHydratedBacktrackCandidates,
+  buildDiscriminativeSecondPass,
+  buildExpansionQuery,
+  buildFinalSupportTokens,
+  buildFocusedHitContent,
+  buildHydratedRescueBridgeTokens,
+  buildLexicalSearchQuery,
+  buildQueryTokenSet,
+  DEFAULT_QMD_NAMESPACE_WEIGHTS,
+  extractContent,
+  extractScore,
+  normalizeContent,
+  normalizeFilename,
+  normalizePath,
+  parsePendingEmbeddingCount,
+  parseRows,
+  pickStringDeep,
+  rankRetrievedHits,
+  resolveRequestedCollectionName,
+  shouldRunAdaptiveSecondPass,
+  tokenizeQuery,
+  tokenLength
+} from './qmd-retrieval'
 
 const QMD_INDEX_NAME = 'leon-memory'
 const DEFAULT_TOP_K = 12
-const DEFAULT_TOKEN_BUDGET = 320
+const DEFAULT_TOKEN_BUDGET = 480
 const CONTEXT_FULL_CONTENT_CAP = 8_000
+const BRIDGE_SOURCE_CONTENT_CAP = 96_000
+const MIN_HIT_TOKEN_BUDGET = 48
 const INDEX_UPDATE_MIN_INTERVAL_MS = 10_000
+const EMBEDDING_REFRESH_MIN_INTERVAL_MS = 30_000
 
 type MemoryScope = 'persistent' | 'daily' | 'discussion'
 type MemoryKind =
@@ -112,10 +140,6 @@ const COLLECTIONS: Record<KnowledgeNamespace, { name: string, dir: string }> = {
   }
 }
 
-function normalizeContent(content: string): string {
-  return content.replace(/\r\n/g, '\n').trim()
-}
-
 function toFactKeySegment(value: string): string {
   return value
     .trim()
@@ -123,417 +147,6 @@ function toFactKeySegment(value: string): string {
     .replace(/[^a-z0-9._-]+/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '')
-}
-
-function normalizeFilename(filePath: string): string {
-  return path.basename(filePath).toUpperCase()
-}
-
-function normalizePath(value: string): string {
-  if (!value) {
-    return ''
-  }
-  if (!value.startsWith('file://')) {
-    return value
-  }
-
-  try {
-    return decodeURIComponent(new URL(value).pathname)
-  } catch {
-    return value
-  }
-}
-
-function tokenizeQuery(value: string): string[] {
-  return (
-    value
-      .normalize('NFKC')
-      .toLowerCase()
-      .match(/\p{L}[\p{L}\p{M}\p{N}_-]*|\p{N}+/gu) || []
-  )
-    .map((token) => token.trim())
-    .filter(Boolean)
-}
-
-function tokenLength(token: string): number {
-  return [...token].length
-}
-
-function namespaceRecallWeight(namespace: KnowledgeNamespace): number {
-  switch (namespace) {
-    case 'memory_persistent':
-      return 1.35
-    case 'memory_daily':
-      return 0.85
-    case 'memory_discussion':
-      return 0.65
-    case 'conversation_daily':
-      return 0.85
-    case 'context':
-      return 0.8
-    default:
-      return 0.8
-  }
-}
-
-function extractOverlapCount(queryTokens: Set<string>, hit: QMDHit): number {
-  if (queryTokens.size === 0) {
-    return 0
-  }
-
-  const hitText = `${hit.title} ${path.basename(hit.path || '')} ${hit.content.slice(0, 1_000)}`
-  const hitTokens = new Set(tokenizeQuery(hitText))
-  if (hitTokens.size === 0) {
-    return 0
-  }
-
-  let overlapCount = 0
-  for (const token of queryTokens) {
-    if (hitTokens.has(token)) {
-      overlapCount += 1
-    }
-  }
-
-  return overlapCount
-}
-
-function computeRecencyBoost(hit: QMDHit): number {
-  if (
-    hit.namespace !== 'memory_daily' &&
-    hit.namespace !== 'memory_discussion' &&
-    hit.namespace !== 'conversation_daily'
-  ) {
-    return 0
-  }
-
-  const basename = path.basename(hit.path || '')
-  const dayKeyMatch = basename.match(/^(\d{4}-\d{2}-\d{2})\.md(?:\.gz)?$/i)
-  if (!dayKeyMatch || !dayKeyMatch[1]) {
-    return 0
-  }
-
-  const dayTs = Date.parse(`${dayKeyMatch[1]}T00:00:00.000Z`)
-  if (!Number.isFinite(dayTs)) {
-    return 0
-  }
-
-  const ageDays = Math.max(
-    0,
-    Math.floor((Date.now() - dayTs) / (24 * 60 * 60 * 1_000))
-  )
-
-  if (ageDays <= 1) {
-    return 0.3
-  }
-  if (ageDays <= 7) {
-    return 0.18
-  }
-  if (ageDays <= 30) {
-    return 0.08
-  }
-
-  return 0
-}
-
-function computeLexicalBoost(queryTokens: Set<string>, hit: QMDHit): number {
-  if (queryTokens.size === 0) {
-    return 0
-  }
-
-  const hitText = `${hit.title} ${path.basename(hit.path || '')} ${hit.content.slice(0, 1_000)}`
-  const hitTokens = new Set(tokenizeQuery(hitText))
-  if (hitTokens.size === 0) {
-    return 0
-  }
-
-  let overlapCount = 0
-  for (const token of queryTokens) {
-    if (hitTokens.has(token)) {
-      overlapCount += 1
-    }
-  }
-
-  if (overlapCount === 0) {
-    return 0
-  }
-
-  const coverage = overlapCount / queryTokens.size
-  const density = overlapCount / Math.max(8, Math.min(32, hitTokens.size))
-  return coverage * 1.4 + density * 0.4
-}
-
-function computeRankingScore(
-  hit: QMDHit,
-  queryTokens: Set<string>
-): number {
-  const weightedBase = hit.score * namespaceRecallWeight(hit.namespace)
-  const lexicalBoost = computeLexicalBoost(queryTokens, hit)
-  const overlapCount = extractOverlapCount(queryTokens, hit)
-  const recencyBoost = computeRecencyBoost(hit)
-  let sparseOverlapPenalty = 0
-
-  if (queryTokens.size >= 4 && overlapCount === 0) {
-    sparseOverlapPenalty = 0.3
-  } else if (queryTokens.size >= 5 && overlapCount <= 1) {
-    sparseOverlapPenalty = 0.18
-  }
-
-  return weightedBase + lexicalBoost + recencyBoost - sparseOverlapPenalty
-}
-
-function buildAdaptiveQueryTokenSet(
-  queryTokens: Set<string>,
-  hits: QMDHit[]
-): Set<string> {
-  if (queryTokens.size === 0 || hits.length === 0) {
-    return queryTokens
-  }
-
-  const hitCount = hits.length
-  const tokenDocumentFrequency = new Map<string, number>()
-  for (const token of queryTokens) {
-    tokenDocumentFrequency.set(token, 0)
-  }
-
-  for (const hit of hits) {
-    const hitText = `${hit.title} ${path.basename(hit.path || '')} ${hit.content.slice(0, 1_000)}`
-    const hitTokens = new Set(tokenizeQuery(hitText))
-    for (const token of queryTokens) {
-      if (hitTokens.has(token)) {
-        tokenDocumentFrequency.set(
-          token,
-          (tokenDocumentFrequency.get(token) || 0) + 1
-        )
-      }
-    }
-  }
-
-  const adaptiveTokens = new Set<string>()
-  for (const token of queryTokens) {
-    const frequency = tokenDocumentFrequency.get(token) || 0
-    const ratio = frequency / hitCount
-    // Drop near-global query terms that mostly add noise to lexical overlap.
-    if (ratio >= 0.85) {
-      continue
-    }
-    adaptiveTokens.add(token)
-  }
-
-  return adaptiveTokens.size > 0 ? adaptiveTokens : queryTokens
-}
-
-function parsePersistentMemoryItemId(hit: QMDHit): string | null {
-  if (hit.namespace !== 'memory_persistent') {
-    return null
-  }
-
-  const directPrefix = 'memory-db://'
-  if (hit.path.startsWith(directPrefix)) {
-    const parsed = hit.path.slice(directPrefix.length).trim()
-    return parsed || null
-  }
-
-  const basename = path.basename(hit.path || '', '.md').trim()
-  if (!basename) {
-    return null
-  }
-
-  return basename
-}
-
-function pickStringDeep(
-  row: Record<string, unknown>,
-  keys: string[]
-): string {
-  const queue: unknown[] = [row]
-  while (queue.length > 0) {
-    const current = queue.shift()
-    if (!current) {
-      continue
-    }
-
-    if (Array.isArray(current)) {
-      for (const item of current) {
-        queue.push(item)
-      }
-      continue
-    }
-
-    if (typeof current !== 'object') {
-      continue
-    }
-
-    const objectValue = current as Record<string, unknown>
-    for (const key of keys) {
-      const value = objectValue[key]
-      if (typeof value === 'string' && value.trim()) {
-        return value.trim()
-      }
-    }
-
-    for (const value of Object.values(objectValue)) {
-      if (value && typeof value === 'object') {
-        queue.push(value)
-      }
-    }
-  }
-
-  return ''
-}
-
-function pickNumberDeep(
-  row: Record<string, unknown>,
-  keys: string[]
-): number {
-  const queue: unknown[] = [row]
-  while (queue.length > 0) {
-    const current = queue.shift()
-    if (!current) {
-      continue
-    }
-
-    if (Array.isArray(current)) {
-      for (const item of current) {
-        queue.push(item)
-      }
-      continue
-    }
-
-    if (typeof current !== 'object') {
-      continue
-    }
-
-    const objectValue = current as Record<string, unknown>
-    for (const key of keys) {
-      const value = objectValue[key]
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        return value
-      }
-      if (typeof value === 'string' && value.trim()) {
-        const parsed = Number(value)
-        if (Number.isFinite(parsed)) {
-          return parsed
-        }
-      }
-    }
-
-    for (const value of Object.values(objectValue)) {
-      if (value && typeof value === 'object') {
-        queue.push(value)
-      }
-    }
-  }
-
-  return 0
-}
-
-function extractContent(row: Record<string, unknown>): string {
-  const direct = pickStringDeep(row, [
-    'snippet',
-    'content',
-    'text',
-    'context',
-    'body'
-  ])
-  if (direct) {
-    return direct
-  }
-
-  const listKeys = ['snippets', 'chunks', 'matches', 'contexts', 'passages']
-  for (const key of listKeys) {
-    const value = row[key]
-    if (!Array.isArray(value)) {
-      continue
-    }
-
-    const lines: string[] = []
-    for (const item of value) {
-      if (typeof item === 'string' && item.trim()) {
-        lines.push(item.trim())
-        continue
-      }
-
-      if (item && typeof item === 'object' && !Array.isArray(item)) {
-        const nested = pickStringDeep(item as Record<string, unknown>, [
-          'snippet',
-          'content',
-          'text',
-          'context',
-          'body'
-        ])
-        if (nested) {
-          lines.push(nested)
-        }
-      }
-    }
-
-    if (lines.length > 0) {
-      return lines.join('\n')
-    }
-  }
-
-  return ''
-}
-
-function extractScore(row: Record<string, unknown>): number {
-  const score = pickNumberDeep(row, [
-    'score',
-    'fused_score',
-    'final_score',
-    'rank_score'
-  ])
-  if (score !== 0) {
-    return score
-  }
-
-  const distance = pickNumberDeep(row, ['distance', 'cosine_distance'])
-  if (distance > 0) {
-    return 1 / (1 + distance)
-  }
-
-  return 0
-}
-
-function parseRows(raw: string): Array<Record<string, unknown>> {
-  try {
-    const parsed = JSON.parse(raw) as unknown
-    if (Array.isArray(parsed)) {
-      return parsed.filter(
-        (item): item is Record<string, unknown> =>
-          item !== null && typeof item === 'object' && !Array.isArray(item)
-      )
-    }
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return []
-    }
-
-    const rows: Array<Record<string, unknown>> = []
-    const queue: unknown[] = [parsed]
-
-    while (queue.length > 0) {
-      const current = queue.shift()
-      if (!current || typeof current !== 'object') {
-        continue
-      }
-
-      const objectValue = current as Record<string, unknown>
-      for (const value of Object.values(objectValue)) {
-        if (Array.isArray(value)) {
-          for (const item of value) {
-            if (item && typeof item === 'object' && !Array.isArray(item)) {
-              rows.push(item as Record<string, unknown>)
-            }
-          }
-        } else if (value && typeof value === 'object') {
-          queue.push(value)
-        }
-      }
-    }
-
-    return rows.length > 0 ? rows : [parsed as Record<string, unknown>]
-  } catch {
-    return []
-  }
 }
 
 function toDayKey(timestamp: number): string {
@@ -574,6 +187,8 @@ export default class MemoryTool extends Tool {
   private static storageReady = false
   private static collectionsReady = false
   private static lastIndexUpdateAt = 0
+  private static lastEmbeddingRefreshAt = 0
+  private static embeddingRefreshPromise: Promise<void> | null = null
 
   private readonly config: ReturnType<typeof ToolkitConfig.load>
 
@@ -612,10 +227,10 @@ export default class MemoryTool extends Tool {
         error: 'Query is required.'
       }
     }
-
     await this.ensureStorage()
     await this.ensureCollections()
     await this.updateIndex()
+    await this.ensureEmbeddings()
 
     const includeContext = options.includeContext === true
     const namespaces = this.normalizeNamespaces(options.namespaces, includeContext)
@@ -634,15 +249,7 @@ export default class MemoryTool extends Tool {
 
     const rawHits: QMDHit[] = []
     const perNamespaceLimit = Math.max(topK * 3, topK)
-    const rawQueryTokens = tokenizeQuery(normalizedQuery)
-    const informativeQueryTokens = rawQueryTokens.filter(
-      (token) => tokenLength(token) >= 3
-    )
-    const queryTokens = new Set(
-      informativeQueryTokens.length > 0
-        ? informativeQueryTokens
-        : rawQueryTokens
-    )
+    const queryTokens = buildQueryTokenSet(normalizedQuery)
     const collectionNames = [
       ...new Set(
         namespaces
@@ -670,131 +277,57 @@ export default class MemoryTool extends Tool {
       topK,
       perNamespaceLimit * Math.max(1, collectionNames.length)
     )
+    const retrievalStages: string[] = []
+    const rewrittenQueries: string[] = []
+
+    const runPreferredSearchModes = async (
+      bridgeTerms: string[],
+      scopedCollectionNames: string[],
+      limit: number
+    ): Promise<{
+      rows: Array<Record<string, unknown>>
+      modeUsed: QMDSearchMode
+    }> => {
+      const lexicalQuery = buildLexicalSearchQuery(normalizedQuery, bridgeTerms)
+      let rows = await this.runSearchMode(
+        'query',
+        buildExpansionQuery(normalizedQuery, bridgeTerms),
+        scopedCollectionNames,
+        limit
+      )
+      if (rows.length > 0) {
+        return {
+          rows,
+          modeUsed: 'query'
+        }
+      }
+
+      rows = await this.runSearchMode(
+        'search',
+        lexicalQuery,
+        scopedCollectionNames,
+        limit
+      )
+
+      return {
+        rows,
+        modeUsed: 'search'
+      }
+    }
+
+    const namespaceWeights: Partial<Record<KnowledgeNamespace, number>> =
+      DEFAULT_QMD_NAMESPACE_WEIGHTS
 
     const rankHitsByQuery = (
       hitsInput: QMDHit[]
     ): Array<{ hit: QMDHit, rankingScore: number, overlapCount: number }> => {
-      const deduped = new Map<string, QMDHit>()
-      for (const hit of hitsInput) {
-        const key = `${hit.namespace}|${hit.path}|${hit.content}`
-        const existing = deduped.get(key)
-        if (!existing || hit.score > existing.score) {
-          deduped.set(key, hit)
-        }
-      }
-
-      const dedupedHits = [...deduped.values()]
-      const adaptiveQueryTokens = buildAdaptiveQueryTokenSet(
+      return rankRetrievedHits(
+        hitsInput,
         queryTokens,
-        dedupedHits
+        COLLECTIONS,
+        namespaceWeights,
+        BRIDGE_SOURCE_CONTENT_CAP
       )
-
-      return dedupedHits
-        .map((hit) => ({
-          hit,
-          overlapCount: extractOverlapCount(adaptiveQueryTokens, hit),
-          rankingScore: computeRankingScore(hit, adaptiveQueryTokens)
-        }))
-        .sort((a, b) => b.rankingScore - a.rankingScore)
-    }
-
-    const shouldRunSecondPass = (
-      rankedHitsInput: Array<{
-        hit: QMDHit
-        rankingScore: number
-        overlapCount: number
-      }>
-    ): boolean => {
-      if (rankedHitsInput.length === 0) {
-        return true
-      }
-
-      const topWindow = rankedHitsInput.slice(0, Math.min(6, rankedHitsInput.length))
-      const maxOverlap = topWindow.reduce(
-        (maxValue, current) => Math.max(maxValue, current.overlapCount),
-        0
-      )
-      const bestScore = topWindow[0]?.rankingScore || 0
-      const nonPersistentCount = topWindow.filter(
-        (rankedHit) => rankedHit.hit.namespace !== 'memory_persistent'
-      ).length
-      const hasStrongNonPersistentMatch = topWindow.some(
-        (rankedHit) =>
-          rankedHit.hit.namespace !== 'memory_persistent' &&
-          rankedHit.overlapCount >= 2
-      )
-
-      if (maxOverlap === 0) {
-        return true
-      }
-
-      if (bestScore < 1 && maxOverlap <= 1) {
-        return true
-      }
-
-      if (
-        nonPersistentCount <= 1 &&
-        !hasStrongNonPersistentMatch &&
-        maxOverlap <= 1
-      ) {
-        return true
-      }
-
-      return false
-    }
-
-    const buildDiscriminativeSecondPassQuery = (hitsInput: QMDHit[]): string | null => {
-      if (queryTokens.size < 2 || hitsInput.length === 0) {
-        return null
-      }
-
-      const tokenDocumentFrequency = new Map<string, number>(
-        [...queryTokens].map((token) => [token, 0])
-      )
-
-      for (const hit of hitsInput) {
-        const hitText = `${hit.title} ${path.basename(hit.path || '')} ${hit.content.slice(0, 1_000)}`
-        const hitTokens = new Set(tokenizeQuery(hitText))
-        for (const token of queryTokens) {
-          if (hitTokens.has(token)) {
-            tokenDocumentFrequency.set(
-              token,
-              (tokenDocumentFrequency.get(token) || 0) + 1
-            )
-          }
-        }
-      }
-
-      const hitCount = Math.max(1, hitsInput.length)
-      const discriminativeTokens = [...queryTokens]
-        .map((token) => {
-          const frequency = tokenDocumentFrequency.get(token) || 0
-          const inverseDocumentFrequency = Math.log((hitCount + 1) / (frequency + 1))
-          const lengthBonus = Math.min(0.35, tokenLength(token) / 20)
-          return {
-            token,
-            score: inverseDocumentFrequency + lengthBonus
-          }
-        })
-        .sort((entryA, entryB) => entryB.score - entryA.score)
-        .map((entry) => entry.token)
-
-      const selectedTokens = discriminativeTokens.slice(
-        0,
-        Math.min(8, discriminativeTokens.length)
-      )
-      if (selectedTokens.length < 2) {
-        return null
-      }
-
-      const rewrittenQuery = selectedTokens.join(' ').trim()
-      if (!rewrittenQuery) {
-        return null
-      }
-
-      return rewrittenQuery.toLowerCase() === normalizedQuery.toLowerCase()
-        ? null
-        : rewrittenQuery
     }
 
     const appendRows = (
@@ -832,8 +365,15 @@ export default class MemoryTool extends Tool {
           'collection_name',
           'collectionName'
         ])
+        const resolvedExplicitCollection = resolveRequestedCollectionName(
+          explicitCollection,
+          collectionNames
+        )
         const collectionFromQmdPathMatch = sourcePath.match(/^qmd:\/\/([^/]+)\//i)
-        const collectionFromQmdPath = collectionFromQmdPathMatch?.[1] || ''
+        const collectionFromQmdPath = resolveRequestedCollectionName(
+          collectionFromQmdPathMatch?.[1] || '',
+          collectionNames
+        )
         const collectionFromAbsolutePath = collectionNames.find((collectionName) => {
           const collectionPath = collectionPathByName.get(collectionName)
           if (!collectionPath || !sourcePath) {
@@ -843,7 +383,7 @@ export default class MemoryTool extends Tool {
           return sourcePath.startsWith(collectionPath)
         })
         const resolvedCollectionName =
-          explicitCollection ||
+          resolvedExplicitCollection ||
           collectionFromQmdPath ||
           collectionFromAbsolutePath ||
           (collectionNames.length === 1 ? collectionNames[0] : '')
@@ -875,24 +415,35 @@ export default class MemoryTool extends Tool {
       }
     }
 
-    let rows = await this.runSearchMode(
-      'query',
-      normalizedQuery,
+    let { rows, modeUsed } = await runPreferredSearchModes(
+      [],
       collectionNames,
       globalLimit
     )
-    let modeUsed: QMDSearchMode = 'query'
-    if (rows.length === 0) {
-      rows = await this.runSearchMode(
+    retrievalStages.push(`initial:${modeUsed}:${rows.length}`)
+
+    appendRows(rows, modeUsed)
+
+    let rankedHits = rankHitsByQuery(rawHits)
+    const hasQmdPersistentHit = (): boolean =>
+      rawHits.some(
+        (hit) =>
+          hit.namespace === 'memory_persistent' &&
+          !hit.path.startsWith('memory-db://')
+      )
+    const shouldEnrichWithFullSearch =
+      !hasQmdPersistentHit() || shouldRunAdaptiveSecondPass(rankedHits)
+
+    if (shouldEnrichWithFullSearch) {
+      const searchRows = await this.runSearchMode(
         'search',
-        normalizedQuery,
+        buildLexicalSearchQuery(normalizedQuery),
         collectionNames,
         globalLimit
       )
-      modeUsed = 'search'
+      appendRows(searchRows, 'search')
+      retrievalStages.push(`enrich:search:${searchRows.length}`)
     }
-
-    appendRows(rows, modeUsed)
 
     const missingNamespaces = namespaces.filter(
       (namespace) => !rawHits.some((hit) => hit.namespace === namespace)
@@ -903,71 +454,41 @@ export default class MemoryTool extends Tool {
         continue
       }
 
-      let scopedRows = await this.runSearchMode(
-        'query',
-        normalizedQuery,
-        [collectionName],
-        perNamespaceLimit
-      )
-      let scopedMode: QMDSearchMode = 'query'
-      if (scopedRows.length === 0) {
-        scopedRows = await this.runSearchMode(
-          'search',
-          normalizedQuery,
+      const { rows: scopedRows, modeUsed: scopedMode } =
+        await runPreferredSearchModes(
+          [],
           [collectionName],
           perNamespaceLimit
         )
-        scopedMode = 'search'
-      }
 
       appendRows(scopedRows, scopedMode)
     }
 
-    if (!rawHits.some((hit) => hit.namespace === 'memory_persistent')) {
-      const fallbackHits = this.readPersistentFallback(
+    rankedHits = rankHitsByQuery(rawHits)
+    let secondPassSupportTokens: string[] = []
+    if (!hasQmdPersistentHit() || shouldRunAdaptiveSecondPass(rankedHits)) {
+      const secondPass = buildDiscriminativeSecondPass(
         normalizedQuery,
-        [...queryTokens],
-        perNamespaceLimit
-      )
-      for (const fallbackHit of fallbackHits) {
-        rawHits.push(fallbackHit)
-      }
-    }
-
-    const relatedPersistentLimit = Math.max(2, Math.floor(topK / 2))
-    const relatedPersistentHits = this.readRelatedPersistentFallback(
-      rawHits,
-      relatedPersistentLimit
-    )
-    for (const relatedHit of relatedPersistentHits) {
-      rawHits.push(relatedHit)
-    }
-
-    let rankedHits = rankHitsByQuery(rawHits)
-    if (shouldRunSecondPass(rankedHits)) {
-      const secondPassQuery = buildDiscriminativeSecondPassQuery(
-        rankedHits.map((rankedHit) => rankedHit.hit)
+        queryTokens,
+        rankedHits.map((rankedHit) => rankedHit.hit),
+        COLLECTIONS,
+        BRIDGE_SOURCE_CONTENT_CAP
       )
 
-      if (secondPassQuery) {
-        let secondPassRows = await this.runSearchMode(
-          'query',
-          secondPassQuery,
+      if (secondPass) {
+        secondPassSupportTokens = secondPass.bridgeTokens
+        rewrittenQueries.push(`second_pass=${JSON.stringify(secondPass.lexicalQuery)}`)
+        const {
+          rows: secondPassRows,
+          modeUsed: secondPassMode
+        } = await runPreferredSearchModes(
+          secondPass.bridgeTokens,
           collectionNames,
           globalLimit
         )
-        let secondPassMode: QMDSearchMode = 'query'
-        if (secondPassRows.length === 0) {
-          secondPassRows = await this.runSearchMode(
-            'search',
-            secondPassQuery,
-            collectionNames,
-            globalLimit
-          )
-          secondPassMode = 'search'
-        }
 
         appendRows(secondPassRows, secondPassMode)
+        retrievalStages.push(`second_pass:${secondPassMode}:${secondPassRows.length}`)
 
         const stillMissingNamespaces = namespaces.filter(
           (namespace) => !rawHits.some((hit) => hit.namespace === namespace)
@@ -978,28 +499,127 @@ export default class MemoryTool extends Tool {
             continue
           }
 
-          let scopedRows = await this.runSearchMode(
-            'query',
-            secondPassQuery,
-            [collectionName],
-            perNamespaceLimit
-          )
-          let scopedMode: QMDSearchMode = 'query'
-          if (scopedRows.length === 0) {
-            scopedRows = await this.runSearchMode(
-              'search',
-              secondPassQuery,
+          const { rows: scopedRows, modeUsed: scopedMode } =
+            await runPreferredSearchModes(
+              secondPass.bridgeTokens,
               [collectionName],
               perNamespaceLimit
             )
-            scopedMode = 'search'
-          }
 
           appendRows(scopedRows, scopedMode)
         }
 
         rankedHits = rankHitsByQuery(rawHits)
       }
+    }
+
+    rankedHits = rankHitsByQuery(rawHits)
+    let rescueSupportTokens: string[] = []
+    const rescueBridgeTokens = buildHydratedRescueBridgeTokens(
+      queryTokens,
+      rankedHits,
+      COLLECTIONS,
+      BRIDGE_SOURCE_CONTENT_CAP
+    ).filter((token) => !secondPassSupportTokens.includes(token))
+
+    if (rescueBridgeTokens.length > 0) {
+      rescueSupportTokens = rescueBridgeTokens
+      rewrittenQueries.push(
+        `rescue=${JSON.stringify(buildLexicalSearchQuery(normalizedQuery, rescueBridgeTokens))}`
+      )
+      const {
+        rows: rescueRows,
+        modeUsed: rescueMode
+      } = await runPreferredSearchModes(
+        rescueBridgeTokens,
+        collectionNames,
+        globalLimit
+      )
+
+      appendRows(rescueRows, rescueMode)
+      retrievalStages.push(`rescue:${rescueMode}:${rescueRows.length}`)
+
+      const stillMissingNamespaces = namespaces.filter(
+        (namespace) => !rawHits.some((hit) => hit.namespace === namespace)
+      )
+      for (const missingNamespace of stillMissingNamespaces) {
+        const collectionName = COLLECTIONS[missingNamespace]?.name
+        if (!collectionName) {
+          continue
+        }
+
+        const { rows: scopedRows, modeUsed: scopedMode } =
+          await runPreferredSearchModes(
+            rescueBridgeTokens,
+            [collectionName],
+            perNamespaceLimit
+          )
+
+        appendRows(scopedRows, scopedMode)
+      }
+
+      rankedHits = rankHitsByQuery(rawHits)
+    }
+
+    const backtrackCandidates = buildHydratedBacktrackCandidates(
+      queryTokens,
+      rankedHits,
+      COLLECTIONS,
+      namespaceWeights,
+      BRIDGE_SOURCE_CONTENT_CAP
+    )
+    const existingHitPaths = new Set(
+      rawHits.map((hit) => `${hit.namespace}|${hit.path}`)
+    )
+    const appendedBacktrackHits = backtrackCandidates
+      .filter((candidate) => !existingHitPaths.has(
+        `${candidate.hit.namespace}|${candidate.hit.path}`
+      ))
+      .slice(0, 4)
+
+    if (appendedBacktrackHits.length > 0) {
+      for (const candidate of appendedBacktrackHits) {
+        rawHits.push({
+          ...candidate.hit,
+          score: Math.max(candidate.hit.score, candidate.rankingScore)
+        })
+      }
+      retrievalStages.push(`backtrack:local:${appendedBacktrackHits.length}`)
+      rankedHits = rankHitsByQuery(rawHits)
+    }
+
+    const excerptQueryTokens = buildAdaptiveQueryTokenSet(
+      queryTokens,
+      rankedHits.map((rankedHit) => rankedHit.hit),
+      COLLECTIONS,
+      BRIDGE_SOURCE_CONTENT_CAP
+    )
+
+    const supportTokens = buildFinalSupportTokens(
+      excerptQueryTokens,
+      rankedHits,
+      COLLECTIONS,
+      BRIDGE_SOURCE_CONTENT_CAP,
+      [...secondPassSupportTokens, ...rescueSupportTokens]
+    )
+
+    const focusedContentCache = new Map<string, string>()
+    const getFocusedHitContent = (hit: QMDHit): string => {
+      const cacheKey = `${hit.namespace}|${hit.path}|${hit.title}|${hit.id}`
+      const cachedContent = focusedContentCache.get(cacheKey)
+      if (cachedContent) {
+        return cachedContent
+      }
+
+      const focusedContent = buildFocusedHitContent(
+        hit,
+        excerptQueryTokens,
+        supportTokens,
+        COLLECTIONS,
+        BRIDGE_SOURCE_CONTENT_CAP
+      )
+      focusedContentCache.set(cacheKey, focusedContent)
+      return focusedContent
     }
 
     const selected: Array<{
@@ -1012,7 +632,11 @@ export default class MemoryTool extends Tool {
     const selectedKeys = new Set<string>()
     let usedTokenEstimate = 0
 
-    const addHit = (hit: QMDHit, rankingScore: number): boolean => {
+    const addHit = (
+      hit: QMDHit,
+      rankingScore: number,
+      budgetHint?: number
+    ): boolean => {
       if (selected.length >= topK || usedTokenEstimate >= tokenBudget) {
         return false
       }
@@ -1024,12 +648,14 @@ export default class MemoryTool extends Tool {
 
       const remainingBudget = tokenBudget - usedTokenEstimate
       const perHitBudget =
-        selected.length === 0
-          ? Math.max(96, Math.floor(tokenBudget * 0.6))
-          : remainingBudget
+        budgetHint && budgetHint > 0
+          ? Math.min(remainingBudget, budgetHint)
+          : selected.length === 0
+            ? Math.max(96, Math.floor(tokenBudget * 0.6))
+            : remainingBudget
 
       const clipped = clipWithTokenBudget(
-        normalizeContent(hit.content),
+        getFocusedHitContent(hit),
         Math.min(remainingBudget, perHitBudget)
       )
       if (!clipped) {
@@ -1052,7 +678,12 @@ export default class MemoryTool extends Tool {
     }
 
     const namespaceCoverageQueue: KnowledgeNamespace[] = [...new Set(namespaces)]
-    for (const namespace of namespaceCoverageQueue) {
+      .filter(
+        (namespace) =>
+          namespace !== 'context' &&
+          !(namespace === 'conversation_daily' && namespaces.includes('memory_daily'))
+      )
+    for (const [index, namespace] of namespaceCoverageQueue.entries()) {
       const firstByNamespace = rankedHits.find(
         (rankedHit) => rankedHit.hit.namespace === namespace
       )
@@ -1060,7 +691,24 @@ export default class MemoryTool extends Tool {
         continue
       }
 
-      addHit(firstByNamespace.hit, firstByNamespace.rankingScore)
+      const remainingCoverageNamespaces = Math.max(
+        1,
+        namespaceCoverageQueue.length - index
+      )
+      const namespaceBudget = Math.max(
+        MIN_HIT_TOKEN_BUDGET,
+        Math.floor((tokenBudget - usedTokenEstimate) / remainingCoverageNamespaces)
+      )
+      const cappedNamespaceBudget = Math.min(
+        namespaceBudget,
+        Math.max(192, Math.floor(tokenBudget * 0.28))
+      )
+
+      addHit(
+        firstByNamespace.hit,
+        firstByNamespace.rankingScore,
+        cappedNamespaceBudget
+      )
     }
 
     for (const rankedHit of rankedHits) {
@@ -1068,10 +716,22 @@ export default class MemoryTool extends Tool {
         break
       }
 
-      addHit(rankedHit.hit, rankedHit.rankingScore)
+      const remainingResultSlots = Math.max(1, topK - selected.length)
+      const rollingBudget = Math.max(
+        MIN_HIT_TOKEN_BUDGET,
+        Math.floor((tokenBudget - usedTokenEstimate) / remainingResultSlots)
+      )
+
+      addHit(rankedHit.hit, rankedHit.rankingScore, rollingBudget)
     }
 
     const facts = includeFacts ? this.readFacts(8) : []
+    this.log(
+      `memory.read retrieval stages=${retrievalStages.join(' -> ')} final_hits=${selected.length} used_tokens=${usedTokenEstimate}`
+    )
+    if (rewrittenQueries.length > 0) {
+      this.log(`memory.read rewritten ${rewrittenQueries.join(' | ')}`)
+    }
 
     return {
       success: true,
@@ -1209,6 +869,7 @@ export default class MemoryTool extends Tool {
 
     await this.ensureCollections()
     await this.updateIndex()
+    await this.ensureEmbeddings()
 
     return {
       success: true,
@@ -1401,8 +1062,7 @@ export default class MemoryTool extends Tool {
           '**/*.md'
         ])
       } catch (error) {
-        const message = String(error).toLowerCase()
-        if (!message.includes('already exists')) {
+        if (!(await this.collectionExists(collection.name))) {
           throw error
         }
       }
@@ -1413,6 +1073,15 @@ export default class MemoryTool extends Tool {
 
   private async ensureQmdAvailable(): Promise<void> {
     await this.runQMD(['--help'])
+  }
+
+  private async collectionExists(name: string): Promise<boolean> {
+    try {
+      await this.runQMD(['--index', QMD_INDEX_NAME, 'ls', name])
+      return true
+    } catch {
+      return false
+    }
   }
 
   private async updateIndex(): Promise<void> {
@@ -1428,156 +1097,40 @@ export default class MemoryTool extends Tool {
     MemoryTool.lastIndexUpdateAt = now
   }
 
-  private readPersistentFallback(
-    query: string,
-    queryTokens: string[],
-    limit: number
-  ): QMDHit[] {
-    const normalizedQuery = query.trim().toLowerCase()
-    const terms = [
-      ...new Set([
-        ...queryTokens.filter((token) => tokenLength(token) >= 3),
-        ...tokenizeQuery(normalizedQuery).filter(
-          (token) => tokenLength(token) >= 3
-        )
-      ])
-    ]
-      .slice(0, 10)
-
-    if (terms.length === 0) {
-      return []
+  private async ensureEmbeddings(force = false): Promise<void> {
+    const now = Date.now()
+    if (
+      !force &&
+      MemoryTool.lastEmbeddingRefreshAt > 0 &&
+      now - MemoryTool.lastEmbeddingRefreshAt < EMBEDDING_REFRESH_MIN_INTERVAL_MS
+    ) {
+      return
     }
 
-    const whereClause = terms
-      .map(() => 'LOWER(content_text) LIKE ?')
-      .join(' OR ')
-    const params = terms.map((term) => `%${term}%`)
+    if (MemoryTool.embeddingRefreshPromise) {
+      await MemoryTool.embeddingRefreshPromise
+      return
+    }
 
-    const rows = this.getDb()
-      .prepare(
-        `SELECT id, title, content_text, importance
-         FROM memory_items
-         WHERE scope = 'persistent'
-           AND is_deleted = 0
-           AND (${whereClause})
-         ORDER BY importance DESC, updated_at DESC
-         LIMIT ?`
-      )
-      .all(...params, limit) as Array<Record<string, unknown>>
-
-    return rows
-      .map((row) => {
-        const id = typeof row['id'] === 'string' ? row['id'] : ''
-        const content =
-          typeof row['content_text'] === 'string' ? row['content_text'] : ''
-        if (!id || !content) {
-          return null
+    MemoryTool.embeddingRefreshPromise = (async (): Promise<void> => {
+      try {
+        const statusOutput = await this.runQMD(['status', '--index', QMD_INDEX_NAME])
+        const pendingEmbeddingCount = parsePendingEmbeddingCount(statusOutput)
+        if (pendingEmbeddingCount <= 0) {
+          MemoryTool.lastEmbeddingRefreshAt = Date.now()
+          return
         }
 
-        const title = typeof row['title'] === 'string'
-          ? row['title']
-          : 'Persistent memory'
-        const importance = Number(row['importance'])
-
-        return {
-          id,
-          path: `memory-db://${id}`,
-          title,
-          content,
-          score: Number.isFinite(importance) ? 0.2 + importance : 0.2,
-          namespace: 'memory_persistent' as const
-        }
-      })
-      .filter((hit): hit is QMDHit => hit !== null)
-  }
-
-  private readRelatedPersistentFallback(
-    seedHits: QMDHit[],
-    limit: number
-  ): QMDHit[] {
-    const anchorIds = [
-      ...new Set(
-        seedHits
-          .map((hit) => parsePersistentMemoryItemId(hit))
-          .filter((id): id is string => Boolean(id))
-      )
-    ].slice(0, 2)
-
-    if (anchorIds.length === 0) {
-      return []
-    }
-
-    const db = this.getDb()
-    const anchorPlaceholders = anchorIds.map(() => '?').join(', ')
-    const anchors = db.prepare(
-      `SELECT id, day_key, source_ref
-       FROM memory_items
-       WHERE scope = 'persistent'
-         AND is_deleted = 0
-         AND id IN (${anchorPlaceholders})`
-    ).all(...anchorIds) as Array<Record<string, unknown>>
-
-    if (anchors.length === 0) {
-      return []
-    }
-
-    const relatedConditions: string[] = []
-    const relatedParams: string[] = []
-    for (const anchor of anchors) {
-      const dayKey =
-        typeof anchor['day_key'] === 'string' ? anchor['day_key'] : ''
-      const sourceRef =
-        typeof anchor['source_ref'] === 'string' ? anchor['source_ref'] : ''
-
-      if (dayKey) {
-        relatedConditions.push('day_key = ?')
-        relatedParams.push(dayKey)
+        await this.runQMD(['embed', '--index', QMD_INDEX_NAME])
+        MemoryTool.lastEmbeddingRefreshAt = Date.now()
+      } catch {
+        MemoryTool.lastEmbeddingRefreshAt = Date.now()
+      } finally {
+        MemoryTool.embeddingRefreshPromise = null
       }
-      if (sourceRef) {
-        relatedConditions.push('source_ref = ?')
-        relatedParams.push(sourceRef)
-      }
-    }
+    })()
 
-    if (relatedConditions.length === 0) {
-      return []
-    }
-
-    const excludedAnchorPlaceholders = anchorIds.map(() => '?').join(', ')
-    const rows = db.prepare(
-      `SELECT id, title, content_text, importance
-       FROM memory_items
-       WHERE scope = 'persistent'
-         AND is_deleted = 0
-         AND id NOT IN (${excludedAnchorPlaceholders})
-         AND (${relatedConditions.join(' OR ')})
-       ORDER BY importance DESC, updated_at DESC
-       LIMIT ?`
-    ).all(...anchorIds, ...relatedParams, limit) as Array<Record<string, unknown>>
-
-    return rows
-      .map((row) => {
-        const id = typeof row['id'] === 'string' ? row['id'] : ''
-        const content =
-          typeof row['content_text'] === 'string' ? row['content_text'] : ''
-        if (!id || !content) {
-          return null
-        }
-
-        const title =
-          typeof row['title'] === 'string' ? row['title'] : 'Persistent memory'
-        const importance = Number(row['importance'])
-
-        return {
-          id,
-          path: `memory-db://${id}`,
-          title,
-          content,
-          score: Number.isFinite(importance) ? 0.1 + importance * 0.75 : 0.1,
-          namespace: 'memory_persistent' as const
-        }
-      })
-      .filter((hit): hit is QMDHit => hit !== null)
+    await MemoryTool.embeddingRefreshPromise
   }
 
   private async runSearchMode(
@@ -1603,20 +1156,14 @@ export default class MemoryTool extends Tool {
 
     let payload = ''
     try {
-      payload = await this.runQMD([...args, '--full'])
+      payload = await this.runQMD(args)
     } catch (error) {
       const message = String(error).toLowerCase()
-      if (message.includes('unknown') && message.includes('full')) {
-        try {
-          payload = await this.runQMD(args)
-        } catch {
-          return []
-        }
-      } else if (mode === 'query' && message.includes('not found')) {
+      if (mode === 'query' && message.includes('not found')) {
         return this.runSearchMode('search', query, collectionNames, limit)
-      } else {
-        return []
       }
+
+      return []
     }
 
     return parseRows(payload)
@@ -1766,5 +1313,7 @@ export default class MemoryTool extends Tool {
     MemoryTool.db = null
     MemoryTool.storageReady = false
     MemoryTool.collectionsReady = false
+    MemoryTool.lastEmbeddingRefreshAt = 0
+    MemoryTool.embeddingRefreshPromise = null
   }
 }

@@ -12,7 +12,7 @@
   },
   "functions": {
     "read": {
-      "description": "Recall relevant memories for a query using Leon's memory system.",
+      "description": "Recall relevant memories for a query using Leon's memory system. Keep the query short and semantically close to the user's wording. Prefer concrete entities or relationships already mentioned. Avoid long speculative keyword lists.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -25,7 +25,14 @@
               "namespaces": {
                 "type": "array",
                 "items": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "memory_persistent",
+                    "memory_daily",
+                    "memory_discussion",
+                    "conversation_daily",
+                    "context"
+                  ]
                 }
               },
               "topK": {

@@ -29,7 +29,7 @@ const LEON_MEMORY_DISCUSSION_TTL_DAYS = 5
 const LEON_MEMORY_RECALL_TOP_K = 12
 const LEON_MEMORY_PLANNING_TOKEN_BUDGET = 220
 const LEON_MEMORY_PLANNING_CONTEXT_FILES_TOKEN_BUDGET = 1_200
-const LEON_MEMORY_EXECUTION_TOKEN_BUDGET = 320
+const LEON_MEMORY_EXECUTION_TOKEN_BUDGET = 480
 const PERSISTENT_EXTRACTION_TIMEOUT_MS = 45_000
 const PERSISTENT_EXTRACTION_MAX_RETRIES = 1
 const PERSISTENT_EXTRACTION_MAX_TOKENS = 220
@@ -604,12 +604,7 @@ export default class MemoryManager {
 
     const topK = input.topK || LEON_MEMORY_RECALL_TOP_K
     const tokenBudget = input.tokenBudget || LEON_MEMORY_EXECUTION_TOKEN_BUDGET
-    const namespaces = input.namespaces || [
-      'memory_persistent',
-      'memory_daily',
-      'memory_discussion',
-      'context'
-    ]
+    const namespaces = this.normalizeRecallNamespaces(input.namespaces)
 
     LogHelper.title('Memory Manager')
     LogHelper.debug(
@@ -913,6 +908,30 @@ export default class MemoryManager {
     result.promptText = renderRecallPrompt(result)
 
     return result
+  }
+
+  private normalizeRecallNamespaces(
+    namespaces?: string[]
+  ): RecallHit['namespace'][] {
+    const allowed = new Set<RecallHit['namespace']>([
+      'memory_persistent',
+      'memory_daily',
+      'memory_discussion',
+      'conversation_daily',
+      'context'
+    ])
+    const normalized = Array.isArray(namespaces)
+      ? namespaces.filter(
+          (namespace): namespace is RecallHit['namespace'] =>
+            typeof namespace === 'string' &&
+            namespace !== 'default' &&
+            allowed.has(namespace as RecallHit['namespace'])
+        )
+      : []
+
+    return normalized.length > 0
+      ? [...new Set(normalized)]
+      : ['memory_persistent', 'memory_daily', 'memory_discussion', 'context']
   }
 
   public async buildPlanningMemoryPack(

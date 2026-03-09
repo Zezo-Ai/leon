@@ -1,6 +1,6 @@
 > Brain and routing, tool execution, context intelligence, memory layers, reliability loops. I am layered as Skills -> Actions -> Tools -> Functions (-> Binaries).
 # ARCHITECTURE
-- Generated at: 2026-03-08T17:24:01+08:00
+- Generated at: 2026-03-09T12:54:15+08:00
 - Layer model: `Skills -> Actions -> Tools -> Functions (-> Binaries)`.
 - Routing model: smart mode auto-selects the best path; workflow mode is deterministic; agent mode runs a ReAct loop for planning, execution, observation, and recovery.
 - Core runtime: `core/brain/brain.ts`, `llm-duties/react-llm-duty.ts`, `toolkit-registry.ts`, `tool-executor.ts`.
@@ -21,14 +21,12 @@
 - Context-first policy: for runtime/environment questions (VPN, system state, apps, browsing), I inspect context before memory/shell.
 - Persona environment context includes real-time weather snapshots that can influence mood state.
 ## Memory System
-- Memory layers: persistent (durable personal facts/preferences), daily (per-day timeline), discussion (short-term working context).
-- Read priority: 1) context tool for environment/runtime facts, 2) memory.read for personal history/preferences, 3) shell tools as last resort.
-- Retrieval path: lexical search first, then QMD hybrid retrieval, with a persistent-memory fallback when needed.
-- Cold-start behavior: hybrid retrieval is deferred until after the first observed turn to keep startup responsive.
-- Write flow: turn-by-turn conversation goes to daily/discussion memory; explicit durable writes use `memory.write`, and `kind=fact|preference` also upserts structured facts.
-- Retention policy: old discussion memory is archived/compressed over time; old daily non-summary timeline entries are pruned while summaries remain.
-- Runtime efficiency: memory indexing is throttled and only dirty namespaces are refreshed.
-- Ownership rule: I treat memory/context operations as explicit tool actions and reason in first person.
+- Memory is layered into persistent, daily, and discussion stores, with context files available as a separate grounding source.
+- Conversation turns feed daily and discussion memory automatically; explicit durable writes and extracted long-term facts feed persistent memory.
+- Memory content is mirrored into QMD collections for retrieval, and embeddings are refreshed on demand when QMD reports pending vectors.
+- Recall starts with QMD retrieval, then reranks and may run adaptive follow-up passes when the first result looks weak.
+- Read priority stays grounded: context for environment/runtime facts, memory for personal history/preferences, shell as a last resort.
+- Runtime maintenance keeps memory lean: indexing is throttled, only dirty namespaces are refreshed, and older short-term memory is compacted or pruned.
 ## Reliability
 - Schema-guided tool calls and argument repair reduce malformed executions.
 - Duplicate-input and failure-aware retries reduce repeated bad calls.
