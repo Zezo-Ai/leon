@@ -4,6 +4,7 @@ import type { LLMReasoningMode } from '@/core/llm-manager/types'
 import type { ReactPhase } from './types'
 
 export interface ReactPhasePolicy {
+  promptProfile: 'full' | 'lean'
   // Inject the persona style/voice block into the system prompt.
   includePersonality: boolean
   // Inject the dynamic mood block into the system prompt.
@@ -22,6 +23,7 @@ export interface ReactPhasePolicy {
 
 const REACT_PHASE_POLICIES: Record<ReactPhase, ReactPhasePolicy> = {
   planning: {
+    promptProfile: 'lean',
     includePersonality: false,
     includeMood: false,
     reasoningMode: 'on',
@@ -31,6 +33,7 @@ const REACT_PHASE_POLICIES: Record<ReactPhase, ReactPhasePolicy> = {
     emitReasoning: true
   },
   execution: {
+    promptProfile: 'lean',
     includePersonality: false,
     includeMood: false,
     reasoningMode: 'guarded',
@@ -40,6 +43,7 @@ const REACT_PHASE_POLICIES: Record<ReactPhase, ReactPhasePolicy> = {
     emitReasoning: true
   },
   recovery: {
+    promptProfile: 'lean',
     includePersonality: false,
     includeMood: false,
     reasoningMode: 'on',
@@ -49,6 +53,7 @@ const REACT_PHASE_POLICIES: Record<ReactPhase, ReactPhasePolicy> = {
     emitReasoning: true
   },
   final_answer: {
+    promptProfile: 'full',
     includePersonality: true,
     includeMood: true,
     reasoningMode: 'off',
@@ -74,6 +79,7 @@ export function buildPhaseSystemPrompt(
   const policy = getPhasePolicy(phase)
 
   return PERSONA.getCompactDutySystemPrompt(basePrompt, {
+    profile: policy.promptProfile,
     includePersonality: policy.includePersonality,
     includeMood: policy.includeMood
   })
@@ -83,5 +89,5 @@ export function formatPhasePolicyForLog(
   phase: ReactPhase,
   policy: ReactPhasePolicy
 ): string {
-  return `phase=${phase} | persona=${policy.includePersonality ? 'on' : 'off'} | mood=${policy.includeMood ? 'on' : 'off'} | thinking=${policy.reasoningMode} | budget=${policy.thoughtTokensBudget ?? 0} | provider_stream=${policy.streamToProvider ? 'on' : 'off'} | user_stream=${policy.streamToUser ? 'on' : 'off'} | reasoning=${policy.emitReasoning ? 'on' : 'off'}`
+  return `phase=${phase} | profile=${policy.promptProfile} | persona=${policy.includePersonality ? 'on' : 'off'} | mood=${policy.includeMood ? 'on' : 'off'} | thinking=${policy.reasoningMode} | budget=${policy.thoughtTokensBudget ?? 0} | provider_stream=${policy.streamToProvider ? 'on' : 'off'} | user_stream=${policy.streamToUser ? 'on' : 'off'} | reasoning=${policy.emitReasoning ? 'on' : 'off'}`
 }

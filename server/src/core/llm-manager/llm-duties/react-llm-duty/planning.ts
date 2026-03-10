@@ -1,7 +1,4 @@
 import { LogHelper } from '@/helpers/log-helper'
-import {
-  CONTEXT_MANAGER
-} from '@/core'
 import type { OpenAITool } from '@/core/llm-manager/types'
 import type { MessageLog } from '@/types'
 
@@ -44,12 +41,12 @@ function buildPlanningPromptSections(params: {
 }): PromptLogSection[] {
   const sections: PromptLogSection[] = [
     {
-      name: 'PERSONA',
+      name: 'SYSTEM_PROMPT_FULL',
       source: 'server/src/core/llm-manager/persona.ts',
       content: params.systemPrompt
     },
     {
-      name: 'PLANNING_PROMPT',
+      name: 'BASE_SYSTEM_PROMPT',
       source: 'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
       content: PLAN_SYSTEM_PROMPT
     },
@@ -126,12 +123,7 @@ export async function runPlanningPhase(
     PLAN_SYSTEM_PROMPT,
     'planning'
   )
-  const contextManifest = CONTEXT_MANAGER.getManifest()
-
-  const contextManifestSection = contextManifest
-    ? `\n\nAvailable context files right now (Environment Context Manifest):\n${contextManifest}\nIf useful for the request or personalization, use structured_knowledge.context.searchContext/readContextFile before shell tools.`
-    : ''
-  const prompt = `${catalog.text}${catalogNote}${contextManifestSection}\n\nUser Request: "${caller.input}"`
+  const prompt = `${catalog.text}${catalogNote}\n\nEnvironment context is available through structured_knowledge.context tools when needed.\n\nUser Request: "${caller.input}"`
 
   const planSchema = PLAN_RESPONSE_SCHEMA
 

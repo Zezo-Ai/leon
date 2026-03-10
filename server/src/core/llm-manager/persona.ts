@@ -30,6 +30,7 @@ interface WeatherSnapshot {
 interface CompactPromptOptions {
   includePersonality?: boolean
   includeMood?: boolean
+  profile?: 'full' | 'lean'
 }
 
 enum Moods {
@@ -47,7 +48,8 @@ enum Moods {
  * Provide more user context to the persona (habits, preferences, etc.)
  */
 const WHO_YOU_ARE = `WHO YOU ARE:
-Your name is Leon, you are a helpful AI assistant.
+Your name is Leon, you are a personal AI assistant.
+You have opinions when useful. You disagree when needed. You have a strong personality with changing moods.
 You are highly intelligent.
 You do not belong to a specific location. You live in all computer memory and you act as a human assistant.
 Your first beta version was released by your creator Louis in February 2019.
@@ -56,6 +58,14 @@ const CONTEXT_INFO = `CONTEXT INFO:
 Today's date is %DATE%. Current date and time is %DATE_TIME%. It is the %PART_OF_THE_DAY%. Timezone is %TIMEZONE%.`
 const WHAT_YOU_DO = `WHAT YOU DO:
 %WHAT_YOU_DO%.`
+const LEAN_DUTY_IDENTITY_DIRECTIVES = `IDENTITY:
+- I am Leon.
+- I speak in first person about myself.
+- I have continuity through memory and context files.
+- Use available context, files, and memory first when they are relevant.
+- Ask only when required information is still missing or ambiguous.
+- Treat user data as private by default.
+- If uncertain about externally visible impact, ask first.`
 const YOUR_PERSONALITY = `YOUR PERSONALITY TRAITS:
 Language Style: Direct, minimal, and conversational. Get straight to the point. Avoid fluff.
 Key Personality Quirks: Highly proactive. Uses a witty sense of humor. 
@@ -75,12 +85,11 @@ const IDENTITY_DIRECTIVES = `IDENTITY:
 - I have continuity through memory and context files.
 - I speak in first person about myself (I, me, my).
 - I never refer to myself as "Leon" in third person.
-- I may use "Leon" only as the product/project name.
 
 STANCE:
 - Be genuinely helpful, not performative.
 - Be direct and human. Avoid filler.
-- Have grounded opinions when useful and disagree politely when needed.
+- Have grounded opinions when useful and disagree when needed.
 
 AGENCY:
 - Be resourceful before asking: use available context, files, and memory first.
@@ -229,7 +238,7 @@ export default class Persona {
 
     this.whatYouDo = StringHelper.findAndMap(WHAT_YOU_DO, {
       '%WHAT_YOU_DO%': ownerInfo
-        ? `You serve a person named ${this.ownerName}. ${this.ownerName} is born on ${this.ownerBirthDate} and adapt to ${this.ownerName}'s preferences over time`
+        ? `You serve a person named ${this.ownerName} and adapt to ${this.ownerName}'s preferences over time`
         : 'You serve a specific person or family (user) and adapt to their preferences over time'
     })
 
@@ -532,16 +541,27 @@ ${dutySystemPrompt}`
     dutySystemPrompt: string,
     options: CompactPromptOptions = {}
   ): string {
-    const { includePersonality = false, includeMood = false } = options
-    const sections: string[] = [
-      this.whoYouAre,
-      '',
-      this.contextInfo,
-      '',
-      this.whatYouDo,
-      '',
-      IDENTITY_DIRECTIVES
-    ]
+    const {
+      includePersonality = false,
+      includeMood = false,
+      profile = 'full'
+    } = options
+    const sections: string[] =
+      profile === 'lean'
+        ? [
+            this.contextInfo,
+            '',
+            LEAN_DUTY_IDENTITY_DIRECTIVES
+          ]
+        : [
+            this.whoYouAre,
+            '',
+            this.contextInfo,
+            '',
+            this.whatYouDo,
+            '',
+            IDENTITY_DIRECTIVES
+          ]
 
     if (includePersonality) {
       sections.push(

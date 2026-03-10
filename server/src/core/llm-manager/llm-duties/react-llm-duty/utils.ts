@@ -11,6 +11,232 @@ export const formatFilePath = (filePath: string): string => {
   return `[FILE_PATH]${filePath}[/FILE_PATH]`
 }
 
+function clipText(value: string, maxLength = 180): string {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxLength) {
+    return normalized
+  }
+
+  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`
+}
+
+function summarizeScalar(value: unknown): string | null {
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return clipText(String(value))
+  }
+
+  return null
+}
+
+function pickRepresentativeText(record: Record<string, unknown>): string | null {
+  const preferredKeys = [
+    'content',
+    'snippet',
+    'text',
+    'description',
+    'title',
+    'filename',
+    'location',
+    'sourcePath'
+  ]
+
+  for (const key of preferredKeys) {
+    const value = summarizeScalar(record[key])
+    if (value) {
+      return value
+    }
+  }
+
+  for (const value of Object.values(record)) {
+    const scalar = summarizeScalar(value)
+    if (scalar) {
+      return scalar
+    }
+  }
+
+  return null
+}
+
+function summarizeArrayField(key: string, value: unknown[]): string | null {
+  if (value.length === 0) {
+    return `${key}=0`
+  }
+
+  const objectItems = value.filter(
+    (item): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === 'object' && !Array.isArray(item)
+  )
+
+  if (objectItems.length > 0) {
+    const preview = objectItems
+      .slice(0, 2)
+      .map((item) => pickRepresentativeText(item))
+      .filter((item): item is string => Boolean(item))
+      .join(' ; ')
+
+    return preview
+      ? `${key}(${value.length}): ${preview}`
+      : `${key}=${value.length}`
+  }
+
+  const scalarPreview = value
+    .map((item) => summarizeScalar(item))
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 3)
+    .join(', ')
+
+  return scalarPreview
+    ? `${key}(${value.length}): ${scalarPreview}`
+    : `${key}=${value.length}`
+}
+
+function summarizeObjectField(
+  key: string,
+  value: Record<string, unknown>
+): string | null {
+  const preferredSummary = pickRepresentativeText(value)
+  if (preferredSummary) {
+    return `${key}: ${preferredSummary}`
+  }
+
+  const entries = Object.entries(value)
+    .map(([childKey, childValue]) => {
+      const scalar = summarizeScalar(childValue)
+      return scalar ? `${childKey}=${scalar}` : null
+    })
+    .filter((entry): entry is string => Boolean(entry))
+    .slice(0, 3)
+
+  if (entries.length === 0) {
+    return null
+  }
+
+  return `${key}: ${entries.join(', ')}`
+}
+
+function summarizeStructuredPayload(payload: unknown): string[] {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    const scalar = summarizeScalar(payload)
+    return scalar ? [scalar] : []
+  }
+
+  const summaries: string[] = []
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (summaries.length >= 6) {
+      break
+    }
+
+    const scalar = summarizeScalar(value)
+    if (scalar) {
+      summaries.push(`${key}=${scalar}`)
+      continue
+    }
+
+    if (Array.isArray(value)) {
+      const arraySummary = summarizeArrayField(key, value)
+      if (arraySummary) {
+        summaries.push(arraySummary)
+      }
+      continue
+    }
+
+    if (value && typeof value === 'object') {
+      const objectSummary = summarizeObjectField(
+        key,
+        value as Record<string, unknown>
+      )
+      if (objectSummary) {
+        summaries.push(objectSummary)
+      }
+    }
+  }
+
+  return summaries
+}
+
+function extractObservationPayload(
+  parsed: Record<string, unknown>
+): unknown {
+  const data = parsed['data']
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return null
+  }
+
+  const output = (data as Record<string, unknown>)['output']
+  if (!output || typeof output !== 'object' || Array.isArray(output)) {
+    return data
+  }
+
+  const outputRecord = output as Record<string, unknown>
+  const result = outputRecord['result']
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    const resultRecord = result as Record<string, unknown>
+    const nestedData = resultRecord['data']
+    if (nestedData && typeof nestedData === 'object' && !Array.isArray(nestedData)) {
+      return nestedData
+    }
+
+    return resultRecord
+  }
+
+  const nestedData = outputRecord['data']
+  if (nestedData && typeof nestedData === 'object' && !Array.isArray(nestedData)) {
+    return nestedData
+  }
+
+  return outputRecord
+}
+
+function formatObservationSummary(observation: string): string {
+  const parsed = parseToolCallArguments(observation)
+  if (!parsed) {
+    return clipText(observation, 320)
+  }
+
+  const parts: string[] = []
+  const status =
+    typeof parsed['status'] === 'string' ? parsed['status'].trim() : ''
+  const message =
+    typeof parsed['message'] === 'string' ? clipText(parsed['message'], 160) : ''
+
+  if (status) {
+    parts.push(status)
+  }
+
+  if (message) {
+    parts.push(message)
+  }
+
+  const toolFailure =
+    parsed['tool_output_failure'] &&
+    typeof parsed['tool_output_failure'] === 'object' &&
+    !Array.isArray(parsed['tool_output_failure'])
+      ? (parsed['tool_output_failure'] as Record<string, unknown>)
+      : null
+  const toolFailureError =
+    toolFailure && typeof toolFailure['error'] === 'string'
+      ? clipText(toolFailure['error'] as string, 160)
+      : ''
+
+  if (toolFailureError && !parts.includes(toolFailureError)) {
+    parts.push(toolFailureError)
+  }
+
+  const payloadSummary = summarizeStructuredPayload(
+    extractObservationPayload(parsed)
+  )
+  if (payloadSummary.length > 0) {
+    parts.push(payloadSummary.join(' | '))
+  }
+
+  return clipText(parts.join(' | '), 700)
+}
+
 /**
  * Determines whether a catalog entry refers to a tool (toolkit.tool) rather
  * than a fully-qualified function (toolkit.tool.function).
@@ -46,9 +272,11 @@ export function formatExecutionHistory(history: ExecutionRecord[]): string {
       (exec, i) =>
         `Step ${i + 1}: ${exec.function} [${exec.status}]${
           exec.stepLabel ? ` | Label: "${exec.stepLabel}"` : ''
-        }\n  Requested Input: ${
-          exec.requestedToolInput || 'not available'
-        }\n  Observation: ${exec.observation}`
+        }${
+          exec.requestedToolInput
+            ? `\n  Input: ${clipText(exec.requestedToolInput, 220)}`
+            : ''
+        }\n  Result: ${formatObservationSummary(exec.observation)}`
     )
     .join('\n')}`
 }

@@ -1,7 +1,4 @@
 import { LogHelper } from '@/helpers/log-helper'
-import {
-  CONTEXT_MANAGER
-} from '@/core'
 import type { OpenAITool } from '@/core/llm-manager/types'
 import type { MessageLog } from '@/types'
 
@@ -40,12 +37,12 @@ function buildRecoveryPromptSections(params: {
 }): PromptLogSection[] {
   const sections: PromptLogSection[] = [
     {
-      name: 'PERSONA',
+      name: 'SYSTEM_PROMPT_FULL',
       source: 'server/src/core/llm-manager/persona.ts',
       content: params.systemPrompt
     },
     {
-      name: 'RECOVERY_PLAN_PROMPT',
+      name: 'BASE_SYSTEM_PROMPT',
       source: 'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
       content: RECOVERY_PLAN_SYSTEM_PROMPT
     },
@@ -108,7 +105,6 @@ export async function runRecoveryPlanningPhase(
     RECOVERY_PLAN_SYSTEM_PROMPT,
     'recovery'
   )
-  const contextManifest = CONTEXT_MANAGER.getManifest()
   const failedExecution = executionHistory[executionHistory.length - 1]
   const historySection = formatExecutionHistory(executionHistory)
   const pendingStepsSection =
@@ -119,11 +115,9 @@ export async function runRecoveryPlanningPhase(
           )
           .join('\n')
       : '- none'
-  const contextManifestSection = contextManifest
-    ? `\n\nEnvironment Context Manifest:\n${contextManifest}`
-    : ''
+  const prompt = `${catalog.text}${catalogNote}
 
-  const prompt = `${catalog.text}${catalogNote}${contextManifestSection}
+Environment context is available through structured_knowledge.context tools when needed.
 
 Recovery Context:
 - Failed Step Function: ${failedStep.function}

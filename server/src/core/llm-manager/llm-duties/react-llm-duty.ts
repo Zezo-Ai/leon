@@ -2027,6 +2027,21 @@ export class ReActLLMDuty extends LLMDuty {
     return Math.ceil(historyChars / CHARS_PER_TOKEN)
   }
 
+  private formatHistoryForPromptLog(history?: MessageLog[]): string {
+    if (!history || history.length === 0) {
+      return ''
+    }
+
+    return JSON.stringify(
+      history.map((log) => ({
+        who: log.who,
+        message: log.message
+      })),
+      null,
+      2
+    )
+  }
+
   private buildLogTitle(context?: string): string {
     return context ? `${this.name} / ${context}` : this.name
   }
@@ -2038,10 +2053,13 @@ export class ReActLLMDuty extends LLMDuty {
   private writePhasePromptLog(params: {
     phase: ReactPhase
     channel: 'json' | 'text' | 'tools'
-    sections: PromptLogSection[]
+    systemPrompt: string
+    prompt: string
+    history?: MessageLog[]
+    schema?: Record<string, unknown>
+    tools?: OpenAITool[]
     phasePolicySummary?: string
     shouldStream?: boolean
-    tools?: OpenAITool[]
     toolChoice?: OpenAIToolChoice
   }): void {
     try {
@@ -2073,11 +2091,35 @@ export class ReActLLMDuty extends LLMDuty {
           : []),
         ''
       ]
-      const sectionLines = params.sections.flatMap((section) => [
-        `--- ${section.name} (${section.source}) ---`,
-        section.content ?? '',
+      const sectionLines = [
+        '--- SYSTEM_PROMPT ---',
+        params.systemPrompt,
+        '',
+        '--- PHASE_INPUT ---',
+        params.prompt,
         ''
-      ])
+      ]
+
+      const formattedHistory = this.formatHistoryForPromptLog(params.history)
+      if (formattedHistory) {
+        sectionLines.push('--- HISTORY ---', formattedHistory, '')
+      }
+
+      if (params.schema) {
+        sectionLines.push(
+          '--- JSON_SCHEMA ---',
+          this.safeJSONStringify(params.schema),
+          ''
+        )
+      }
+
+      if (params.tools && params.tools.length > 0) {
+        sectionLines.push(
+          '--- TOOLS_SCHEMA ---',
+          this.safeJSONStringify(params.tools),
+          ''
+        )
+      }
 
       fs.writeFileSync(
         promptLogFilePath,
@@ -2111,12 +2153,15 @@ export class ReActLLMDuty extends LLMDuty {
     const schemaTokens = params.schema
       ? this.estimateTokensFromText(this.safeJSONStringify(params.schema))
       : 0
+    const toolsTokens = params.tools
+      ? this.estimateTokensFromText(this.safeJSONStringify(params.tools))
+      : 0
     const totalEstimated =
-      promptTokens + systemTokens + historyTokens + schemaTokens
+      promptTokens + systemTokens + historyTokens + schemaTokens + toolsTokens
 
     this.logTitle(params.phase)
     LogHelper.debug(
-      `Prompt dispatch [${params.channel}] est_tokens=${totalEstimated} (prompt=${promptTokens}, system=${systemTokens}, history=${historyTokens}${schemaTokens > 0 ? `, schema=${schemaTokens}` : ''})${
+      `Prompt dispatch [${params.channel}] est_tokens=${totalEstimated} (prompt=${promptTokens}, system=${systemTokens}, history=${historyTokens}${schemaTokens > 0 ? `, schema=${schemaTokens}` : ''}${toolsTokens > 0 ? `, tools=${toolsTokens}` : ''})${
         params.shouldStream === true ? ' | stream=true' : ''
       }${
         params.phasePolicySummary ? ` | ${params.phasePolicySummary}` : ''
@@ -2139,14 +2184,17 @@ export class ReActLLMDuty extends LLMDuty {
     this.writePhasePromptLog({
       phase: params.phase,
       channel: params.channel,
-      sections,
+      systemPrompt: params.systemPrompt,
+      prompt: params.prompt,
+      ...(params.history ? { history: params.history } : {}),
+      ...(params.schema ? { schema: params.schema } : {}),
+      ...(params.tools ? { tools: params.tools } : {}),
       ...(params.phasePolicySummary !== undefined
         ? { phasePolicySummary: params.phasePolicySummary }
         : {}),
       ...(params.shouldStream !== undefined
         ? { shouldStream: params.shouldStream }
         : {}),
-      ...(params.tools ? { tools: params.tools } : {}),
       ...(params.toolChoice !== undefined
         ? { toolChoice: params.toolChoice }
         : {})

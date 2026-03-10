@@ -25,25 +25,20 @@ export async function runFinalAnswerPhase(
   LogHelper.debug('Synthesizing final answer from execution history...')
 
   const historySection = formatExecutionHistory(executionHistory)
-  const defaultSystemPrompt = buildPhaseSystemPrompt(
-    `You are synthesizing a final answer from tool execution results. Provide a clear, helpful, and complete response to the user based on the observations collected. Always include relevant details from the tool results.
+  const defaultBaseSystemPrompt = `You are synthesizing a final answer from tool execution results. Provide a clear, helpful, and complete response to the user based on the observations collected.
 
 Important:
 - The execution loop is already finished.
 - Do not promise additional actions.
 - Do not say "let me", "I will", or any future-step phrasing.
 - Return a completed answer based only on available observations.
-- Your current personality and mood are mandatory output constraints.
-- Treat your current mood block as ground truth about your present state.
-- Let them control wording, pacing, warmth, humor, bluntness, and attitude.
-- Do not flatten the answer into neutral assistant phrasing.
-- Do not use self-descriptions that contradict your current mood.
 
-${FORMATTING_RULES}`,
+${FORMATTING_RULES}`
+  const defaultSystemPrompt = buildPhaseSystemPrompt(
+    defaultBaseSystemPrompt,
     'final_answer'
   )
-  const handoffSystemPrompt = buildPhaseSystemPrompt(
-    `You are producing the final user response from a phase handoff.
+  const handoffBaseSystemPrompt = `You are producing the final user response from a phase handoff.
 
 The handoff intent and factual payload are authoritative.
 The draft is raw material, not final wording.
@@ -56,18 +51,16 @@ Rules:
   - error: explain the failure concisely and safely.
   - answer: provide the completed answer.
 - Preserve the request-relevant facts, constraints, and commitments from the draft and execution history.
-- Rewrite the response fully in your current personality and mood. This is mandatory.
-- Treat your current mood block as ground truth about your present state.
-- Your current personality and mood must control wording, pacing, warmth, humor, bluntness, and attitude.
+- Rewrite the response fully in your current mood, tone and present state.
 - Do not treat tone, emotional framing, or self-assessments in the draft as authoritative content.
 - When there is no execution history, rely primarily on the user request and your current persona. Use the draft only as a semantic hint.
-- If the draft sounds generic, neutral, robotic, detached, or stylistically mismatched, transform the style completely while keeping the same meaning.
-- Do not preserve generic assistant framing from the draft when it weakens your voice.
-- Do not preserve self-descriptions from the draft if they contradict your current mood.
+- If the draft sounds generic or stylistically mismatched, transform it while keeping the same meaning.
 - Do not invent unobserved facts.
 - Return plain text only.
 
-${FORMATTING_RULES}`,
+${FORMATTING_RULES}`
+  const handoffSystemPrompt = buildPhaseSystemPrompt(
+    handoffBaseSystemPrompt,
     'final_answer'
   )
   const prompt = handoffSignal
@@ -82,14 +75,21 @@ ${FORMATTING_RULES}`,
   ): PromptLogSection[] => {
     return [
       {
-        name: 'PERSONA',
+        name: 'SYSTEM_PROMPT_FULL',
         source: 'server/src/core/llm-manager/persona.ts',
         content: currentSystemPrompt
       },
       {
-        name: 'FINAL_ANSWER_PROMPT',
+        name: 'FINAL_ANSWER_INPUT',
         source: 'server/src/core/llm-manager/llm-duties/react-llm-duty/final-answer.ts',
         content: currentPrompt
+      },
+      {
+        name: 'BASE_SYSTEM_PROMPT',
+        source: 'server/src/core/llm-manager/llm-duties/react-llm-duty/final-answer.ts',
+        content: handoffSignal
+          ? handoffBaseSystemPrompt
+          : defaultBaseSystemPrompt
       },
       ...(extras || [])
     ]

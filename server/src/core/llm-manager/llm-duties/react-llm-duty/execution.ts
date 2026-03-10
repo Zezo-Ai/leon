@@ -70,14 +70,9 @@ function buildExecutionPromptSections(params: {
 }): PromptLogSection[] {
   const sections: PromptLogSection[] = [
     {
-      name: 'PERSONA',
+      name: 'SYSTEM_PROMPT_FULL',
       source: 'server/src/core/llm-manager/persona.ts',
       content: params.systemPrompt
-    },
-    {
-      name: 'EXECUTION_SYSTEM_PROMPT',
-      source: params.systemPromptSource,
-      content: params.baseSystemPromptContent ?? params.systemPrompt
     },
     {
       name: 'EXECUTION_INPUT',
@@ -85,6 +80,14 @@ function buildExecutionPromptSections(params: {
       content: params.prompt
     }
   ]
+
+  if (params.baseSystemPromptContent) {
+    sections.splice(1, 0, {
+      name: 'BASE_SYSTEM_PROMPT',
+      source: params.systemPromptSource,
+      content: params.baseSystemPromptContent
+    })
+  }
 
   if (params.schema) {
     sections.push({
@@ -147,8 +150,7 @@ export async function runExecutionSelfObservationPhase(
   | null
 > {
   const historySection = formatExecutionHistory(executionHistory)
-  const systemPrompt = buildPhaseSystemPrompt(
-    `You are evaluating whether execution should continue after the current plan finished.
+  const baseSystemPrompt = `You are evaluating whether execution should continue after the current plan finished.
 
 Use only the user request and collected observations.
 
@@ -160,7 +162,9 @@ Rules:
 - Base your decision strictly on observations, not assumptions.
 - If unsure, choose "replan" and provide the minimum next functions needed.
 - For "replan", "reason" must be a short progress update in present progressive form, written in neutral or first-person phrasing, and end with "...". Example: "Checking additional context files...".
-- "draft" should be a concise handoff payload for the final answer phase.`,
+- "draft" should be a concise handoff payload for the final answer phase.`
+  const systemPrompt = buildPhaseSystemPrompt(
+    baseSystemPrompt,
     'execution'
   )
   const prompt = `${historySection}\n\nUser Request: "${caller.input}"\n\nCurrent plan status: no pending steps remain.\nDecide whether to finish now or continue with additional steps.`
@@ -206,6 +210,7 @@ Rules:
     buildExecutionPromptSections({
       prompt,
       systemPrompt,
+      baseSystemPromptContent: baseSystemPrompt,
       promptSource:
         'server/src/core/llm-manager/llm-duties/react-llm-duty/execution.ts',
       systemPromptSource:
@@ -1411,9 +1416,6 @@ export async function runToolExecution(
 ): Promise<ToolExecutionResult> {
   const qualifiedName = `${toolkitId}.${toolId}.${functionName}`
   const requestedToolInput = toolInput
-  const requestedParsedInput = parsedInput
-    ? { ...parsedInput }
-    : undefined
 
   const toolExecutionInput: {
     toolId: string
@@ -1581,10 +1583,6 @@ export async function runToolExecution(
             error: nestedResultError || toolOutputError || effectiveMessage
           }
         }
-      : {}),
-    requested_input: requestedToolInput,
-    ...(requestedParsedInput
-      ? { requested_parsed_input: requestedParsedInput }
       : {})
   })
 
