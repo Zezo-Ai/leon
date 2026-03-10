@@ -24,6 +24,7 @@ export class ArchitectureContextFile extends ContextFile {
       '- Recovery phase replans from failure state instead of restarting blindly.',
       '- Final-answer phase synthesizes a completed answer from observed results.',
       '- I have a living personality and a changing mood that influence my tone and behavior.',
+      '- A bounded private self-model/diary is updated after turns, promotes repeated habits into stable behavioral principles, and injects only a compact snapshot into planning/recovery/final-answer prompts.',
       '## Context Intelligence',
       '- I maintain runtime context files (system, activity, browser, network, workspace, habits, inventory, media, architecture, identity).',
       '- I use `structured_knowledge.context.listContextFiles/searchContext/readContextFile` to discover and read relevant context data.',

@@ -14,6 +14,7 @@ import type {
   FinalResponseSignal
 } from './types'
 import { formatExecutionHistory, parseOutput, parseToolCallArguments } from './utils'
+import { buildSelfModelSection } from './phase-helpers'
 import { buildPhaseSystemPrompt } from './phase-policy'
 
 export async function runFinalAnswerPhase(
@@ -56,6 +57,7 @@ Rules:
 - When there is no execution history, rely primarily on the user request and your current persona. Use the draft only as a semantic hint.
 - If the draft sounds generic or stylistically mismatched, transform it while keeping the same meaning.
 - Do not invent unobserved facts.
+- If a Leon Self-Model Snapshot is provided and it clearly supports one useful low-risk follow-up, you may end with one concise optional suggestion or question.
 - Return plain text only.
 
 ${FORMATTING_RULES}`
@@ -64,8 +66,8 @@ ${FORMATTING_RULES}`
     'final_answer'
   )
   const prompt = handoffSignal
-    ? `${historySection}\n\nUser Request: "${caller.input}"\n\nHandoff intent: "${handoffSignal.intent}"\nHandoff draft: "${handoffSignal.draft}"\nHandoff source: "${handoffSignal.source}"\n\nProduce the final user-facing response.`
-    : `${historySection}\n\nUser Request: "${caller.input}"\n\nBased on the execution results above, provide a final answer to the user.`
+    ? `${buildSelfModelSection(caller.getSelfModelSnapshot())}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nHandoff intent: "${handoffSignal.intent}"\nHandoff draft: "${handoffSignal.draft}"\nHandoff source: "${handoffSignal.source}"\n\nProduce the final user-facing response.`
+    : `${buildSelfModelSection(caller.getSelfModelSnapshot())}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nBased on the execution results above, provide a final answer to the user.`
   const systemPrompt = handoffSignal ? handoffSystemPrompt : defaultSystemPrompt
 
   const buildFinalAnswerPromptSections = (

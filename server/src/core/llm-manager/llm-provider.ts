@@ -1710,6 +1710,7 @@ export default class LLMProvider {
       completionParams.maxRetries ?? DEFAULT_MAX_EXECUTION_RETRIES
     completionParams.data = completionParams.data ?? null
     completionParams.functions = completionParams.functions ?? undefined
+    completionParams.systemPrompt = completionParams.systemPrompt ?? ''
     completionParams.temperature =
       completionParams.temperature ?? DEFAULT_TEMPERATURE
     completionParams.maxTokens =

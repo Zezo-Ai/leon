@@ -22,6 +22,7 @@ import Persona from '@/core/llm-manager/persona'
 import ToolkitRegistry from '@/core/toolkit-registry'
 import ContextManager from '@/core/context-manager'
 import MemoryManager from '@/core/memory-manager'
+import SelfModelManager from '@/core/self-model-manager'
 import ToolExecutor from '@/core/tool-executor'
 import { ConversationLogger } from '@/conversation-logger'
 import { ToolCallLogger } from '@/tool-call-logger'
@@ -76,6 +77,7 @@ export const PERSONA = new Persona()
 
 export const CONTEXT_MANAGER = new ContextManager()
 export const MEMORY_MANAGER = new MemoryManager()
+export const SELF_MODEL_MANAGER = new SelfModelManager()
 
 export const STT = new SpeechToText()
 

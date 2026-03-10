@@ -19,6 +19,7 @@ import {
   PERSONA,
   TOOLKIT_REGISTRY,
   CONTEXT_MANAGER,
+  SELF_MODEL_MANAGER,
   CONVERSATION_LOGGER,
   BRAIN,
   SOCKET_SERVER
@@ -172,6 +173,8 @@ export class ReActLLMDuty extends LLMDuty {
   private hasExplicitMemoryWrite = false
   private reasoningGenerationId: string | null = null
   private finalAnswerPhaseCompleted = false
+  private finalResponseIntent: FinalResponseSignal['intent'] = 'answer'
+  private lastExecutionHistory: ExecutionRecord[] = []
 
   constructor(params: ReactLLMDutyParams) {
     super()
@@ -244,6 +247,8 @@ export class ReActLLMDuty extends LLMDuty {
     this.hasExplicitMemoryWrite = false
     this.reasoningGenerationId = StringHelper.random(6, { onlyLetters: true })
     this.finalAnswerPhaseCompleted = false
+    this.finalResponseIntent = 'answer'
+    this.lastExecutionHistory = []
 
     try {
       const { messageLogs: history, localChatHistory } =
@@ -282,9 +287,14 @@ export class ReActLLMDuty extends LLMDuty {
       let currentExecutingFunction: string | null = null
       const caller = this.createLLMCaller(history, effectiveInput)
       const finalizeWithPostAnswerMaintenance = async (
-        finalAnswer: string
+        finalAnswer: string,
+        finalIntent: FinalResponseSignal['intent'] = 'answer'
       ): Promise<LLMDutyResult> => {
         this.finalAnswerPhaseCompleted = true
+        this.finalResponseIntent = finalIntent
+        this.lastExecutionHistory = executionHistory.map((item) => ({
+          ...item
+        }))
         const dutyResult = this.makeDutyResult(finalAnswer)
         try {
           await this.maybeCompactHistoryAfterAnswer(
@@ -307,7 +317,7 @@ export class ReActLLMDuty extends LLMDuty {
           executionHistory,
           signal
         )
-        return finalizeWithPostAnswerMaintenance(finalAnswer)
+        return finalizeWithPostAnswerMaintenance(finalAnswer, signal.intent)
       }
 
       if (continuation) {
@@ -855,7 +865,7 @@ export class ReActLLMDuty extends LLMDuty {
       }
 
       const finalAnswer = await runFinalAnswerPhase(caller, executionHistory)
-      return await finalizeWithPostAnswerMaintenance(finalAnswer)
+      return await finalizeWithPostAnswerMaintenance(finalAnswer, 'answer')
     } catch (e) {
       LogHelper.title(this.name)
       LogHelper.error(`Failed to execute: ${e}`)
@@ -1427,6 +1437,9 @@ export class ReActLLMDuty extends LLMDuty {
       getContextFileContent: CONTEXT_MANAGER.getContextFileContent.bind(
         CONTEXT_MANAGER
       ),
+      getContextManifest: CONTEXT_MANAGER.getManifest.bind(CONTEXT_MANAGER),
+      getSelfModelSnapshot:
+        SELF_MODEL_MANAGER.getSnapshot.bind(SELF_MODEL_MANAGER),
       consumeProviderErrorMessage:
         LLM_PROVIDER.consumeLastProviderErrorMessage.bind(LLM_PROVIDER)
     }
@@ -2419,7 +2432,15 @@ export class ReActLLMDuty extends LLMDuty {
       input: this.input,
       output: normalizedOutput,
       data: {
-        hasExplicitMemoryWrite: this.hasExplicitMemoryWrite
+        hasExplicitMemoryWrite: this.hasExplicitMemoryWrite,
+        finalIntent: this.finalResponseIntent,
+        executionHistory: this.lastExecutionHistory.map((item) => ({
+          function: item.function,
+          status: item.status,
+          observation: item.observation,
+          stepLabel: item.stepLabel,
+          requestedToolInput: item.requestedToolInput
+        }))
       }
     } as unknown as LLMDutyResult
   }

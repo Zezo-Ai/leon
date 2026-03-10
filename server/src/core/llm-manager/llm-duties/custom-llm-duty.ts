@@ -58,7 +58,12 @@ export class CustomLLMDuty extends LLMDuty {
     }
 
     this.input = params.input
-    this.data = params.data
+    this.data = {
+      ...this.data,
+      ...params.data,
+      system_prompt: params.data.system_prompt ?? ''
+    }
+    this.systemPrompt = this.data.system_prompt ?? ''
 
     CustomLLMDuty.disposeTimeoutMs =
       params.data.disposeTimeout ?? DEFAULT_DISPOSE_TIMEOUT
@@ -125,6 +130,9 @@ export class CustomLLMDuty extends LLMDuty {
   }
 
   public async init(): Promise<void> {
+    const normalizedSystemPrompt = this.data.system_prompt ?? ''
+    this.systemPrompt = normalizedSystemPrompt
+
     if (LLM_PROVIDER_NAME === LLMProviders.Local) {
       try {
         this.resetDisposeTimer()
@@ -135,7 +143,7 @@ export class CustomLLMDuty extends LLMDuty {
         if (
           !CustomLLMDuty.context ||
           !CustomLLMDuty.session ||
-          this.data.system_prompt !== CustomLLMDuty.currentSystemPrompt
+          normalizedSystemPrompt !== CustomLLMDuty.currentSystemPrompt
         ) {
           LogHelper.title(this.name)
           LogHelper.info('Initializing...')
@@ -147,7 +155,7 @@ export class CustomLLMDuty extends LLMDuty {
             CustomLLMDuty.session.dispose({ disposeSequence: true })
           }
 
-          CustomLLMDuty.currentSystemPrompt = this.data.system_prompt || ''
+          CustomLLMDuty.currentSystemPrompt = normalizedSystemPrompt
 
           CustomLLMDuty.context = await LLM_MANAGER.model.createContext()
 
@@ -167,6 +175,8 @@ export class CustomLLMDuty extends LLMDuty {
         LogHelper.title(this.name)
         LogHelper.error(`Failed to initialize: ${e}`)
       }
+    } else {
+      CustomLLMDuty.currentSystemPrompt = normalizedSystemPrompt
     }
   }
 
@@ -178,9 +188,11 @@ export class CustomLLMDuty extends LLMDuty {
       this.resetDisposeTimer()
 
       const prompt = this.input as string
+      const effectiveSystemPrompt =
+        CustomLLMDuty.currentSystemPrompt ?? this.systemPrompt ?? ''
       const completionParams = {
         dutyType: LLMDuties.Custom,
-        systemPrompt: CustomLLMDuty.currentSystemPrompt as string,
+        systemPrompt: effectiveSystemPrompt,
         temperature: this.data.temperature,
         maxTokens: this.data.max_tokens,
         thoughtTokensBudget: this.data.thought_tokens_budget
@@ -227,7 +239,7 @@ export class CustomLLMDuty extends LLMDuty {
 
       LogHelper.title(this.name)
       LogHelper.success('Duty executed')
-      LogHelper.success(`System prompt — ${CustomLLMDuty.currentSystemPrompt}`)
+      LogHelper.success(`System prompt — ${effectiveSystemPrompt}`)
       LogHelper.success(`Prompt — ${prompt}`)
       LogHelper.success(`Output — ${completionResult?.output}
 usedInputTokens: ${completionResult?.usedInputTokens}

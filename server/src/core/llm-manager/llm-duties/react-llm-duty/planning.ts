@@ -23,7 +23,9 @@ import {
   shouldTreatPlanningTextAsFinalAnswer,
   extractPlanningMarkedFinalAnswer,
   extractPlanningTextHandoffDraft,
-  createPlanFromUnexpectedToolCall
+  createPlanFromUnexpectedToolCall,
+  buildContextManifestSection,
+  buildSelfModelSection
 } from './phase-helpers'
 import {
   PLAN_RESPONSE_SCHEMA,
@@ -123,7 +125,11 @@ export async function runPlanningPhase(
     PLAN_SYSTEM_PROMPT,
     'planning'
   )
-  const prompt = `${catalog.text}${catalogNote}\n\nEnvironment context is available through structured_knowledge.context tools when needed.\n\nUser Request: "${caller.input}"`
+  const selfModelSection = buildSelfModelSection(caller.getSelfModelSnapshot())
+  const contextManifestSection = buildContextManifestSection(
+    caller.getContextManifest()
+  )
+  const prompt = `${catalog.text}${catalogNote}\n\n${selfModelSection}\n\n${contextManifestSection}\n\nEnvironment context is available through structured_knowledge.context tools when needed.\n\nUser Request: "${caller.input}"`
 
   const planSchema = PLAN_RESPONSE_SCHEMA
 

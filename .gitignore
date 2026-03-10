@@ -16,6 +16,7 @@ logs/prompts/*
 core/context/*[.md, .json]
 !core/context/LEON.md
 !core/context/ARCHITECTURE.md
+core/context/private/
 core/memory/*
 !core/memory/.gitkeep
 core/config/**/*.json

@@ -257,6 +257,24 @@ export function buildToolkitContextSection(
   return `Toolkit Context Summary:\n${toolkitContext}`
 }
 
+export function buildContextManifestSection(manifest: string): string {
+  const normalized = manifest.trim()
+  if (!normalized) {
+    return 'Context File Manifest: none'
+  }
+
+  return `Context File Manifest:\n${normalized}`
+}
+
+export function buildSelfModelSection(snapshot: string): string {
+  const normalized = snapshot.trim()
+  if (!normalized) {
+    return 'Leon Self-Model Snapshot: none'
+  }
+
+  return normalized
+}
+
 export function stripInlineToolMarkup(text: string): string {
   if (!text) {
     return ''

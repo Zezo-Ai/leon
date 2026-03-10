@@ -42,7 +42,9 @@ import {
   extractFailureMessageFromObservation,
   findDuplicateToolInputMatch,
   buildPreviouslyUsedInputsSection,
-  buildToolkitContextSection
+  buildToolkitContextSection,
+  buildContextManifestSection,
+  buildSelfModelSection
 } from './phase-helpers'
 import {
   buildPhaseSystemPrompt
@@ -141,6 +143,25 @@ function createExecutionHandoff(
   }
 }
 
+function shouldInjectContextManifestForExecution(
+  toolkitId: string,
+  toolId: string
+): boolean {
+  return toolkitId === 'structured_knowledge' && toolId === 'context'
+}
+
+function buildExecutionContextManifestSection(
+  caller: LLMCaller,
+  toolkitId: string,
+  toolId: string
+): string {
+  if (!shouldInjectContextManifestForExecution(toolkitId, toolId)) {
+    return ''
+  }
+
+  return buildContextManifestSection(caller.getContextManifest())
+}
+
 export async function runExecutionSelfObservationPhase(
   caller: LLMCaller,
   executionHistory: ExecutionRecord[]
@@ -167,7 +188,11 @@ Rules:
     baseSystemPrompt,
     'execution'
   )
-  const prompt = `${historySection}\n\nUser Request: "${caller.input}"\n\nCurrent plan status: no pending steps remain.\nDecide whether to finish now or continue with additional steps.`
+  const selfModelSection = buildSelfModelSection(caller.getSelfModelSnapshot())
+  const contextManifestSection = buildContextManifestSection(
+    caller.getContextManifest()
+  )
+  const prompt = `${selfModelSection}\n\n${contextManifestSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nCurrent plan status: no pending steps remain.\nDecide whether to finish now or continue with additional steps.`
 
   const schema = {
     type: 'object',
@@ -468,6 +493,11 @@ async function resolveToolFunctionWithNativeTools(
     caller,
     toolkitId
   )
+  const contextManifestSection = buildExecutionContextManifestSection(
+    caller,
+    toolkitId,
+    toolId
+  )
   const historySection = formatExecutionHistory(executionHistory)
   const resolveSystemPrompt = buildPhaseSystemPrompt(
     RESOLVE_FUNCTION_SYSTEM_PROMPT,
@@ -485,7 +515,7 @@ async function resolveToolFunctionWithNativeTools(
     })
   )
 
-  const prompt = `Tool: ${toolkitId}.${toolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide arguments.`
+  const prompt = `Tool: ${toolkitId}.${toolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}${contextManifestSection ? `\n\n${contextManifestSection}` : ''}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide arguments.`
 
   const result = await caller.callLLMWithTools(
     prompt,
@@ -657,6 +687,11 @@ async function resolveToolFunctionWithJSONMode(
     caller,
     effectiveToolkitId
   )
+  const contextManifestSection = buildExecutionContextManifestSection(
+    caller,
+    effectiveToolkitId,
+    effectiveToolId
+  )
   const functionsSection = functionEntries
     .map(([fnName, fnConfig]) => {
       const params = JSON.stringify(fnConfig.parameters)
@@ -669,7 +704,7 @@ async function resolveToolFunctionWithJSONMode(
     RESOLVE_FUNCTION_SYSTEM_PROMPT,
     'execution'
   )
-  const prompt = `Tool: ${effectiveToolkitId}.${effectiveToolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\nAvailable Functions:\n${functionsSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide tool_input.`
+  const prompt = `Tool: ${effectiveToolkitId}.${effectiveToolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}${contextManifestSection ? `\n\n${contextManifestSection}` : ''}\n\n${executionMemorySection}\n\nAvailable Functions:\n${functionsSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide tool_input.`
 
   const resolveSchema = {
     type: 'object',
@@ -886,6 +921,11 @@ async function executeFunctionWithNativeTools(
     caller,
     toolkitId
   )
+  const contextManifestSection = buildExecutionContextManifestSection(
+    caller,
+    toolkitId,
+    toolId
+  )
   const historySection = formatExecutionHistory(executionHistory)
   const executeSystemPrompt = buildPhaseSystemPrompt(
     EXECUTE_SYSTEM_PROMPT,
@@ -990,7 +1030,7 @@ async function executeFunctionWithNativeTools(
     const retryNote = lastError
       ? `\n\nPrevious attempt failed: ${lastError}.${lastFailedToolInput ? `\nPrevious failed tool_input: ${lastFailedToolInput}\nDo not reuse the same tool_input. Change the arguments to address the failure.` : ' Please fix the arguments.'}`
       : ''
-    const prompt = `Current Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}`
+    const prompt = `Current Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\n\n${toolkitContextSection}${contextManifestSection ? `\n\n${contextManifestSection}` : ''}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}`
 
     const result = await caller.callLLMWithTools(
       prompt,
@@ -1162,6 +1202,11 @@ async function executeFunctionWithJSONMode(
     caller,
     toolkitId
   )
+  const contextManifestSection = buildExecutionContextManifestSection(
+    caller,
+    toolkitId,
+    toolId
+  )
   const historySection = formatExecutionHistory(executionHistory)
   const executeSystemPrompt = buildPhaseSystemPrompt(
     EXECUTE_SYSTEM_PROMPT,
@@ -1225,7 +1270,7 @@ async function executeFunctionWithJSONMode(
     const retryNote = lastError
       ? `\n\nPrevious attempt failed: ${lastError}.${lastFailedToolInput ? `\nPrevious failed tool_input: ${lastFailedToolInput}\nDo not reuse the same tool_input. Change the arguments to address the failure.` : ' Please fix the tool_input.'}`
       : ''
-    const prompt = `Function: ${qualifiedName}\nDescription: ${functionConfig.description}\nCurrent Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\nParameters: ${paramsSchema}\n\n${toolkitContextSection}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}\n\nProvide the tool_input for this function.`
+    const prompt = `Function: ${qualifiedName}\nDescription: ${functionConfig.description}\nCurrent Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\nParameters: ${paramsSchema}\n\n${toolkitContextSection}${contextManifestSection ? `\n\n${contextManifestSection}` : ''}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}\n\nProvide the tool_input for this function.`
 
     const completionResult = await caller.callLLM(
       prompt,

@@ -13,6 +13,7 @@ import {
   CONVERSATION_LOGGER,
   LLM_MANAGER,
   NLU,
+  SELF_MODEL_MANAGER,
   SOCKET_SERVER,
   TTS
 } from '@/core'
@@ -265,7 +266,31 @@ export default class Brain {
          * It may happen that only a speech is needed
          */
         if (textAnswer) {
+          const recentConversationLogs = await CONVERSATION_LOGGER.load({
+            nbOfLogsToLoad: 12
+          })
+          const ownerMessage =
+            [...recentConversationLogs]
+              .reverse()
+              .find((log) => log.who === 'owner')?.message ||
+            NLU.nluResult.utterance ||
+            ''
+          const sentAt = Date.now()
+
           SOCKET_SERVER.socket?.emit('answer', textAnswer)
+
+          if (NLU.currentResponseRoute !== 'react') {
+            void SELF_MODEL_MANAGER.observeTurn({
+              userMessage: ownerMessage,
+              assistantMessage: textAnswer,
+              sentAt,
+              route: 'workflow',
+              finalIntent: 'answer'
+            }).catch((error: unknown) => {
+              LogHelper.title('Brain')
+              LogHelper.warning(`Failed to update workflow self model: ${error}`)
+            })
+          }
 
           await CONVERSATION_LOGGER.push({
             who: 'leon',

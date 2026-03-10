@@ -152,5 +152,7 @@ export interface LLMCaller {
   readonly input: string | object | null
   readonly history: MessageLog[]
   getContextFileContent(filename: string): string | null
+  getContextManifest(): string
+  getSelfModelSnapshot(): string
   consumeProviderErrorMessage(): string | null
 }

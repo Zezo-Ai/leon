@@ -21,7 +21,9 @@ import {
 } from './utils'
 import {
   extractPlanningTextHandoffDraft,
-  createPlanFromUnexpectedToolCall
+  createPlanFromUnexpectedToolCall,
+  buildContextManifestSection,
+  buildSelfModelSection
 } from './phase-helpers'
 import {
   PLAN_RESPONSE_SCHEMA,
@@ -105,6 +107,10 @@ export async function runRecoveryPlanningPhase(
     RECOVERY_PLAN_SYSTEM_PROMPT,
     'recovery'
   )
+  const selfModelSection = buildSelfModelSection(caller.getSelfModelSnapshot())
+  const contextManifestSection = buildContextManifestSection(
+    caller.getContextManifest()
+  )
   const failedExecution = executionHistory[executionHistory.length - 1]
   const historySection = formatExecutionHistory(executionHistory)
   const pendingStepsSection =
@@ -116,6 +122,10 @@ export async function runRecoveryPlanningPhase(
           .join('\n')
       : '- none'
   const prompt = `${catalog.text}${catalogNote}
+
+${selfModelSection}
+
+${contextManifestSection}
 
 Environment context is available through structured_knowledge.context tools when needed.
 

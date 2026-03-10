@@ -22,7 +22,8 @@ import {
   MEMORY_MANAGER,
   PERSONA,
   LLM_PROVIDER,
-  TOOL_CALL_LOGGER
+  TOOL_CALL_LOGGER,
+  SELF_MODEL_MANAGER
 } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import Conversation from '@/core/nlp/conversation'
@@ -75,6 +76,7 @@ export default class NLU {
   // Used to store the conversation state (across multiple turns)
   public conversation = new Conversation('conv0')
   private hasHandledProviderFailure = false
+  private _currentResponseRoute: RoutingRoute = 'workflow'
 
   private readonly routingRoutes: Record<RoutingRoute, RoutingRoute> = {
     workflow: 'workflow',
@@ -91,6 +93,10 @@ export default class NLU {
 
   get nluResult(): NLUResult {
     return this._nluResult
+  }
+
+  get currentResponseRoute(): RoutingRoute {
+    return this._currentResponseRoute
   }
 
   async setNLUResult(newNLUResult: NLUResult): Promise<void> {
@@ -711,6 +717,7 @@ export default class NLU {
   private async runReAct(utterance: NLPUtterance): Promise<void> {
     LogHelper.title('NLU')
     LogHelper.info('Routing to ReAct...')
+    this._currentResponseRoute = 'react'
 
     const reactDuty = new ReActLLMDuty({
       input: utterance
@@ -718,9 +725,49 @@ export default class NLU {
     await reactDuty.init()
     const reactResult = await reactDuty.execute()
     const output = reactResult?.output as unknown as string
-    const hasExplicitMemoryWrite = Boolean(
-      reactResult?.data && reactResult.data['hasExplicitMemoryWrite'] === true
-    )
+    const reactData =
+      reactResult?.data && typeof reactResult.data === 'object'
+        ? (reactResult.data as Record<string, unknown>)
+        : {}
+    const hasExplicitMemoryWrite =
+      reactData['hasExplicitMemoryWrite'] === true
+    const finalIntent =
+      typeof reactData['finalIntent'] === 'string'
+        ? (reactData['finalIntent'] as
+            | 'answer'
+            | 'clarification'
+            | 'cancelled'
+            | 'blocked'
+            | 'error')
+        : 'answer'
+    const toolExecutions = Array.isArray(reactData['executionHistory'])
+      ? (reactData['executionHistory'] as Array<Record<string, unknown>>)
+          .map((item) => {
+            const functionName =
+              typeof item['function'] === 'string' ? item['function'] : ''
+            const status = item['status'] === 'error' ? 'error' : 'success'
+            const observation =
+              typeof item['observation'] === 'string' ? item['observation'] : ''
+            if (!functionName) {
+              return null
+            }
+
+            return {
+              functionName,
+              status,
+              observation
+            }
+          })
+          .filter(
+            (
+              item
+            ): item is {
+              functionName: string
+              status: 'success' | 'error'
+              observation: string
+            } => Boolean(item)
+          )
+      : []
 
     if (output) {
       const sentAt = Date.now()
@@ -728,10 +775,22 @@ export default class NLU {
         userMessage: utterance,
         assistantMessage: String(output),
         sentAt,
-        route: 'react'
+        route: 'react',
+        toolExecutions
       }).catch((error: unknown) => {
         LogHelper.title('NLU')
         LogHelper.warning(`Failed to store turn memory: ${error}`)
+      })
+      void SELF_MODEL_MANAGER.observeTurn({
+        userMessage: utterance,
+        assistantMessage: String(output),
+        sentAt,
+        route: 'react',
+        finalIntent,
+        toolExecutions
+      }).catch((error: unknown) => {
+        LogHelper.title('NLU')
+        LogHelper.warning(`Failed to update self model: ${error}`)
       })
 
       if (!hasExplicitMemoryWrite) {
@@ -1104,6 +1163,7 @@ export default class NLU {
               `Routing decision: mode=${routingDecision.mode} route=${routingDecision.route} reason=${routingDecision.reason}`
             )
 
+            this._currentResponseRoute = routingDecision.route
             PERSONA.refreshContextInfo()
             if (routingDecision.route === this.routingRoutes.react) {
               this.conversation.cleanActiveState()

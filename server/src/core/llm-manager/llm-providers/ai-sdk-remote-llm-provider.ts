@@ -224,12 +224,16 @@ export default class AISDKRemoteLLMProvider {
     prompt: PromptOrChatHistory,
     completionParams: CompletionParams
   ): Array<Record<string, unknown>> {
-    const messages: Array<Record<string, unknown>> = [
-      {
+    const normalizedSystemPrompt = String(completionParams.systemPrompt ?? '')
+      .trim()
+    const messages: Array<Record<string, unknown>> = []
+
+    if (normalizedSystemPrompt) {
+      messages.push({
         role: 'system',
-        content: completionParams.systemPrompt
-      }
-    ]
+        content: normalizedSystemPrompt
+      })
+    }
 
     if (completionParams.history) {
       for (const message of completionParams.history) {
