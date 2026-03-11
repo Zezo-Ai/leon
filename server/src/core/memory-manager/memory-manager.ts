@@ -27,8 +27,8 @@ import type {
 const CONTEXT_SYNC_TTL_MS = 5 * 60 * 1_000
 const LEON_MEMORY_DISCUSSION_TTL_DAYS = 5
 const LEON_MEMORY_RECALL_TOP_K = 12
+const LEON_MEMORY_PLANNING_RECALL_TOP_K = 6
 const LEON_MEMORY_PLANNING_TOKEN_BUDGET = 220
-const LEON_MEMORY_PLANNING_CONTEXT_FILES_TOKEN_BUDGET = 1_200
 const LEON_MEMORY_EXECUTION_TOKEN_BUDGET = 480
 const PERSISTENT_EXTRACTION_TIMEOUT_MS = 45_000
 const PERSISTENT_EXTRACTION_MAX_RETRIES = 1
@@ -350,117 +350,6 @@ export default class MemoryManager {
     return false
   }
 
-  private async buildContextFilesInjectionFromHits(
-    hits: RecallHit[],
-    query: string,
-    tokenBudget: number
-  ): Promise<string> {
-    if (tokenBudget <= 0) {
-      return ''
-    }
-
-    const queryTokens = new Set(tokenizeWords(query))
-    const contextCandidates = hits
-      .filter((hit) => hit.namespace === 'context')
-      .map((hit) => {
-        const filename = hit.sourcePath
-          ? path.basename(hit.sourcePath)
-          : hit.title || ''
-        const filenameTokens = tokenizeFilenameWords(filename)
-        const matchedFilenameTokens = filenameTokens.filter((token) =>
-          queryTokens.has(token)
-        ).length
-        const overlapBoost =
-          filenameTokens.length > 0
-            ? matchedFilenameTokens / filenameTokens.length
-            : 0
-
-        return {
-          filename,
-          baseScore: hit.bm25Score,
-          score: hit.bm25Score + overlapBoost * 0.8
-        }
-      })
-      .filter((candidate) => candidate.filename.endsWith('.md'))
-      .sort((a, b) => b.score - a.score)
-
-    const contextFilenames = [
-      ...new Set(contextCandidates.map((candidate) => candidate.filename))
-    ]
-
-    if (contextFilenames.length === 0) {
-      return ''
-    }
-
-    const maxInjectedFiles = Math.min(3, contextFilenames.length)
-    const selectedFilenames = contextFilenames.slice(0, maxInjectedFiles)
-    let remainingTokens = tokenBudget
-    const sections: string[] = []
-    const injectedFiles: string[] = []
-    const minReservePerRemainingFile = 180
-
-    for (const [index, filename] of selectedFilenames.entries()) {
-      if (remainingTokens <= 0) {
-        break
-      }
-
-      const filePath = path.join(CONTEXT_PATH, filename)
-      if (!fs.existsSync(filePath)) {
-        continue
-      }
-
-      const rawContent = await fs.promises.readFile(filePath, 'utf8')
-      const normalizedContent = normalizeContent(rawContent)
-      if (!normalizedContent) {
-        continue
-      }
-
-      const fullTokens = Math.max(1, Math.ceil(normalizedContent.length / 4))
-      const remainingFiles = selectedFilenames.length - (index + 1)
-      const reservedForRemaining = remainingFiles * minReservePerRemainingFile
-      const budgetForThisFile = Math.max(
-        minReservePerRemainingFile,
-        remainingTokens - reservedForRemaining
-      )
-
-      let fileContent = normalizedContent
-      let usedTokens = fullTokens
-      let partiallyShared = false
-
-      if (fullTokens > budgetForThisFile) {
-        const maxChars = budgetForThisFile * 4
-        if (maxChars < 120) {
-          break
-        }
-        fileContent = `${normalizedContent.slice(0, maxChars).trimEnd()}...`
-        usedTokens = Math.max(1, Math.ceil(fileContent.length / 4))
-        partiallyShared = true
-      }
-
-      sections.push(`### ${filename}\n${fileContent}`)
-      injectedFiles.push(filename)
-      remainingTokens -= usedTokens
-
-      LogHelper.title('Memory Manager')
-      LogHelper.debug(
-        `Context file ${partiallyShared ? 'partially shared' : 'fully shared'}: file="${filename}" value=${JSON.stringify(
-          fileContent
-        )}`
-      )
-    }
-
-    if (sections.length === 0) {
-      return ''
-    }
-
-    LogHelper.title('Memory Manager')
-    LogHelper.debug(
-      `Planning context files injection: files=${injectedFiles.join(', ')} | used_tokens=${tokenBudget - remainingTokens}`
-    )
-
-    return `Relevant Context Files (full content):\n${sections.join('\n\n')}`
-  }
-
   public constructor() {
     if (!MemoryManager.instance) {
       LogHelper.title('Memory Manager')
@@ -600,11 +489,13 @@ export default class MemoryManager {
       await this.load()
     }
 
-    await this.syncContextFiles()
-
     const topK = input.topK || LEON_MEMORY_RECALL_TOP_K
     const tokenBudget = input.tokenBudget || LEON_MEMORY_EXECUTION_TOKEN_BUDGET
     const namespaces = this.normalizeRecallNamespaces(input.namespaces)
+
+    if (!input.skipContextSync && namespaces.includes('context')) {
+      await this.syncContextFiles()
+    }
 
     LogHelper.title('Memory Manager')
     LogHelper.debug(
@@ -947,34 +838,24 @@ export default class MemoryManager {
       namespaces: [
         'memory_persistent',
         'memory_daily',
-        'memory_discussion',
-        'context'
+        'memory_discussion'
       ],
-      topK: LEON_MEMORY_RECALL_TOP_K,
+      topK: LEON_MEMORY_PLANNING_RECALL_TOP_K,
       tokenBudget,
-      includeFacts: true
+      includeFacts: true,
+      skipContextSync: true
     })
 
     if (!recalled.hits.length && !recalled.facts.length) {
       return ''
     }
 
-    const contextFilesPack = await this.buildContextFilesInjectionFromHits(
-      recalled.hits,
-      query,
-      LEON_MEMORY_PLANNING_CONTEXT_FILES_TOKEN_BUDGET
-    )
-
-    const promptText = contextFilesPack
-      ? `${recalled.promptText}\n\n${contextFilesPack}`
-      : recalled.promptText
-
     LogHelper.title('Memory Manager')
     LogHelper.debug(
-      `Planning memory pack built | chars=${promptText.length} | used_tokens=${recalled.usedTokenEstimate}`
+      `Planning memory pack built | chars=${recalled.promptText.length} | used_tokens=${recalled.usedTokenEstimate}`
     )
 
-    return promptText
+    return recalled.promptText
   }
 
   public async buildExecutionMemoryPack(

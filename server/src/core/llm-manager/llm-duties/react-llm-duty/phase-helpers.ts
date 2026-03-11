@@ -260,10 +260,10 @@ export function buildToolkitContextSection(
 export function buildContextManifestSection(manifest: string): string {
   const normalized = manifest.trim()
   if (!normalized) {
-    return 'Context File Manifest: none'
+    return 'Context Files Available: none'
   }
 
-  return `Context File Manifest:\n${normalized}`
+  return `Context Files Available:\n${normalized}`
 }
 
 export function buildSelfModelSection(snapshot: string): string {

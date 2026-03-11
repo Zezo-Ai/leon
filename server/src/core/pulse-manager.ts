@@ -860,7 +860,7 @@ export default class PulseManager {
       'Leon Self-Model Snapshot:',
       evidence.selfModelSnapshot || 'none',
       '',
-      'Context File Manifest:',
+      'Context Files Available:',
       evidence.contextManifest || 'none',
       '',
       'Memory Pack:',

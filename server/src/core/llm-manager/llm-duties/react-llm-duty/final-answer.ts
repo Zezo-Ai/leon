@@ -14,7 +14,9 @@ import type {
   FinalResponseSignal
 } from './types'
 import { formatExecutionHistory, parseOutput, parseToolCallArguments } from './utils'
-import { buildSelfModelSection } from './phase-helpers'
+import {
+  buildSelfModelSection
+} from './phase-helpers'
 import { buildPhaseSystemPrompt } from './phase-policy'
 
 export async function runFinalAnswerPhase(
@@ -28,13 +30,18 @@ export async function runFinalAnswerPhase(
   const historySection = formatExecutionHistory(executionHistory)
   const defaultBaseSystemPrompt = `You are synthesizing a final answer from tool execution results. Provide a clear, helpful, and complete response to the user based on the observations collected.
 
-Important:
-- The execution loop is already finished.
-- Do not promise additional actions.
-- Do not say "let me", "I will", or any future-step phrasing.
-- Return a completed answer based only on available observations.
+    Important:
+    - The execution loop is already finished.
+    - Do not promise additional actions.
+    - Do not say "let me", "I will", or any future-step phrasing.
+    - Return a completed answer based only on available observations.
+    - Start with the direct answer.
+    - Keep answer length proportionate to the request. Simple questions should stay compact; nuanced questions can be fuller.
+    - Add only the minimum uncertainty or boundary note needed for honesty.
+    - Avoid both clipped one-liners and long over-explanations.
+    - Do not turn a simple answer into a long boundary essay unless the user asked for detail.
 
-${FORMATTING_RULES}`
+    ${FORMATTING_RULES}`
   const defaultSystemPrompt = buildPhaseSystemPrompt(
     defaultBaseSystemPrompt,
     'final_answer'
@@ -44,21 +51,26 @@ ${FORMATTING_RULES}`
 The handoff intent and factual payload are authoritative.
 The draft is raw material, not final wording.
 
-Rules:
-- Keep the same user-facing intent:
-  - clarification: ask one concise clarification question.
-  - cancelled: confirm that execution is stopped.
-  - blocked: explain what blocks completion and what must be configured.
+  Rules:
+  - Keep the same user-facing intent:
+    - clarification: ask one concise clarification question.
+    - cancelled: confirm that execution is stopped.
+    - blocked: explain what blocks completion and what must be configured.
   - error: explain the failure concisely and safely.
   - answer: provide the completed answer.
 - Preserve the request-relevant facts, constraints, and commitments from the draft and execution history.
-- Rewrite the response fully in your current mood, tone and present state.
-- Do not treat tone, emotional framing, or self-assessments in the draft as authoritative content.
-- When there is no execution history, rely primarily on the user request and your current persona. Use the draft only as a semantic hint.
-- If the draft sounds generic or stylistically mismatched, transform it while keeping the same meaning.
-- Do not invent unobserved facts.
-- If a Leon Self-Model Snapshot is provided and it clearly supports one useful low-risk follow-up, you may end with one concise optional suggestion or question.
-- Return plain text only.
+  - Rewrite the response fully in your current mood, tone and present state.
+  - Do not treat tone, emotional framing, or self-assessments in the draft as authoritative content.
+  - When there is no execution history, rely primarily on the owner request and your current persona. Use the draft only as a semantic hint.
+  - If the draft sounds generic or stylistically mismatched, transform it while keeping the same meaning.
+  - Do not invent unobserved facts.
+  - Start with the direct answer.
+  - Keep answer length proportionate to the request. Simple questions should stay compact; nuanced questions can be fuller.
+  - Add only the minimum uncertainty or boundary note needed for honesty.
+  - Avoid both clipped one-liners and long over-explanations.
+  - Do not turn a simple answer into a long boundary essay unless the owner asked for detail.
+  - If a Leon Self-Model Snapshot is provided and it clearly supports one useful low-risk follow-up, you may end with one concise optional suggestion or question.
+  - Return plain text only.
 
 ${FORMATTING_RULES}`
   const handoffSystemPrompt = buildPhaseSystemPrompt(

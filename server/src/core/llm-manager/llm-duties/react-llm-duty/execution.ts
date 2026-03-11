@@ -182,6 +182,7 @@ Return ONLY one of:
 Rules:
 - Base your decision strictly on observations, not assumptions.
 - If unsure, choose "replan" and provide the minimum next functions needed.
+- If the current best answer would still rely on weak hints or unresolved uncertainty that context or memory could reduce, choose "replan" and add grounding steps instead of handing off an answer.
 - For "replan", "reason" must be a short progress update in present progressive form, written in neutral or first-person phrasing, and end with "...". Example: "Checking additional context files...".
 - "draft" should be a concise handoff payload for the final answer phase.`
   const systemPrompt = buildPhaseSystemPrompt(

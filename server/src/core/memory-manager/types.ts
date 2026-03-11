@@ -66,6 +66,7 @@ export interface RecallQuery {
   topK?: number
   tokenBudget?: number
   includeFacts?: boolean
+  skipContextSync?: boolean
 }
 
 export interface RecallHit {
