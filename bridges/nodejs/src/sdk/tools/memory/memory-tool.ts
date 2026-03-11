@@ -2,12 +2,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 
-import execa from 'execa'
 import SQLite from 'better-sqlite3'
 import type { Database as SQLiteDatabase } from 'better-sqlite3'
 
 import { Tool } from '@sdk/base-tool'
 import { ToolkitConfig } from '@sdk/toolkit-config'
+
 import {
   buildAdaptiveQueryTokenSet,
   buildHydratedBacktrackCandidates,
@@ -24,15 +24,21 @@ import {
   normalizeContent,
   normalizeFilename,
   normalizePath,
-  parsePendingEmbeddingCount,
-  parseRows,
   pickStringDeep,
   rankRetrievedHits,
   resolveRequestedCollectionName,
-  shouldRunAdaptiveSecondPass,
-  tokenizeQuery,
-  tokenLength
+  shouldRunAdaptiveSecondPass
 } from './qmd-retrieval'
+import {
+  type QMDCollectionDefinition,
+  type QMDStoreRow,
+  runQMDStoreSearch,
+  updateQMDStore,
+  getQMDStore,
+  getQMDStoreStatus,
+  embedQMDStore,
+  closeQMDStore
+} from './qmd-store'
 
 const QMD_INDEX_NAME = 'leon-memory'
 const DEFAULT_TOP_K = 12
@@ -139,6 +145,13 @@ const COLLECTIONS: Record<KnowledgeNamespace, { name: string, dir: string }> = {
     dir: MEMORY_DAILY_PATH
   }
 }
+
+const SDK_COLLECTIONS: QMDCollectionDefinition[] = [
+  COLLECTIONS.context,
+  COLLECTIONS.memory_persistent,
+  COLLECTIONS.memory_daily,
+  COLLECTIONS.memory_discussion
+]
 
 function toFactKeySegment(value: string): string {
   return value
@@ -285,7 +298,7 @@ export default class MemoryTool extends Tool {
       scopedCollectionNames: string[],
       limit: number
     ): Promise<{
-      rows: Array<Record<string, unknown>>
+      rows: QMDStoreRow[]
       modeUsed: QMDSearchMode
     }> => {
       const lexicalQuery = buildLexicalSearchQuery(normalizedQuery, bridgeTerms)
@@ -415,7 +428,7 @@ export default class MemoryTool extends Tool {
       }
     }
 
-    let { rows, modeUsed } = await runPreferredSearchModes(
+    const { rows, modeUsed } = await runPreferredSearchModes(
       [],
       collectionNames,
       globalLimit
@@ -1039,49 +1052,14 @@ export default class MemoryTool extends Tool {
       return
     }
 
-    await this.ensureQmdAvailable()
-
-    const collectionEntries = [
-      COLLECTIONS.context,
-      COLLECTIONS.memory_persistent,
-      COLLECTIONS.memory_daily,
-      COLLECTIONS.memory_discussion
-    ]
-    for (const collection of collectionEntries) {
-      await fs.promises.mkdir(collection.dir, { recursive: true })
-      try {
-        await this.runQMD([
-          '--index',
-          QMD_INDEX_NAME,
-          'collection',
-          'add',
-          collection.dir,
-          '--name',
-          collection.name,
-          '--mask',
-          '**/*.md'
-        ])
-      } catch (error) {
-        if (!(await this.collectionExists(collection.name))) {
-          throw error
-        }
-      }
-    }
+    await Promise.all(
+      SDK_COLLECTIONS.map((collection) =>
+        fs.promises.mkdir(collection.dir, { recursive: true })
+      )
+    )
+    await getQMDStore(QMD_INDEX_NAME, SDK_COLLECTIONS)
 
     MemoryTool.collectionsReady = true
-  }
-
-  private async ensureQmdAvailable(): Promise<void> {
-    await this.runQMD(['--help'])
-  }
-
-  private async collectionExists(name: string): Promise<boolean> {
-    try {
-      await this.runQMD(['--index', QMD_INDEX_NAME, 'ls', name])
-      return true
-    } catch {
-      return false
-    }
   }
 
   private async updateIndex(): Promise<void> {
@@ -1093,7 +1071,10 @@ export default class MemoryTool extends Tool {
       return
     }
 
-    await this.runQMD(['--index', QMD_INDEX_NAME, 'update'])
+    await updateQMDStore({
+      indexName: QMD_INDEX_NAME,
+      collections: SDK_COLLECTIONS
+    })
     MemoryTool.lastIndexUpdateAt = now
   }
 
@@ -1114,14 +1095,20 @@ export default class MemoryTool extends Tool {
 
     MemoryTool.embeddingRefreshPromise = (async (): Promise<void> => {
       try {
-        const statusOutput = await this.runQMD(['status', '--index', QMD_INDEX_NAME])
-        const pendingEmbeddingCount = parsePendingEmbeddingCount(statusOutput)
+        const status = await getQMDStoreStatus({
+          indexName: QMD_INDEX_NAME,
+          collections: SDK_COLLECTIONS
+        })
+        const pendingEmbeddingCount = status.needsEmbedding
         if (pendingEmbeddingCount <= 0) {
           MemoryTool.lastEmbeddingRefreshAt = Date.now()
           return
         }
 
-        await this.runQMD(['embed', '--index', QMD_INDEX_NAME])
+        await embedQMDStore({
+          indexName: QMD_INDEX_NAME,
+          collections: SDK_COLLECTIONS
+        })
         MemoryTool.lastEmbeddingRefreshAt = Date.now()
       } catch {
         MemoryTool.lastEmbeddingRefreshAt = Date.now()
@@ -1138,25 +1125,20 @@ export default class MemoryTool extends Tool {
     query: string,
     collectionNames: string[],
     limit: number
-  ): Promise<Array<Record<string, unknown>>> {
+  ): Promise<QMDStoreRow[]> {
     if (!query.trim()) {
       return []
     }
 
-    const args = [
-      mode,
-      query,
-      '--index',
-      QMD_INDEX_NAME,
-      '--json',
-      '-n',
-      String(limit),
-      ...collectionNames.flatMap((collectionName) => ['-c', collectionName])
-    ]
-
-    let payload = ''
     try {
-      payload = await this.runQMD(args)
+      return await runQMDStoreSearch({
+        indexName: QMD_INDEX_NAME,
+        collections: SDK_COLLECTIONS,
+        mode,
+        query,
+        collectionNames,
+        limit
+      })
     } catch (error) {
       const message = String(error).toLowerCase()
       if (mode === 'query' && message.includes('not found')) {
@@ -1165,18 +1147,6 @@ export default class MemoryTool extends Tool {
 
       return []
     }
-
-    return parseRows(payload)
-  }
-
-  private async runQMD(args: string[]): Promise<string> {
-    const { stdout } = await execa('qmd', args, {
-      reject: true,
-      env: process.env,
-      preferLocal: true,
-      localDir: ROOT_DIR
-    })
-    return stdout || ''
   }
 
   private readFacts(limit: number): Array<{ key: string, text: string }> {
@@ -1315,5 +1285,6 @@ export default class MemoryTool extends Tool {
     MemoryTool.collectionsReady = false
     MemoryTool.lastEmbeddingRefreshAt = 0
     MemoryTool.embeddingRefreshPromise = null
+    void closeQMDStore(QMD_INDEX_NAME)
   }
 }

@@ -1,8 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import execa from 'execa'
-
 import {
   CONTEXT_PATH,
   MEMORY_PATH
@@ -23,13 +21,20 @@ import {
   extractScore,
   normalizeFilename,
   normalizePath,
-  parsePendingEmbeddingCount,
-  parseRows,
   pickStringDeep,
   rankRetrievedHits,
   resolveRequestedCollectionName,
   shouldRunAdaptiveSecondPass
 } from '@sdk/tools/memory/qmd-retrieval'
+import {
+  type QMDCollectionDefinition,
+  type QMDStoreRow,
+  runQMDStoreSearch,
+  updateQMDStore,
+  getQMDStore,
+  getQMDStoreStatus,
+  embedQMDStore
+} from '@sdk/tools/memory/qmd-store'
 
 import type { KnowledgeNamespace } from './types'
 
@@ -79,6 +84,13 @@ const QMD_COLLECTIONS: Record<KnowledgeNamespace, { name: string, dir: string }>
   }
 }
 
+const SDK_COLLECTIONS: QMDCollectionDefinition[] = [
+  QMD_COLLECTIONS.context,
+  QMD_COLLECTIONS.memory_persistent,
+  QMD_COLLECTIONS.memory_daily,
+  QMD_COLLECTIONS.memory_discussion
+]
+
 function isContextFilenameAllowed(
   allowedFilenames: Set<string>,
   sourcePath: string,
@@ -111,7 +123,6 @@ export default class QMDBackend {
       return
     }
 
-    await this.ensureQmdAvailable()
     await this.ensureCollections()
     this.loaded = true
 
@@ -141,7 +152,15 @@ export default class QMDBackend {
       return
     }
 
-    await this.runQMD(['--index', QMD_INDEX_NAME, 'update'])
+    await updateQMDStore({
+      indexName: QMD_INDEX_NAME,
+      collections: SDK_COLLECTIONS,
+      collectionNames: [...new Set(
+        [...this.dirtyNamespaces]
+          .map((namespace) => QMD_COLLECTIONS[namespace]?.name)
+          .filter((name): name is string => Boolean(name))
+      )]
+    })
     this.lastUpdateAt = now
     this.dirtyNamespaces.clear()
 
@@ -201,17 +220,15 @@ export default class QMDBackend {
       scopedCollectionNames: string[],
       limit: number
     ): Promise<{
-      rows: Array<Record<string, unknown>>
+      rows: QMDStoreRow[]
       modeUsed: QMDSearchMode
     }> => {
       const lexicalQuery = buildLexicalSearchQuery(input.query, bridgeTerms)
-      let rows = parseRows(
-        await this.runQMDSearchMode(
-          'query',
-          buildExpansionQuery(input.query, bridgeTerms),
-          scopedCollectionNames,
-          limit
-        )
+      let rows = await this.runQMDSearchMode(
+        'query',
+        buildExpansionQuery(input.query, bridgeTerms),
+        scopedCollectionNames,
+        limit
       )
       if (rows.length > 0) {
         return {
@@ -220,13 +237,11 @@ export default class QMDBackend {
         }
       }
 
-      rows = parseRows(
-        await this.runQMDSearchMode(
-          'search',
-          lexicalQuery,
-          scopedCollectionNames,
-          limit
-        )
+      rows = await this.runQMDSearchMode(
+        'search',
+        lexicalQuery,
+        scopedCollectionNames,
+        limit
       )
 
       return {
@@ -333,7 +348,7 @@ export default class QMDBackend {
     const retrievalStages: string[] = []
     const rewrittenQueries: string[] = []
 
-    let rows: Array<Record<string, unknown>> = []
+    let rows: QMDStoreRow[] = []
     let modeUsed: QMDSearchMode | null = null
 
     if (this.hybridRetrievalEnabled) {
@@ -359,13 +374,11 @@ export default class QMDBackend {
 
     if (rows.length === 0) {
       try {
-        rows = parseRows(
-          await this.runQMDSearchMode(
-            'search',
-            buildLexicalSearchQuery(input.query),
-            collectionNames,
-            globalLimit
-          )
+        rows = await this.runQMDSearchMode(
+          'search',
+          buildLexicalSearchQuery(input.query),
+          collectionNames,
+          globalLimit
         )
         modeUsed = 'search'
         retrievalStages.push(`fallback:search:${rows.length}`)
@@ -384,13 +397,11 @@ export default class QMDBackend {
     let rankedHits = rankHitsByQuery(hits)
     if (!hasPersistentHit() || shouldRunAdaptiveSecondPass(rankedHits)) {
       try {
-        const enrichmentRows = parseRows(
-          await this.runQMDSearchMode(
-            'search',
-            buildLexicalSearchQuery(input.query),
-            collectionNames,
-            globalLimit
-          )
+        const enrichmentRows = await this.runQMDSearchMode(
+          'search',
+          buildLexicalSearchQuery(input.query),
+          collectionNames,
+          globalLimit
         )
         appendRows(enrichmentRows, 'search')
         retrievalStages.push(`enrich:search:${enrichmentRows.length}`)
@@ -412,13 +423,11 @@ export default class QMDBackend {
 
         try {
           appendRows(
-            parseRows(
-                await this.runQMDSearchMode(
-                  'search',
-                  buildLexicalSearchQuery(input.query),
-                  [collectionName],
-                  perNamespaceLimit
-                )
+            await this.runQMDSearchMode(
+              'search',
+              buildLexicalSearchQuery(input.query),
+              [collectionName],
+              perNamespaceLimit
             ),
             'search'
           )
@@ -471,13 +480,11 @@ export default class QMDBackend {
 
             try {
               appendRows(
-                parseRows(
-                  await this.runQMDSearchMode(
-                    'search',
-                    buildLexicalSearchQuery(input.query, secondPass.bridgeTokens),
-                    [collectionName],
-                    perNamespaceLimit
-                  )
+                await this.runQMDSearchMode(
+                  'search',
+                  buildLexicalSearchQuery(input.query, secondPass.bridgeTokens),
+                  [collectionName],
+                  perNamespaceLimit
                 ),
                 'search'
               )
@@ -537,13 +544,11 @@ export default class QMDBackend {
 
           try {
             appendRows(
-              parseRows(
-                await this.runQMDSearchMode(
-                  'search',
-                  buildLexicalSearchQuery(input.query, rescueBridgeTokens),
-                  [collectionName],
-                  perNamespaceLimit
-                )
+              await this.runQMDSearchMode(
+                'search',
+                buildLexicalSearchQuery(input.query, rescueBridgeTokens),
+                [collectionName],
+                perNamespaceLimit
               ),
               'search'
             )
@@ -637,64 +642,18 @@ export default class QMDBackend {
     return output
   }
 
-  private async ensureQmdAvailable(): Promise<void> {
-    try {
-      await this.runQMD(['--help'])
-    } catch (error) {
-      throw new Error(
-        `QMD backend requires the "qmd" CLI. Install it as a project dependency (for example: "pnpm add @tobilu/qmd"). ${String(error)}`
-      )
-    }
-  }
-
   private async ensureCollections(): Promise<void> {
-    const namespaces = new Set<KnowledgeNamespace>([
-      'context',
-      'memory_persistent',
-      'memory_daily',
-      'memory_discussion'
-    ])
+    await Promise.all(
+      SDK_COLLECTIONS.map((collection) =>
+        fs.promises.mkdir(collection.dir, { recursive: true })
+      )
+    )
+    await getQMDStore(QMD_INDEX_NAME, SDK_COLLECTIONS)
 
-    for (const namespace of namespaces) {
-      const collection = QMD_COLLECTIONS[namespace]
-      if (!collection) {
-        continue
-      }
-
-      await fs.promises.mkdir(collection.dir, { recursive: true })
-      await this.ensureCollection(collection.name, collection.dir)
-      this.markDirty(namespace)
-    }
-  }
-
-  private async ensureCollection(name: string, dirPath: string): Promise<void> {
-    try {
-      await this.runQMD([
-        '--index',
-        QMD_INDEX_NAME,
-        'collection',
-        'add',
-        dirPath,
-        '--name',
-        name,
-        '--mask',
-        '**/*.md'
-      ])
-    } catch (error) {
-      if (await this.collectionExists(name)) {
-        return
-      }
-      throw error
-    }
-  }
-
-  private async collectionExists(name: string): Promise<boolean> {
-    try {
-      await this.runQMD(['--index', QMD_INDEX_NAME, 'ls', name])
-      return true
-    } catch {
-      return false
-    }
+    this.markDirty('context')
+    this.markDirty('memory_persistent')
+    this.markDirty('memory_daily')
+    this.markDirty('memory_discussion')
   }
 
   private async ensureEmbeddings(force = false): Promise<void> {
@@ -710,8 +669,11 @@ export default class QMDBackend {
 
     this.embeddingRefreshPromise = (async (): Promise<void> => {
       try {
-        const statusOutput = await this.runQMD(['status', '--index', QMD_INDEX_NAME])
-        const pendingEmbeddingCount = parsePendingEmbeddingCount(statusOutput)
+        const status = await getQMDStoreStatus({
+          indexName: QMD_INDEX_NAME,
+          collections: SDK_COLLECTIONS
+        })
+        const pendingEmbeddingCount = status.needsEmbedding
 
         if (pendingEmbeddingCount <= 0) {
           this.lastEmbedAt = Date.now()
@@ -723,7 +685,10 @@ export default class QMDBackend {
           `QMD embeddings pending: ${pendingEmbeddingCount}. Running embed refresh...`
         )
 
-        await this.runQMD(['embed', '--index', QMD_INDEX_NAME])
+        await embedQMDStore({
+          indexName: QMD_INDEX_NAME,
+          collections: SDK_COLLECTIONS
+        })
         this.lastEmbedAt = Date.now()
 
         LogHelper.title('Memory Manager')
@@ -745,48 +710,19 @@ export default class QMDBackend {
     query: string,
     collectionNames: string[],
     limit: number
-  ): Promise<string> {
-    const baseArgs = [
+  ): Promise<QMDStoreRow[]> {
+    LogHelper.title('Memory Manager')
+    LogHelper.debug(
+      `QMD store search: mode=${mode} collections=${collectionNames.join(', ')} limit=${limit} query=${JSON.stringify(query)}`
+    )
+
+    return runQMDStoreSearch({
+      indexName: QMD_INDEX_NAME,
+      collections: SDK_COLLECTIONS,
       mode,
       query,
-      '--index',
-      QMD_INDEX_NAME,
-      '--json',
-      '-n',
-      String(limit),
-      ...collectionNames.flatMap((collectionName) => ['-c', collectionName])
-    ]
-
-    try {
-      return await this.runQMD(baseArgs)
-    } catch (error) {
-      const message = String(error).toLowerCase()
-      if (mode === 'query' && message.includes('not found')) {
-        return this.runQMD(['search', ...baseArgs.slice(1)])
-      }
-
-      throw error
-    }
-  }
-
-  private async runQMD(args: string[]): Promise<string> {
-    const command = ['qmd', ...args]
-      .map((argument) =>
-        /[\s"\\]/.test(argument)
-          ? JSON.stringify(argument)
-          : argument
-      )
-      .join(' ')
-
-    LogHelper.title('Memory Manager')
-    LogHelper.debug(`QMD command: ${command}`)
-
-    const { stdout } = await execa('qmd', args, {
-      reject: true,
-      env: process.env,
-      preferLocal: true,
-      localDir: process.cwd()
+      collectionNames,
+      limit
     })
-    return stdout || ''
   }
 }
