@@ -606,6 +606,7 @@ export default class QMDBackend {
 
     const output = rankedHits.map((rankedHit) => ({
       ...rankedHit.hit,
+      score: Math.max(rankedHit.hit.score, rankedHit.rankingScore),
       content: buildFocusedHitContent(
         rankedHit.hit,
         excerptQueryTokens,

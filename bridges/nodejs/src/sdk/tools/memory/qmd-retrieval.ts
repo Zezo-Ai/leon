@@ -96,16 +96,86 @@ function dedupeStable(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))]
 }
 
+function trimDoubledConsonant(value: string): string {
+  return /([b-df-hj-np-tv-z])\1$/i.test(value)
+    ? value.slice(0, -1)
+    : value
+}
+
+function restoreTrailingE(value: string): string {
+  if (!value || value.endsWith('e') || /[aeiou]$/i.test(value)) {
+    return value
+  }
+
+  return `${value}e`
+}
+
+function buildTokenVariants(token: string): string[] {
+  const normalized = sanitizeQmdQueryLine(token).toLowerCase()
+  if (!normalized) {
+    return []
+  }
+
+  const variants = new Set<string>([normalized])
+  const addVariant = (value: string): void => {
+    const candidate = sanitizeQmdQueryLine(value).toLowerCase()
+    if (candidate && tokenLength(candidate) >= 3) {
+      variants.add(candidate)
+    }
+  }
+
+  if (normalized.endsWith('ies') && normalized.length > 4) {
+    addVariant(`${normalized.slice(0, -3)}y`)
+  }
+
+  if (normalized.endsWith('ves') && normalized.length > 4) {
+    addVariant(normalized.slice(0, -1))
+    addVariant(`${normalized.slice(0, -3)}fe`)
+  }
+
+  if (
+    normalized.endsWith('s') &&
+    normalized.length > 4 &&
+    !normalized.endsWith('ss') &&
+    !normalized.endsWith('us') &&
+    !normalized.endsWith('is')
+  ) {
+    addVariant(normalized.slice(0, -1))
+  }
+
+  if (normalized.endsWith('ing') && normalized.length > 5) {
+    const stem = normalized.slice(0, -3)
+    const trimmedStem = trimDoubledConsonant(stem)
+    addVariant(stem)
+    addVariant(trimmedStem)
+    addVariant(restoreTrailingE(stem))
+    addVariant(restoreTrailingE(trimmedStem))
+  }
+
+  if (normalized.endsWith('ed') && normalized.length > 4) {
+    const stem = normalized.slice(0, -2)
+    const trimmedStem = trimDoubledConsonant(stem)
+    addVariant(stem)
+    addVariant(trimmedStem)
+    addVariant(restoreTrailingE(stem))
+    addVariant(restoreTrailingE(trimmedStem))
+  }
+
+  return [...variants]
+}
+
 function splitQuerySegments(value: string): string[] {
   return value
-    .split(/[\n,;:(){}\[\]|]+/g)
+    .split(/[\n,;:(){}[\]|]+/g)
     .map((segment) => sanitizeQmdQueryLine(segment))
     .filter(Boolean)
 }
 
 function normalizeSegmentTerms(value: string): string {
   const uniqueTokens = dedupeStable(
-    tokenizeQuery(value).filter((token) => tokenLength(token) >= 3)
+    tokenizeQuery(value)
+      .filter((token) => tokenLength(token) >= 3)
+      .flatMap((token) => buildTokenVariants(token))
   )
 
   if (uniqueTokens.length === 0) {
@@ -436,6 +506,7 @@ function buildSemanticLines<TNamespace extends string>(
 ): string[] {
   const lines = hit.content
     .split('\n')
+    .flatMap((line: string) => line.split('|'))
     .map((line: string) => line.trim())
     .filter(Boolean)
 
@@ -448,6 +519,29 @@ function buildSemanticLines<TNamespace extends string>(
   )
 
   return semanticLines.length > 0 ? semanticLines : lines
+}
+
+function computeQuestionPenalty<TNamespace extends string>(
+  hit: RetrievedHit<TNamespace>
+): number {
+  const namespace = String(hit.namespace)
+  if (namespace === 'memory_persistent' || namespace === 'context') {
+    return 0
+  }
+
+  const semanticLines = buildSemanticLines(hit)
+  if (semanticLines.length === 0) {
+    return 0
+  }
+
+  const questionLineCount = semanticLines.filter((line) =>
+    line.includes('?')
+  ).length
+  if (questionLineCount === 0) {
+    return 0
+  }
+
+  return Math.min(0.18, (questionLineCount / semanticLines.length) * 0.14)
 }
 
 function focusCandidateTextAroundQuery(
@@ -494,15 +588,33 @@ export function buildQueryTokenSet(query: string): Set<string> {
   )
 }
 
+function buildRankingContent<TNamespace extends string>(
+  hit: RetrievedHit<TNamespace>
+): string {
+  const semanticLines = buildSemanticLines(hit)
+  if (semanticLines.length === 0) {
+    return hit.content
+  }
+
+  const nonQuestionLines = semanticLines.filter((line) => !line.includes('?'))
+  const preferredLines =
+    nonQuestionLines.length > 0 ? nonQuestionLines : semanticLines
+
+  return preferredLines.join(' ')
+}
+
 function buildRankingHitText<TNamespace extends string>(
   hit: RetrievedHit<TNamespace>,
   collections: Record<TNamespace, QMDCollectionSpec>,
   bridgeSourceContentCap: number
 ): string {
-  return buildHitText(
-    hydrateBridgeSeedHit(hit, collections, bridgeSourceContentCap),
-    12_000
+  const hydratedHit = hydrateBridgeSeedHit(
+    hit,
+    collections,
+    bridgeSourceContentCap
   )
+
+  return `${hydratedHit.title} ${path.basename(hydratedHit.path || '')} ${buildRankingContent(hydratedHit).slice(0, 12_000)}`.trim()
 }
 
 export function extractOverlapCount<TNamespace extends string>(
@@ -517,6 +629,7 @@ export function extractOverlapCount<TNamespace extends string>(
 
   const hitTokens = new Set(
     tokenizeQuery(buildRankingHitText(hit, collections, bridgeSourceContentCap))
+      .flatMap((token) => buildTokenVariants(token))
   )
   if (hitTokens.size === 0) {
     return 0
@@ -524,7 +637,7 @@ export function extractOverlapCount<TNamespace extends string>(
 
   let overlapCount = 0
   for (const token of queryTokens) {
-    if (hitTokens.has(token)) {
+    if (buildTokenVariants(token).some((variant) => hitTokens.has(variant))) {
       overlapCount += 1
     }
   }
@@ -683,7 +796,8 @@ export function rankRetrievedHits<TNamespace extends string>(
           collections,
           bridgeSourceContentCap
         ) +
-        computeRecencyBoost(hit)
+        computeRecencyBoost(hit) -
+        computeQuestionPenalty(hit)
 
       return {
         hit,
