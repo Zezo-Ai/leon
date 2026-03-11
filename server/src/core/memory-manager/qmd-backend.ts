@@ -29,6 +29,7 @@ import {
 import {
   type QMDCollectionDefinition,
   type QMDStoreRow,
+  QMDWriteLockTimeoutError,
   runQMDStoreSearch,
   updateQMDStore,
   getQMDStore,
@@ -152,25 +153,39 @@ export default class QMDBackend {
       return
     }
 
-    await updateQMDStore({
-      indexName: QMD_INDEX_NAME,
-      collections: SDK_COLLECTIONS,
-      collectionNames: [...new Set(
-        [...this.dirtyNamespaces]
-          .map((namespace) => QMD_COLLECTIONS[namespace]?.name)
-          .filter((name): name is string => Boolean(name))
-      )]
-    })
-    this.lastUpdateAt = now
-    this.dirtyNamespaces.clear()
+    try {
+      await updateQMDStore({
+        indexName: QMD_INDEX_NAME,
+        collections: SDK_COLLECTIONS,
+        collectionNames: [...new Set(
+          [...this.dirtyNamespaces]
+            .map((namespace) => QMD_COLLECTIONS[namespace]?.name)
+            .filter((name): name is string => Boolean(name))
+        )]
+      })
+      this.lastUpdateAt = now
+      this.dirtyNamespaces.clear()
 
-    LogHelper.title('Memory Manager')
-    LogHelper.debug('QMD index refreshed')
+      LogHelper.title('Memory Manager')
+      LogHelper.debug('QMD index refreshed')
+    } catch (error) {
+      if (error instanceof QMDWriteLockTimeoutError) {
+        LogHelper.title('Memory Manager')
+        LogHelper.warning(
+          `QMD refresh skipped because another process is updating the index; continuing with the current index snapshot. ${error.message}`
+        )
+        return
+      }
+
+      throw error
+    }
   }
 
   public async query(input: QMDQueryInput): Promise<QMDRecallHit[]> {
     await this.refresh()
-    await this.ensureEmbeddings()
+    if (this.hybridRetrievalEnabled) {
+      await this.ensureEmbeddings()
+    }
 
     const uniqueNamespaces = [...new Set(input.namespaces)]
     if (uniqueNamespaces.length === 0) {

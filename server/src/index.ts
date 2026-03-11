@@ -258,27 +258,37 @@ import { SystemHelper } from '@/helpers/system-helper'
       1_000 * 3_600 * 6
     )
   }
-  ;[
-    'exit',
-    'SIGINT',
-    'SIGUSR1',
-    'SIGUSR2',
-    'uncaughtException',
-    'SIGTERM',
-    'SIGHUP'
-  ].forEach((eventType) => {
-    process.on(eventType, () => {
-      if (global.pythonTCPServerProcess?.pid) {
-        kill(global.pythonTCPServerProcess.pid as number)
-      }
+  const shutdown = (exitCode = 0): void => {
+    if (global.pythonTCPServerProcess?.pid) {
+      kill(global.pythonTCPServerProcess.pid as number)
+    }
 
-      if (IS_TELEMETRY_ENABLED) {
-        Telemetry.stop()
-      }
+    if (IS_TELEMETRY_ENABLED) {
+      Telemetry.stop()
+    }
 
-      setTimeout(() => {
-        process.exit(0)
-      }, 1_000)
-    })
+    setTimeout(() => {
+      process.exit(exitCode)
+    }, 1_000)
+  }
+
+  ;['exit', 'SIGINT', 'SIGUSR1', 'SIGUSR2', 'SIGTERM', 'SIGHUP'].forEach(
+    (eventType) => {
+      process.on(eventType, () => {
+        shutdown(0)
+      })
+    }
+  )
+
+  process.on('uncaughtException', (error) => {
+    LogHelper.title('Server')
+    LogHelper.error(`Uncaught exception: ${error instanceof Error ? error.stack || error.message : String(error)}`)
+    shutdown(1)
+  })
+
+  process.on('unhandledRejection', (reason) => {
+    LogHelper.title('Server')
+    LogHelper.error(`Unhandled rejection: ${reason instanceof Error ? reason.stack || reason.message : String(reason)}`)
+    shutdown(1)
   })
 })()

@@ -742,10 +742,18 @@ export default class PulseManager {
     const core = await this.loadCoreNodes()
     const selfModelSnapshot = core.SELF_MODEL_MANAGER.getSnapshot()
     const contextManifest = core.CONTEXT_MANAGER.getManifest()
-    const memoryPack = await core.MEMORY_MANAGER.buildPlanningMemoryPack(
-      PULSE_MEMORY_QUERY,
-      PULSE_MEMORY_TOKEN_BUDGET
-    )
+    let memoryPack = ''
+    try {
+      memoryPack = await core.MEMORY_MANAGER.buildPlanningMemoryPack(
+        PULSE_MEMORY_QUERY,
+        PULSE_MEMORY_TOKEN_BUDGET
+      )
+    } catch (error) {
+      LogHelper.title('Pulse Manager')
+      LogHelper.warning(
+        `Pulse memory evidence skipped for this tick: ${String(error)}`
+      )
+    }
     const { changedSignals, nextStamps } = await this.collectContextSignals(
       state.contextFileStamps
     )

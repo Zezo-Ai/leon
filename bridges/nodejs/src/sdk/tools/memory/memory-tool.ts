@@ -32,11 +32,10 @@ import {
 import {
   type QMDCollectionDefinition,
   type QMDStoreRow,
+  QMDWriteLockTimeoutError,
   runQMDStoreSearch,
   updateQMDStore,
   getQMDStore,
-  getQMDStoreStatus,
-  embedQMDStore,
   closeQMDStore
 } from './qmd-store'
 
@@ -47,7 +46,6 @@ const CONTEXT_FULL_CONTENT_CAP = 8_000
 const BRIDGE_SOURCE_CONTENT_CAP = 96_000
 const MIN_HIT_TOKEN_BUDGET = 48
 const INDEX_UPDATE_MIN_INTERVAL_MS = 10_000
-const EMBEDDING_REFRESH_MIN_INTERVAL_MS = 30_000
 
 type MemoryScope = 'persistent' | 'daily' | 'discussion'
 type MemoryKind =
@@ -200,8 +198,6 @@ export default class MemoryTool extends Tool {
   private static storageReady = false
   private static collectionsReady = false
   private static lastIndexUpdateAt = 0
-  private static lastEmbeddingRefreshAt = 0
-  private static embeddingRefreshPromise: Promise<void> | null = null
 
   private readonly config: ReturnType<typeof ToolkitConfig.load>
 
@@ -243,7 +239,6 @@ export default class MemoryTool extends Tool {
     await this.ensureStorage()
     await this.ensureCollections()
     await this.updateIndex()
-    await this.ensureEmbeddings()
 
     const includeContext = options.includeContext === true
     const namespaces = this.normalizeNamespaces(options.namespaces, includeContext)
@@ -882,7 +877,6 @@ export default class MemoryTool extends Tool {
 
     await this.ensureCollections()
     await this.updateIndex()
-    await this.ensureEmbeddings()
 
     return {
       success: true,
@@ -1071,53 +1065,22 @@ export default class MemoryTool extends Tool {
       return
     }
 
-    await updateQMDStore({
-      indexName: QMD_INDEX_NAME,
-      collections: SDK_COLLECTIONS
-    })
-    MemoryTool.lastIndexUpdateAt = now
-  }
-
-  private async ensureEmbeddings(force = false): Promise<void> {
-    const now = Date.now()
-    if (
-      !force &&
-      MemoryTool.lastEmbeddingRefreshAt > 0 &&
-      now - MemoryTool.lastEmbeddingRefreshAt < EMBEDDING_REFRESH_MIN_INTERVAL_MS
-    ) {
-      return
-    }
-
-    if (MemoryTool.embeddingRefreshPromise) {
-      await MemoryTool.embeddingRefreshPromise
-      return
-    }
-
-    MemoryTool.embeddingRefreshPromise = (async (): Promise<void> => {
-      try {
-        const status = await getQMDStoreStatus({
-          indexName: QMD_INDEX_NAME,
-          collections: SDK_COLLECTIONS
-        })
-        const pendingEmbeddingCount = status.needsEmbedding
-        if (pendingEmbeddingCount <= 0) {
-          MemoryTool.lastEmbeddingRefreshAt = Date.now()
-          return
-        }
-
-        await embedQMDStore({
-          indexName: QMD_INDEX_NAME,
-          collections: SDK_COLLECTIONS
-        })
-        MemoryTool.lastEmbeddingRefreshAt = Date.now()
-      } catch {
-        MemoryTool.lastEmbeddingRefreshAt = Date.now()
-      } finally {
-        MemoryTool.embeddingRefreshPromise = null
+    try {
+      await updateQMDStore({
+        indexName: QMD_INDEX_NAME,
+        collections: SDK_COLLECTIONS
+      })
+      MemoryTool.lastIndexUpdateAt = now
+    } catch (error) {
+      if (error instanceof QMDWriteLockTimeoutError) {
+        this.log(
+          `memory.read skipped index refresh because another process is updating QMD; continuing with the current index snapshot. ${error.message}`
+        )
+        return
       }
-    })()
 
-    await MemoryTool.embeddingRefreshPromise
+      throw error
+    }
   }
 
   private async runSearchMode(
@@ -1283,8 +1246,6 @@ export default class MemoryTool extends Tool {
     MemoryTool.db = null
     MemoryTool.storageReady = false
     MemoryTool.collectionsReady = false
-    MemoryTool.lastEmbeddingRefreshAt = 0
-    MemoryTool.embeddingRefreshPromise = null
     void closeQMDStore(QMD_INDEX_NAME)
   }
 }
