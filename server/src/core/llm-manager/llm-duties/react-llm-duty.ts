@@ -1523,7 +1523,10 @@ export class ReActLLMDuty extends LLMDuty {
       (options?.streamToProvider ?? phasePolicy.streamToProvider) &&
       LLM_PROVIDER_NAME !== LLMProviders.Local
     const reasoningGenerationId = shouldEmitReasoning
-      ? this.reasoningGenerationId || StringHelper.random(6, { onlyLetters: true })
+      ? this.getReasoningGenerationId(
+          phase,
+          StringHelper.random(6, { onlyLetters: true })
+        )
       : null
 
     this.logPromptDispatch({
@@ -1549,7 +1552,11 @@ export class ReActLLMDuty extends LLMDuty {
       ...(shouldEmitReasoning && reasoningGenerationId
         ? {
             onReasoningToken: (reasoningChunk: string): void => {
-              this.emitReasoningToken(reasoningChunk, reasoningGenerationId)
+              this.emitReasoningToken(
+                reasoningChunk,
+                reasoningGenerationId,
+                phase
+              )
             }
           }
         : {}),
@@ -1613,7 +1620,10 @@ export class ReActLLMDuty extends LLMDuty {
       (options?.streamToProvider ?? phasePolicy.streamToProvider) &&
       LLM_PROVIDER_NAME !== LLMProviders.Local
     const reasoningGenerationId = shouldEmitReasoning
-      ? this.reasoningGenerationId || StringHelper.random(6, { onlyLetters: true })
+      ? this.getReasoningGenerationId(
+          phase,
+          StringHelper.random(6, { onlyLetters: true })
+        )
       : null
 
     this.logPromptDispatch({
@@ -1641,7 +1651,11 @@ export class ReActLLMDuty extends LLMDuty {
       ...(shouldEmitReasoning && reasoningGenerationId
         ? {
             onReasoningToken: (reasoningChunk: string): void => {
-              this.emitReasoningToken(reasoningChunk, reasoningGenerationId)
+              this.emitReasoningToken(
+                reasoningChunk,
+                reasoningGenerationId,
+                phase
+              )
             }
           }
         : {}),
@@ -1764,9 +1778,10 @@ export class ReActLLMDuty extends LLMDuty {
       ? StringHelper.random(6, { onlyLetters: true })
       : null
     const reasoningGenerationId = shouldEmitReasoning
-      ? this.reasoningGenerationId || generationId || StringHelper.random(6, {
-          onlyLetters: true
-        })
+      ? this.getReasoningGenerationId(
+          phase,
+          generationId || StringHelper.random(6, { onlyLetters: true })
+        )
       : null
 
     this.logTitle(phase)
@@ -1862,7 +1877,11 @@ export class ReActLLMDuty extends LLMDuty {
         ...(shouldEmitReasoning && reasoningGenerationId
           ? {
               onReasoningToken: (reasoningChunk: string): void => {
-                this.emitReasoningToken(reasoningChunk, reasoningGenerationId)
+                this.emitReasoningToken(
+                  reasoningChunk,
+                  reasoningGenerationId,
+                  phase
+                )
               }
             }
           : {}),
@@ -2486,7 +2505,25 @@ export class ReActLLMDuty extends LLMDuty {
     } as unknown as LLMDutyResult
   }
 
-  private emitReasoningToken(token: string, generationId: string): void {
+  private getReasoningGenerationId(
+    phase: ReactPhase,
+    fallbackGenerationId?: string | null
+  ): string | null {
+    const baseGenerationId =
+      this.reasoningGenerationId || fallbackGenerationId || null
+
+    if (!baseGenerationId) {
+      return null
+    }
+
+    return `${baseGenerationId}_${phase}`
+  }
+
+  private emitReasoningToken(
+    token: string,
+    generationId: string,
+    phase: ReactPhase
+  ): void {
     if (!token || !generationId) {
       return
     }
@@ -2495,7 +2532,8 @@ export class ReActLLMDuty extends LLMDuty {
     for (const chunk of chunks) {
       SOCKET_SERVER.socket?.emit('llm-reasoning-token', {
         token: chunk,
-        generationId
+        generationId,
+        phase
       })
     }
   }

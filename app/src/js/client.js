@@ -293,7 +293,11 @@ export default class Client {
       }
 
       this._isLeonGeneratingAnswer = true
-      this.chatbot.createOrUpdateReasoningBlock(data.generationId, data.token)
+      this.chatbot.createOrUpdateReasoningBlock(
+        data.generationId,
+        data.token,
+        data.phase
+      )
       this.chatbot.scrollDown()
     })
 

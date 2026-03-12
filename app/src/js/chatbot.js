@@ -387,7 +387,16 @@ export default class Chatbot {
     return container
   }
 
-  createOrUpdateReasoningBlock(generationId, token) {
+  formatReasoningPhaseTitle(phase) {
+    const normalizedPhase =
+      typeof phase === 'string' && phase.trim()
+        ? phase.replaceAll('_', ' ').toUpperCase()
+        : 'EXECUTION'
+
+    return `REASONING - ${normalizedPhase}`
+  }
+
+  createOrUpdateReasoningBlock(generationId, token, phase) {
     if (!generationId || !token) {
       return null
     }
@@ -402,18 +411,21 @@ export default class Chatbot {
       const container = document.createElement('div')
       const block = document.createElement('div')
       const header = document.createElement('div')
+      const icon = document.createElement('i')
+      const title = document.createElement('span')
       const content = document.createElement('div')
 
       container.className = 'reasoning-block-container leon'
       container.setAttribute('data-reasoning-id', generationId)
       block.className = 'reasoning-block'
       header.className = 'reasoning-header'
-      header.innerHTML = `
-        <i class="ri-brain-ai-3-line reasoning-icon"></i>
-        <span class="reasoning-title">Reasoning</span>
-      `
+      icon.className = 'ri-brain-ai-3-line reasoning-icon'
+      title.className = 'reasoning-title'
+      title.textContent = this.formatReasoningPhaseTitle(phase)
       content.className = 'reasoning-content'
 
+      header.appendChild(icon)
+      header.appendChild(title)
       block.appendChild(header)
       block.appendChild(content)
       container.appendChild(block)
@@ -422,6 +434,7 @@ export default class Chatbot {
       reasoningBlock = {
         container,
         content,
+        text: '',
         isAutoScrollEnabled: true,
         isProgrammaticScroll: false
       }
@@ -439,11 +452,8 @@ export default class Chatbot {
       this.reasoningBlocks.set(generationId, reasoningBlock)
     }
 
-    const tokenElement = document.createElement('span')
-    tokenElement.className = 'reasoning-token fade-in'
-    tokenElement.textContent = token
-
-    reasoningBlock.content.appendChild(tokenElement)
+    reasoningBlock.text += token
+    reasoningBlock.content.textContent = reasoningBlock.text
     this.scrollReasoningContentToBottom(reasoningBlock)
 
     return reasoningBlock.container
