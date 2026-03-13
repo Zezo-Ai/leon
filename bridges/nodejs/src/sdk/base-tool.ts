@@ -47,7 +47,7 @@ export interface ExecuteCommandOptions {
 }
 
 export abstract class Tool {
-  private static isToolRuntime: boolean = (() => {
+  private static isToolRuntime: boolean = ((): boolean => {
     const args = process.argv
     const runtimeIndex = args.indexOf('--runtime')
     if (runtimeIndex === -1) {
@@ -144,7 +144,7 @@ export abstract class Tool {
   /**
    * Get missing required settings information
    */
-  getMissingSettings(): { missing: string[]; settingsPath: string } | null {
+  getMissingSettings(): { missing: string[], settingsPath: string } | null {
     return this.missingSettings
   }
 
@@ -946,7 +946,7 @@ export abstract class Tool {
     }
 
     const linuxCommand = `${command}; echo Command finished.; exec bash`
-    const candidates: Array<{ cmd: string; args: string[] }> = [
+    const candidates: Array<{ cmd: string, args: string[] }> = [
       { cmd: 'gnome-terminal', args: ['--', 'bash', '-lc', linuxCommand] },
       { cmd: 'x-terminal-emulator', args: ['-e', 'bash', '-lc', linuxCommand] },
       { cmd: 'konsole', args: ['-e', 'bash', '-lc', linuxCommand] },

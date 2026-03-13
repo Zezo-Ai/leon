@@ -1,7 +1,11 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+
+import jq from 'node-jq'
+import type { Json as NodeJQJson } from 'node-jq/lib/options'
 
 import { LogHelper } from '@/helpers/log-helper'
 import {
@@ -13,6 +17,8 @@ import {
 import { TOOLKIT_REGISTRY, TOOL_CALL_LOGGER } from '@/core'
 
 const execFileAsync = promisify(execFile)
+const ABSOLUTE_OR_HOME_PATH_PATTERN = /^(~($|[\\/])|\/|[A-Za-z]:[\\/])/
+const EXPLICIT_RELATIVE_PATH_PATTERN = /^\.\.?([\\/]|$)/
 
 interface ToolExecutionInput {
   toolId: string
@@ -114,6 +120,7 @@ export default class ToolExecutor {
         functionName
       })
     }
+    const functionConfig = functions[functionName]
 
     const parsedInput =
       input.parsedInput || this.parseToolInput(input.toolInput)
@@ -128,12 +135,15 @@ export default class ToolExecutor {
       })
     }
 
+    const normalizedParsedInput = this.normalizeFilesystemValues(parsedInput) as Record<
+      string,
+      unknown
+    >
+    const responseJQ = this.getResponseJQ(functionConfig)
+
     let argsArray: unknown[]
     try {
-      argsArray = this.mapArgs(
-        parsedInput,
-        functions?.[functionName]?.parameters
-      )
+      argsArray = this.mapArgs(normalizedParsedInput, functionConfig.parameters)
     } catch (error) {
       return this.buildResult({
         status: 'invalid_input',
@@ -141,7 +151,7 @@ export default class ToolExecutor {
         input: input.toolInput ?? null,
         resolvedTool,
         functionName,
-        parsedInput,
+        parsedInput: normalizedParsedInput,
         output: {}
       })
     }
@@ -151,12 +161,31 @@ export default class ToolExecutor {
       functionName,
       args: argsArray
     })
+    let runtimeOutput = this.normalizeFilesystemValues(
+      runtimeResult.output
+    ) as Record<string, unknown>
+
+    if (runtimeResult.success && responseJQ) {
+      try {
+        runtimeOutput = await this.applyResponseJQ(runtimeResult.output, responseJQ)
+      } catch (error) {
+        return this.buildResult({
+          status: 'invalid_input',
+          message: `response_jq failed: ${(error as Error).message}`,
+          input: input.toolInput ?? null,
+          resolvedTool,
+          functionName,
+          parsedInput: normalizedParsedInput,
+          output: runtimeResult.output
+        })
+      }
+    }
 
     TOOL_CALL_LOGGER.recordToolCall({
       toolkitId: resolvedTool.toolkitId,
       toolId: resolvedTool.toolId,
       functionName,
-      params: parsedInput
+      params: normalizedParsedInput
     })
 
     return this.buildResult({
@@ -165,8 +194,8 @@ export default class ToolExecutor {
       input: input.toolInput ?? null,
       resolvedTool,
       functionName,
-      parsedInput,
-      output: runtimeResult.output
+      parsedInput: normalizedParsedInput,
+      output: runtimeOutput
     })
   }
 
@@ -225,6 +254,283 @@ export default class ToolExecutor {
     }
 
     return null
+  }
+
+  private getResponseJQ(functionConfig: {
+      hooks?: {
+        post_execution?: {
+          response_jq?: string
+        }
+      }
+    }
+  ): string | null {
+    const defaultResponseJQ =
+      typeof functionConfig.hooks?.post_execution?.response_jq === 'string'
+        ? functionConfig.hooks.post_execution.response_jq.trim()
+        : ''
+
+    return defaultResponseJQ || null
+  }
+
+  private normalizeFilesystemValues(value: unknown): unknown {
+    if (typeof value === 'string') {
+      return this.normalizePossibleFilesystemPath(value)
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((item) => this.normalizeFilesystemValues(item))
+    }
+
+    if (value && typeof value === 'object') {
+      const objectValue = value as Record<string, unknown>
+      const normalizedEntries = Object.entries(objectValue).map(([key, nestedValue]) => [
+        key,
+        this.normalizeFilesystemValues(nestedValue)
+      ])
+
+      return Object.fromEntries(normalizedEntries)
+    }
+
+    return value
+  }
+
+  private normalizePossibleFilesystemPath(value: string): string {
+    const trimmedValue = value.trim()
+    if (
+      !trimmedValue ||
+      trimmedValue.includes('\n') ||
+      trimmedValue.includes('\r')
+    ) {
+      return value
+    }
+
+    try {
+      const parsedUrl = new URL(trimmedValue)
+      if (parsedUrl.protocol) {
+        return value
+      }
+    } catch {
+      // Not a valid URL, continue.
+    }
+
+    const resolvedPath = this.resolveFilesystemPathCandidate(trimmedValue)
+    return resolvedPath || value
+  }
+
+  private resolveFilesystemPathCandidate(value: string): string | null {
+    if (
+      ABSOLUTE_OR_HOME_PATH_PATTERN.test(value) ||
+      EXPLICIT_RELATIVE_PATH_PATTERN.test(value)
+    ) {
+      return this.correctHomePath(this.resolveAbsoluteLikePath(value))
+    }
+
+    const existingCandidate = this.buildFilesystemCandidates(value).find(
+      (candidate) => fs.existsSync(candidate)
+    )
+    if (existingCandidate) {
+      return path.normalize(existingCandidate)
+    }
+
+    return null
+  }
+
+  private resolveAbsoluteLikePath(value: string): string {
+    if (value === '~') {
+      return os.homedir()
+    }
+
+    if (value.startsWith('~/') || value.startsWith('~\\')) {
+      return path.join(os.homedir(), value.slice(2))
+    }
+
+    if (path.isAbsolute(value)) {
+      return path.normalize(value)
+    }
+
+    return path.resolve(process.cwd(), value)
+  }
+
+  private buildFilesystemCandidates(value: string): string[] {
+    const homeDirectory = os.homedir()
+    const cwdCandidate = path.resolve(process.cwd(), value)
+    const homeCandidate = path.resolve(homeDirectory, value)
+    const downloadsCandidate = path.resolve(
+      path.join(homeDirectory, 'Downloads'),
+      value
+    )
+    const desktopCandidate = path.resolve(
+      path.join(homeDirectory, 'Desktop'),
+      value
+    )
+
+    return [...new Set([
+      cwdCandidate,
+      downloadsCandidate,
+      desktopCandidate,
+      homeCandidate
+    ])]
+  }
+
+  private correctHomePath(candidate: string): string {
+    const currentHome = path.normalize(os.homedir())
+    if (!currentHome || !path.isAbsolute(candidate)) {
+      return candidate
+    }
+
+    const currentHomeParent = path.dirname(currentHome)
+    const currentHomeName = path.basename(currentHome)
+    if (
+      !currentHomeParent ||
+      currentHomeParent === currentHome ||
+      !candidate.startsWith(`${currentHomeParent}${path.sep}`)
+    ) {
+      return candidate
+    }
+
+    const relativeFromHomeParent = path.relative(currentHomeParent, candidate)
+    const pathParts = relativeFromHomeParent
+      .split(path.sep)
+      .filter(Boolean)
+
+    if (pathParts.length < 2) {
+      return candidate
+    }
+
+    const candidateHomeName = pathParts[0]
+    if (!candidateHomeName || candidateHomeName === currentHomeName) {
+      return candidate
+    }
+
+    return path.normalize(path.join(currentHome, ...pathParts.slice(1)))
+  }
+
+  private async applyResponseJQ(
+    output: Record<string, unknown>,
+    filter: string
+  ): Promise<Record<string, unknown>> {
+    const resolvedInput = await this.resolveResponseJQInput(output)
+    if (resolvedInput === null) {
+      throw new Error(
+        'This tool did not return JSON output, a JSON string, or a JSON file path.'
+      )
+    }
+
+    const projected = await jq.run(filter, resolvedInput.input, {
+      input: 'json',
+      output: 'json'
+    })
+
+    if (resolvedInput.sourceJsonFilePath) {
+      await fs.promises.writeFile(
+        resolvedInput.sourceJsonFilePath,
+        this.serializeProjectedResultForFile(projected),
+        'utf8'
+      )
+    }
+
+    return {
+      result: projected
+    }
+  }
+
+  private async resolveResponseJQInput(
+    output: Record<string, unknown>
+  ): Promise<{
+    input: NodeJQJson
+    sourceJsonFilePath: string | null
+  } | null> {
+    const resultValue = output['result']
+    const resolvedResult = await this.resolveJsonLikeValue(resultValue)
+    if (resolvedResult !== null) {
+      return {
+        input: {
+          ...output,
+          result: resolvedResult.value
+        } as NodeJQJson,
+        sourceJsonFilePath: resolvedResult.sourceJsonFilePath
+      }
+    }
+
+    return {
+      input: output as NodeJQJson,
+      sourceJsonFilePath: null
+    }
+  }
+
+  private async resolveJsonLikeValue(value: unknown): Promise<{
+    value: NodeJQJson
+    sourceJsonFilePath: string | null
+  } | null> {
+    if (value == null) {
+      return null
+    }
+
+    if (Array.isArray(value) || typeof value === 'object') {
+      return {
+        value: value as NodeJQJson,
+        sourceJsonFilePath: null
+      }
+    }
+
+    if (typeof value !== 'string') {
+      return null
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return null
+    }
+
+    const inlineJson = this.parseJsonValue(trimmed)
+    if (inlineJson !== null) {
+      return {
+        value: inlineJson,
+        sourceJsonFilePath: null
+      }
+    }
+
+    const filePath = this.normalizePossibleFilesystemPath(trimmed).trim() || trimmed
+
+    try {
+      const stat = await fs.promises.stat(filePath)
+      if (!stat.isFile()) {
+        return null
+      }
+
+      const fileContent = await fs.promises.readFile(filePath, 'utf8')
+      const parsedFileContent = this.parseJsonValue(fileContent)
+      if (parsedFileContent === null) {
+        return null
+      }
+
+      return {
+        value: parsedFileContent,
+        sourceJsonFilePath: filePath
+      }
+    } catch {
+      return null
+    }
+  }
+
+  private serializeProjectedResultForFile(value: unknown): string {
+    if (typeof value === 'string') {
+      return value
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value)
+    }
+
+    return JSON.stringify(value, null, 2)
+  }
+
+  private parseJsonValue(value: string): NodeJQJson | null {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return null
+    }
   }
 
   private mapArgs(

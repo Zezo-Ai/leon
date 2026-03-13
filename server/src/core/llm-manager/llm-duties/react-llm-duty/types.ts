@@ -12,6 +12,11 @@ export interface FunctionConfig {
   description: string
   parameters: Record<string, unknown>
   output_schema?: Record<string, unknown>
+  hooks?: {
+    post_execution?: {
+      response_jq?: string
+    }
+  }
 }
 
 export type ToolFunctionsMap = Record<string, FunctionConfig>

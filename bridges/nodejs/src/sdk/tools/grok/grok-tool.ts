@@ -102,6 +102,7 @@ interface GrokResponse {
   content?: string
   citations?: string[]
   annotations?: Annotation[]
+  [key: string]: unknown
 }
 
 export default class GrokTool extends Tool {
@@ -206,7 +207,9 @@ export default class GrokTool extends Tool {
    * Uses the /v1/responses endpoint (Responses API) for tool support
    * Reference: https://docs.x.ai/docs/guides/tools/search-tools
    */
-  async chatCompletion(options: GrokChatOptions): Promise<GrokResponse> {
+  async chatCompletion(
+    options: GrokChatOptions
+  ): Promise<GrokResponse> {
     if (!this.apiKey) {
       return {
         success: false,
@@ -462,7 +465,9 @@ Use web search to gather current and accurate information.`
    * Get what's trending on X/Twitter
    * Reference: https://docs.x.ai/docs/guides/tools/search-tools
    */
-  async getTrendingOnX(location?: string): Promise<GrokResponse> {
+  async getTrendingOnX(
+    location?: string
+  ): Promise<GrokResponse> {
     const locationText = location ? ` in ${location}` : ' globally'
     const prompt = `What are the top trending topics and discussions on X/Twitter${locationText} right now? Provide details about each trend including what it's about and key posts.`
 

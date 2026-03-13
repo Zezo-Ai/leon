@@ -20,7 +20,6 @@ DEFAULT_SETTINGS = {
 }
 REQUIRED_SETTINGS = ["GROK_API_KEY"]
 
-
 class GrokTool(BaseTool):
     """
     Grok Tool for AI-powered web and X/Twitter search using xAI's server-side tools.

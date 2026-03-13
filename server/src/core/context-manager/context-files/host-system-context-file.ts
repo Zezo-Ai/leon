@@ -1,4 +1,5 @@
 import os from 'node:os'
+import path from 'node:path'
 
 import { DateHelper } from '@/helpers/date-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
@@ -18,6 +19,9 @@ export class HostSystemContextFile extends ContextFile {
 
   public generate(): string {
     const username = this.probeHelper.getSafeUsername()
+    const homeDirectory = os.homedir()
+    const desktopPath = path.join(homeDirectory, 'Desktop')
+    const downloadsPath = path.join(homeDirectory, 'Downloads')
     const operatingSystemNameVersion =
       this.probeHelper.getOperatingSystemNameVersion()
     const shell =
@@ -38,7 +42,7 @@ export class HostSystemContextFile extends ContextFile {
     const bootTime = DateHelper.getDateTime(Date.now() - os.uptime() * 1_000)
 
     return [
-      `> OS/runtime identity, locale/timezone, VPN/proxy and hardware basics. Host system is ${operatingSystemNameVersion} (${os.platform()} ${os.release()}, ${os.arch()}), user ${username}, shell ${shell}, runtime location hint ${ownerLocation.value}${vpnProxyStatus.behindVpnOrProxy ? ' (VPN/proxy detected).' : '.'}`,
+      `> OS/runtime identity, locale/timezone, VPN/proxy, hardware basics and common user directories. Host system is ${operatingSystemNameVersion} (${os.platform()} ${os.release()}, ${os.arch()}), user ${username}, home ${homeDirectory}, Desktop ${desktopPath}, Downloads ${downloadsPath}, shell ${shell}, runtime location hint ${ownerLocation.value}${vpnProxyStatus.behindVpnOrProxy ? ' (VPN/proxy detected).' : '.'}`,
       '# HOST_SYSTEM',
       `- Generated at: ${DateHelper.getDateTime()}`,
       `- OS name and version: ${operatingSystemNameVersion}`,
@@ -60,7 +64,9 @@ export class HostSystemContextFile extends ContextFile {
       `- CPU cores: ${cpuCores}`,
       `- Total RAM: ${totalMemory}`,
       `- Username: ${username}`,
-      `- Home directory: ${os.homedir()}`,
+      `- Home directory: ${homeDirectory}`,
+      `- Desktop path: ${desktopPath}`,
+      `- Downloads path: ${downloadsPath}`,
       `- Shell: ${shell}`,
       `- Boot time: ${bootTime}`,
       `- Uptime: ${this.probeHelper.formatUptime(os.uptime())}`,

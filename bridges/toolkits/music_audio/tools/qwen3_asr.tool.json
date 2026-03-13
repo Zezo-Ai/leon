@@ -44,6 +44,11 @@
   "functions": {
     "transcribeToFile": {
       "description": "Transcribe audio to a file using Qwen3 ASR.",
+      "hooks": {
+        "post_execution": {
+          "response_jq": "[.result.segments[].text] | map(select(type == \"string\" and length > 0)) | join(\" \")"
+        }
+      },
       "parameters": {
         "type": "object",
         "properties": {

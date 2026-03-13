@@ -45,6 +45,7 @@ Decision policy:
 - When a Context File is provided, treat it as authoritative evidence of what runtime grounding is available before asking questions about the environment.
 - Use structured_knowledge.memory.write for explicit durable memory writes ("remember this", "save this", "don't forget").
 - When a context file is relevant, locate it first, then read the full file before finalizing the answer.
+- If the request mentions or depends on an input local file and you do not already have a confirmed existing path, the plan must first add steps to search for it and confirm the path exists before any tool step that uses that file.
 
 Always create a complete plan with ALL steps needed upfront. Do not return only the first step.
 For example, if the user asks to "find a file and process it", include ALL steps: find, probe, process.
@@ -77,7 +78,6 @@ When chaining tools, reuse fields from the latest observation to fill the next t
 IMPORTANT: Only provide required parameters. Do NOT fill in optional parameters unless the user explicitly provided values for them. Never guess or infer optional parameter values such as file paths, configurations, or system-specific settings.
 Never emit placeholder or acknowledgment-only tool inputs that do not actually advance the current step. If you do not have a concrete action, return "replan" or a clarification handoff instead.
 Previous Executions contain reusable observed values from earlier steps. Use them directly for later write/report/transform steps.
-
 When the next action is based on uncertainty, assumptions, ambiguous selection, or could be irreversible, ask for confirmation before executing the tool.
 
 Human-in-the-loop continuation:
@@ -100,7 +100,6 @@ export const RESOLVE_FUNCTION_SYSTEM_PROMPT = `You are selecting a function from
 You are given the available functions for a specific tool. Choose the most appropriate function for the current step and provide the tool_input.
 
 IMPORTANT: Only provide required parameters. Do NOT fill in optional parameters unless the user explicitly provided values for them.
-
 Human-in-the-loop continuation:
 - If required information is missing, return {"type":"handoff","intent":"clarification","draft":"..."} with one concise clarification question.
 - If the request context already includes a clarification reply, use it to continue THIS SAME step (do not restart the whole task, do not re-run already completed steps).

@@ -166,6 +166,11 @@
     },
     "searchWeb": {
       "description": "Search the web using Grok's server-side web search tool.",
+      "hooks": {
+        "post_execution": {
+          "response_jq": ".result.content"
+        }
+      },
       "parameters": {
         "type": "object",
         "properties": {
@@ -201,6 +206,11 @@
     },
     "searchX": {
       "description": "Search X/Twitter using Grok's server-side X search tool.",
+      "hooks": {
+        "post_execution": {
+          "response_jq": ".result.content"
+        }
+      },
       "parameters": {
         "type": "object",
         "properties": {
@@ -245,6 +255,11 @@
     },
     "search": {
       "description": "Search both web and X using Grok's server-side search tools.",
+      "hooks": {
+        "post_execution": {
+          "response_jq": ".result.content"
+        }
+      },
       "parameters": {
         "type": "object",
         "properties": {
@@ -316,6 +331,11 @@
     },
     "deepResearch": {
       "description": "Perform deep research on a topic using web search.",
+      "hooks": {
+        "post_execution": {
+          "response_jq": ".result.content"
+        }
+      },
       "parameters": {
         "type": "object",
         "properties": {
@@ -348,6 +368,11 @@
     },
     "getTrendingOnX": {
       "description": "Get trending topics on X/Twitter.",
+      "hooks": {
+        "post_execution": {
+          "response_jq": ".result.content"
+        }
+      },
       "parameters": {
         "type": "object",
         "properties": {

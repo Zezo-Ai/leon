@@ -95,7 +95,12 @@ class Qwen3ASRTool(BaseTool):
             if return_timestamps and use_forced_aligner:
                 forced_aligner_path = self.get_resource_path(FORCED_ALIGNER_MODEL_NAME)
 
-            tasks = [{"audio_path": input_path, "output_path": output_path}]
+            tasks = [
+                {
+                    "audio_path": input_path,
+                    "output_path": output_path,
+                }
+            ]
 
             with tempfile.NamedTemporaryFile(
                 mode="w", suffix=".json", delete=False, encoding="utf-8"

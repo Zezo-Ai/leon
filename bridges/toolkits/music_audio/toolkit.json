@@ -7,12 +7,8 @@
     "GPU_COMPUTE.md"
   ],
   "tools": [
-    "faster_whisper",
     "qwen3_asr",
     "qwen3_tts",
-    "openai_audio",
-    "assemblyai_audio",
-    "elevenlabs_audio",
     "ecapa",
     "chatterbox_onnx",
     "ultimate_vocal_remover_onnx"

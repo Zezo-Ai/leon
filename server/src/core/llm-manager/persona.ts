@@ -175,9 +175,10 @@ export default class Persona {
       Persona.instance = this
 
       this.setMood()
-      setInterval(() => {
-        void this.syncWeatherMoodAndContext()
-      }, 60_000 * 60)
+      // Disabled until owner location grounding is reliable enough.
+      // setInterval(() => {
+      //   void this.syncWeatherMoodAndContext()
+      // }, 60_000 * 60)
 
       this.setContextInfo()
       this.setOwnerInfo()
@@ -187,7 +188,8 @@ export default class Persona {
         EVENT_EMITTER.emit('persona_new-info-set')
       }, 60_000 * 5)
 
-      void this.syncWeatherMoodAndContext()
+      // Disabled until owner location grounding is reliable enough.
+      // void this.syncWeatherMoodAndContext()
     }
   }
 
@@ -389,7 +391,7 @@ export default class Persona {
     }
   }
 
-  private async syncWeatherMoodAndContext(): Promise<void> {
+  async syncWeatherMoodAndContext(): Promise<void> {
     try {
       await this.refreshWeatherSnapshot()
     } catch (error) {

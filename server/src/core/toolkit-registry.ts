@@ -18,6 +18,11 @@ interface ToolkitToolDefinition {
       description: string
       parameters: Record<string, unknown>
       output_schema?: Record<string, unknown>
+      hooks?: {
+        post_execution?: {
+          response_jq?: string
+        }
+      }
     }
   >
 }
