@@ -37,7 +37,10 @@ import {
   embedQMDStore
 } from '@sdk/tools/memory/qmd-store'
 
-import type { KnowledgeNamespace } from './types'
+import type {
+  KnowledgeNamespace,
+  RecallRetrievalMode
+} from './types'
 
 const QMD_INDEX_NAME = 'leon-memory'
 const QMD_UPDATE_MIN_INTERVAL_MS = 5_000
@@ -58,6 +61,7 @@ interface QMDQueryInput {
   namespaces: KnowledgeNamespace[]
   topK: number
   contextFilenames?: string[]
+  retrievalMode?: RecallRetrievalMode
 }
 
 type QMDSearchMode = 'query' | 'search'
@@ -183,7 +187,11 @@ export default class QMDBackend {
 
   public async query(input: QMDQueryInput): Promise<QMDRecallHit[]> {
     await this.refresh()
-    if (this.hybridRetrievalEnabled) {
+    const retrievalMode = input.retrievalMode || 'hybrid'
+    const allowSemanticSearch =
+      retrievalMode === 'hybrid' && this.hybridRetrievalEnabled
+
+    if (allowSemanticSearch) {
       await this.ensureEmbeddings()
     }
 
@@ -239,6 +247,18 @@ export default class QMDBackend {
       modeUsed: QMDSearchMode
     }> => {
       const lexicalQuery = buildLexicalSearchQuery(input.query, bridgeTerms)
+      if (retrievalMode === 'lexical') {
+        return {
+          rows: await this.runQMDSearchMode(
+            'search',
+            lexicalQuery,
+            scopedCollectionNames,
+            limit
+          ),
+          modeUsed: 'search'
+        }
+      }
+
       let rows = await this.runQMDSearchMode(
         'query',
         buildExpansionQuery(input.query, bridgeTerms),
@@ -366,7 +386,7 @@ export default class QMDBackend {
     let rows: QMDStoreRow[] = []
     let modeUsed: QMDSearchMode | null = null
 
-    if (this.hybridRetrievalEnabled) {
+    if (allowSemanticSearch) {
       try {
         const result = await runPreferredSearchModes(
           [],
@@ -384,7 +404,11 @@ export default class QMDBackend {
       }
     } else {
       LogHelper.title('Memory Manager')
-      LogHelper.debug('QMD cold-start retrieval mode: search-only (hybrid deferred)')
+      LogHelper.debug(
+        retrievalMode === 'lexical'
+          ? 'QMD retrieval mode: search-only (lexical requested)'
+          : 'QMD cold-start retrieval mode: search-only (hybrid deferred)'
+      )
     }
 
     if (rows.length === 0) {

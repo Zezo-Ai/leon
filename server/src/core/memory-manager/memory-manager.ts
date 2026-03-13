@@ -503,13 +503,16 @@ export default class MemoryManager {
         input.contextFilenames && input.contextFilenames.length > 0
           ? input.contextFilenames.join(', ')
           : 'all'
-      } | topK=${topK} | token_budget=${tokenBudget}`
+      } | topK=${topK} | token_budget=${tokenBudget} | retrieval_mode=${
+        input.retrievalMode || 'hybrid'
+      }`
     )
 
     const qmdHits = await this.qmdBackend.query({
       query: input.query,
       namespaces,
       topK,
+      ...(input.retrievalMode ? { retrievalMode: input.retrievalMode } : {}),
       ...(input.contextFilenames && input.contextFilenames.length > 0
         ? { contextFilenames: input.contextFilenames }
         : {})
@@ -843,7 +846,8 @@ export default class MemoryManager {
       topK: LEON_MEMORY_PLANNING_RECALL_TOP_K,
       tokenBudget,
       includeFacts: true,
-      skipContextSync: true
+      skipContextSync: true,
+      retrievalMode: 'lexical'
     })
 
     if (!recalled.hits.length && !recalled.facts.length) {

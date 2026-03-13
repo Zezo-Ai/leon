@@ -7,6 +7,8 @@ export type KnowledgeNamespace =
   | 'memory_discussion'
   | 'conversation_daily'
 
+export type RecallRetrievalMode = 'hybrid' | 'lexical'
+
 export type MemoryKind =
   | 'fact'
   | 'preference'
@@ -67,6 +69,7 @@ export interface RecallQuery {
   tokenBudget?: number
   includeFacts?: boolean
   skipContextSync?: boolean
+  retrievalMode?: RecallRetrievalMode
 }
 
 export interface RecallHit {
