@@ -15,6 +15,10 @@ import { HabitsContextFile } from '@/core/context-manager/context-files/habits-c
 import { MediaProfileContextFile } from '@/core/context-manager/context-files/media-profile-context-file'
 import { LeonContextFile } from '@/core/context-manager/context-files/leon-context-file'
 import { ArchitectureContextFile } from '@/core/context-manager/context-files/architecture-context-file'
+import {
+  OwnerContextFile,
+  OWNER_CONTEXT_TTL_MS
+} from '@/core/context-manager/context-files/owner-context-file'
 
 export const DEFAULT_CONTEXT_REFRESH_TTL_MS = 10 * 60 * 1_000
 
@@ -29,20 +33,21 @@ export function createContextFiles(
   leonRuntimeResolvers: LeonRuntimeContextResolvers
 ): ContextFile[] {
   return [
-    new HomeContextFile(ttlMs),
-    new HostSystemContextFile(probeHelper, ttlMs),
-    new GpuComputeContextFile(probeHelper, ttlMs),
-    new StorageContextFile(probeHelper, ttlMs),
-    new SystemResourcesContextFile(probeHelper, ttlMs),
-    new BrowserHistoryContextFile(probeHelper, ttlMs),
-    new ActivityContextFile(probeHelper, ttlMs),
-    new LocalInventoryContextFile(probeHelper, ttlMs),
-    new NetworkEcosystemContextFile(probeHelper, ttlMs),
-    new WorkspaceIntelligenceContextFile(probeHelper, ttlMs),
-    new HabitsContextFile(probeHelper, ttlMs),
-    new MediaProfileContextFile(probeHelper, ttlMs),
+    new OwnerContextFile(OWNER_CONTEXT_TTL_MS),
     new LeonContextFile(),
     new ArchitectureContextFile(),
-    new LeonRuntimeContextFile(probeHelper, leonRuntimeResolvers, ttlMs)
+    new LeonRuntimeContextFile(probeHelper, leonRuntimeResolvers, ttlMs),
+    new HomeContextFile(ttlMs),
+    new HostSystemContextFile(probeHelper, ttlMs),
+    new WorkspaceIntelligenceContextFile(probeHelper, ttlMs),
+    new ActivityContextFile(probeHelper, ttlMs),
+    new HabitsContextFile(probeHelper, ttlMs),
+    new MediaProfileContextFile(probeHelper, ttlMs),
+    new BrowserHistoryContextFile(probeHelper, ttlMs),
+    new LocalInventoryContextFile(probeHelper, ttlMs),
+    new NetworkEcosystemContextFile(probeHelper, ttlMs),
+    new StorageContextFile(probeHelper, ttlMs),
+    new SystemResourcesContextFile(probeHelper, ttlMs),
+    new GpuComputeContextFile(probeHelper, ttlMs)
   ]
 }

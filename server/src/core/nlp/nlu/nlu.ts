@@ -28,6 +28,7 @@ import {
 } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import Conversation from '@/core/nlp/conversation'
+import { syncOwnerProfileFromTurn } from '@/core/context-manager/owner-profile-sync'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
 import {
   DEFAULT_NLU_PROCESS_RESULT,
@@ -792,6 +793,14 @@ export default class NLU {
       }).catch((error: unknown) => {
         LogHelper.title('NLU')
         LogHelper.warning(`Failed to update self model: ${error}`)
+      })
+      void syncOwnerProfileFromTurn(
+        utterance,
+        String(output),
+        toolExecutions
+      ).catch((error: unknown) => {
+        LogHelper.title('NLU')
+        LogHelper.warning(`Failed to sync owner profile from turn: ${error}`)
       })
 
       if (!hasExplicitMemoryWrite) {
