@@ -226,6 +226,9 @@
       "Launching {{ binary_name }} with: {{ command }}...",
       "Executing command: {{ command }}..."
     ],
+    "bridges.tools.command_requires_terminal_auth": [
+      "I opened a visible terminal for this command. If it asks for your password or confirmation, enter it there. I'll continue once it finishes."
+    ],
     "bridges.tools.command_completed": [
       "Command completed successfully in {{ execution_time }}.",
       "{{ command }} finished in {{ execution_time }}.",

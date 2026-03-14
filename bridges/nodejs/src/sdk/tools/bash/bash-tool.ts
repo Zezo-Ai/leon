@@ -45,13 +45,21 @@ const UNSAFE_COMMAND_PATTERNS = [
   'while true; do'
 ]
 
+const TERMINAL_AUTH_COMMANDS = new Set(['sudo', 'doas', 'pkexec', 'su'])
+const TERMINAL_AUTH_WRAPPERS = new Set([
+  'env',
+  'command',
+  'builtin',
+  'nohup',
+  'time'
+])
+
 export default class BashTool extends Tool {
   private static readonly TOOLKIT = 'operating_system_control'
   private readonly config: ReturnType<typeof ToolkitConfig.load>
 
   constructor() {
     super()
-    // Load configuration from central toolkits directory
     this.config = ToolkitConfig.load(BashTool.TOOLKIT, this.toolName)
     const toolSettings = ToolkitConfig.loadToolSettings(
       BashTool.TOOLKIT,
@@ -75,9 +83,6 @@ export default class BashTool extends Tool {
     return this.config['description']
   }
 
-  /**
-   * Execute a bash command and return the result.
-   */
   async executeBashCommand(
     command: string,
     options: ExecuteOptions = {}
@@ -99,9 +104,34 @@ export default class BashTool extends Tool {
       }
     }
 
+    const requiresVisibleTerminal = this.requiresVisibleTerminal(analyzedCommand)
+
     try {
-      // Use the base tool's command execution method
-      // For bash commands, we'll use 'bash' as the binary and '-c' with the command as args
+      if (requiresVisibleTerminal) {
+        await this.report('bridges.tools.command_requires_terminal_auth')
+
+        await this.executeCommand({
+          binaryName: 'bash',
+          args: ['-c', command],
+          options: {
+            openInTerminal: true,
+            waitForExit: true,
+            cwd,
+            timeout: timeout * 1_000
+          },
+          skipBinaryDownload: true
+        })
+
+        return {
+          success: true,
+          stdout:
+            'Command executed in a visible terminal. Review that terminal for command output.',
+          stderr: '',
+          returncode: 0,
+          command
+        }
+      }
+
       const resultOutput = await this.executeCommand({
         binaryName: 'bash',
         args: ['-c', command],
@@ -110,7 +140,7 @@ export default class BashTool extends Tool {
           cwd,
           timeout: timeout * 1_000
         },
-        skipBinaryDownload: true // bash is a built-in command, no need to download
+        skipBinaryDownload: true
       })
 
       return {
@@ -123,7 +153,6 @@ export default class BashTool extends Tool {
     } catch (error: unknown) {
       const errorMessage = (error as Error).message
 
-      // Parse error to determine if it was a timeout, command failure, or other error
       if (errorMessage.toLowerCase().includes('timed out')) {
         return {
           success: false,
@@ -132,15 +161,14 @@ export default class BashTool extends Tool {
           returncode: -1,
           command
         }
-      } else if (errorMessage.includes('failed with exit code')) {
-        // Extract exit code and error from the base tool's error message
+      }
+
+      if (errorMessage.includes('failed with exit code')) {
         const exitCodeMatch = errorMessage.match(/exit code (\d+)/)
         const exitCode =
           exitCodeMatch && exitCodeMatch[1]
             ? parseInt(exitCodeMatch[1], 10)
             : -1
-
-        // Extract stderr from the error message if present
         const stderrMatch = errorMessage.match(/exit code \d+: (.+)$/)
         const stderr =
           stderrMatch && stderrMatch[1] ? stderrMatch[1] : errorMessage
@@ -148,26 +176,24 @@ export default class BashTool extends Tool {
         return {
           success: false,
           stdout: '',
-          stderr,
+          stderr: requiresVisibleTerminal
+            ? `Command failed in the visible terminal with exit code ${exitCode}. Review that terminal for details.`
+            : stderr,
           returncode: exitCode,
           command
         }
-      } else {
-        return {
-          success: false,
-          stdout: '',
-          stderr: errorMessage,
-          returncode: -1,
-          command
-        }
+      }
+
+      return {
+        success: false,
+        stdout: '',
+        stderr: errorMessage,
+        returncode: -1,
+        command
       }
     }
   }
 
-  /**
-   * Basic safety check for bash commands.
-   * Returns True if command appears safe to execute.
-   */
   async isSafeCommand(command: string): Promise<boolean> {
     const commandLower = command.toLowerCase()
 
@@ -184,10 +210,6 @@ export default class BashTool extends Tool {
     return true
   }
 
-  /**
-   * Assess the risk level of a command.
-   * Returns: 'low', 'medium', 'high', or 'critical'
-   */
   async getCommandRiskLevel(command: string): Promise<string> {
     const commandLower = command.toLowerCase()
 
@@ -225,9 +247,6 @@ export default class BashTool extends Tool {
     return riskLevel
   }
 
-  /**
-   * Get a human-readable description of the command's risk.
-   */
   async getRiskDescription(command: string): Promise<string> {
     const riskLevel = await this.getCommandRiskLevel(command)
     const commandLower = command.toLowerCase()
@@ -294,5 +313,84 @@ export default class BashTool extends Tool {
       commandLower.includes('| bash') || commandLower.includes('| sh')
 
     return downloadsRemoteContent && pipesToShell
+  }
+
+  private requiresVisibleTerminal(command: string): boolean {
+    let currentToken = ''
+    let quote: '\'' | '"' | null = null
+    let atCommandStart = true
+    let escaped = false
+
+    const flushToken = (): boolean => {
+      if (!currentToken) {
+        return false
+      }
+
+      const token = currentToken
+      currentToken = ''
+
+      if (!atCommandStart) {
+        return false
+      }
+
+      if (this.isShellAssignment(token) || TERMINAL_AUTH_WRAPPERS.has(token)) {
+        return false
+      }
+
+      atCommandStart = false
+      return TERMINAL_AUTH_COMMANDS.has(token)
+    }
+
+    for (const char of command) {
+      if (quote) {
+        if (escaped) {
+          escaped = false
+          continue
+        }
+
+        if (char === '\\' && quote === '"') {
+          escaped = true
+          continue
+        }
+
+        if (char === quote) {
+          quote = null
+        }
+        continue
+      }
+
+      if (char === '\'' || char === '"') {
+        quote = char
+        continue
+      }
+
+      if (char === '\n' || char === ';' || char === '|' || char === '&') {
+        if (flushToken()) {
+          return true
+        }
+        atCommandStart = true
+        continue
+      }
+
+      if (char === ' ' || char === '\t' || char === '\r') {
+        if (flushToken()) {
+          return true
+        }
+        continue
+      }
+
+      currentToken += char
+    }
+
+    return flushToken()
+  }
+
+  private isShellAssignment(token: string): boolean {
+    const separatorIndex = token.indexOf('=')
+    if (separatorIndex <= 0) {
+      return false
+    }
+
+    return !token.slice(0, separatorIndex).includes('/')
   }
 }

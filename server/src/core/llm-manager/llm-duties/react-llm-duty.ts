@@ -113,6 +113,11 @@ interface ReactExecutionContinuationState {
   createdAt: number
 }
 
+interface ReactExecutionContinuationPayload {
+  state: ReactExecutionContinuationState
+  resumedInput: string
+}
+
 interface PreparedReactHistory {
   messageLogs: MessageLog[]
   localChatHistory?: ChatHistoryItem[]
@@ -500,33 +505,22 @@ export class ReActLLMDuty extends LLMDuty {
           )
 
           if (stepResult.signal.intent === 'clarification') {
-            const pausedTrackedSteps =
-              trackedSteps.length > 0
-                ? this.buildPausedTrackedSteps(trackedSteps, currentStepIndex)
-                : [
-                    {
-                      label: currentStep.label,
-                      status: 'in_progress' as PlanStepStatus
-                    }
-                  ]
-            const pendingWithCurrent: PlanStep[] = [currentStep, ...pendingSteps]
-
-            this.saveExecutionContinuation({
-              version: 1,
-              phase: 'execution',
+            const pausedTrackedSteps = this.buildPausedTrackedSteps(
+              trackedSteps,
+              currentStepIndex
+            )
+            this.pauseExecutionForClarification({
               planWidgetId: planWidgetIdValue,
-              originalInput: continuation?.state.originalInput || ownerInputText,
+              originalInput:
+                continuation?.state.originalInput || ownerInputText,
               clarificationQuestion: stepResult.signal.draft,
-              pendingSteps: pendingWithCurrent,
+              currentStep,
+              pendingSteps,
               executionHistory,
               trackedSteps: pausedTrackedSteps,
-              currentStepIndex:
-                pausedTrackedSteps.length > 0
-                  ? Math.min(currentStepIndex, pausedTrackedSteps.length - 1)
-                  : 0,
+              currentStepIndex,
               replanCount,
-              executionCount,
-              createdAt: Date.now()
+              executionCount
             })
             currentExecutingFunction = null
             emitPlanWidget(
@@ -619,6 +613,62 @@ export class ReActLLMDuty extends LLMDuty {
         )
         LogHelper.debug(`Observation: ${stepResult.execution.observation}`)
 
+        // Check for short-circuit handoff from tool result
+        if (stepResult.handoffSignal) {
+          LogHelper.title(this.name)
+          LogHelper.debug(
+            `Tool returned handoff signal: intent="${stepResult.handoffSignal.intent}"`
+          )
+
+          if (stepResult.handoffSignal.intent === 'clarification') {
+            const pausedTrackedSteps = this.buildPausedTrackedSteps(
+              trackedSteps,
+              currentStepIndex
+            )
+            this.pauseExecutionForClarification({
+              planWidgetId: planWidgetIdValue,
+              originalInput:
+                continuation?.state.originalInput || ownerInputText,
+              clarificationQuestion: stepResult.handoffSignal.draft,
+              currentStep,
+              pendingSteps,
+              executionHistory,
+              trackedSteps: pausedTrackedSteps,
+              currentStepIndex,
+              replanCount,
+              executionCount
+            })
+            currentExecutingFunction = null
+            emitPlanWidget(
+              pausedTrackedSteps,
+              null,
+              planWidgetIdValue,
+              true,
+              currentExecutingFunction
+            )
+
+            LogHelper.debug(
+              `Execution paused for clarification at step "${currentStep.label}"`
+            )
+            return await finalizeFromSignal(stepResult.handoffSignal)
+          }
+
+          // Mark all remaining as completed
+          for (const ts of trackedSteps) {
+            ts.status = 'completed'
+          }
+          currentExecutingFunction = null
+          emitPlanWidget(
+            trackedSteps,
+            null,
+            planWidgetIdValue,
+            true,
+            currentExecutingFunction
+          )
+
+          return await finalizeFromSignal(stepResult.handoffSignal)
+        }
+
         // Update plan widget: mark current step as completed, next as in_progress
         if (currentStepIndex < trackedSteps.length) {
           trackedSteps[currentStepIndex]!.status = 'completed'
@@ -636,29 +686,6 @@ export class ReActLLMDuty extends LLMDuty {
           currentExecutingFunction
         )
         currentStepIndex = nextTrackedIndex
-
-        // Check for short-circuit handoff from tool result
-        if (stepResult.handoffSignal) {
-          LogHelper.title(this.name)
-          LogHelper.debug(
-            `Tool returned handoff signal: intent="${stepResult.handoffSignal.intent}"`
-          )
-
-          // Mark all remaining as completed
-          for (const ts of trackedSteps) {
-            ts.status = 'completed'
-          }
-          currentExecutingFunction = null
-          emitPlanWidget(
-            trackedSteps,
-            null,
-            planWidgetIdValue,
-            true,
-            currentExecutingFunction
-          )
-
-          return await finalizeFromSignal(stepResult.handoffSignal)
-        }
 
         if (stepResult.execution.status === 'error') {
           if (replanCount >= MAX_REPLANS) {
@@ -1365,7 +1392,7 @@ export class ReActLLMDuty extends LLMDuty {
     return this.safeJSONStringify(input)
   }
 
-  private loadExecutionContinuation(): ReactExecutionContinuationState | null {
+  private static loadValidExecutionContinuationState(): ReactExecutionContinuationState | null {
     const state = ReActLLMDuty.continuationStateStore.load()
     if (!state) {
       return null
@@ -1374,16 +1401,20 @@ export class ReActLLMDuty extends LLMDuty {
     const isExpired =
       !state.createdAt || Date.now() - state.createdAt > REACT_CONTINUATION_MAX_AGE_MS
     if (isExpired) {
-      this.clearExecutionContinuation()
+      ReActLLMDuty.continuationStateStore.save(null)
       return null
     }
 
     if (state.phase !== 'execution' || !Array.isArray(state.pendingSteps)) {
-      this.clearExecutionContinuation()
+      ReActLLMDuty.continuationStateStore.save(null)
       return null
     }
 
     return state
+  }
+
+  private loadExecutionContinuation(): ReactExecutionContinuationState | null {
+    return ReActLLMDuty.loadValidExecutionContinuationState()
   }
 
   private saveExecutionContinuation(state: ReactExecutionContinuationState): void {
@@ -1396,7 +1427,7 @@ export class ReActLLMDuty extends LLMDuty {
 
   private consumeExecutionContinuation(
     ownerReply: string
-  ): { state: ReactExecutionContinuationState, resumedInput: string } | null {
+  ): ReactExecutionContinuationPayload | null {
     const state = this.loadExecutionContinuation()
     if (!state) {
       return null
@@ -1407,6 +1438,40 @@ export class ReActLLMDuty extends LLMDuty {
     const resumedInput = `${state.originalInput}\n\nPrevious clarification request: "${state.clarificationQuestion}"\nClarification reply: "${ownerReply}"`
 
     return { state, resumedInput }
+  }
+
+  private pauseExecutionForClarification(params: {
+    planWidgetId: string
+    originalInput: string
+    clarificationQuestion: string
+    currentStep: PlanStep
+    pendingSteps: PlanStep[]
+    executionHistory: ExecutionRecord[]
+    trackedSteps: TrackedPlanStep[]
+    currentStepIndex: number
+    replanCount: number
+    executionCount: number
+  }): void {
+    this.saveExecutionContinuation({
+      version: 1,
+      phase: 'execution',
+      planWidgetId: params.planWidgetId,
+      originalInput: params.originalInput,
+      clarificationQuestion: params.clarificationQuestion,
+      pendingSteps: [params.currentStep, ...params.pendingSteps].map((step) => ({
+        function: step.function,
+        label: step.label
+      })),
+      executionHistory: params.executionHistory.map((item) => ({ ...item })),
+      trackedSteps: params.trackedSteps.map((step) => ({ ...step })),
+      currentStepIndex:
+        params.trackedSteps.length > 0
+          ? Math.min(params.currentStepIndex, params.trackedSteps.length - 1)
+          : 0,
+      replanCount: params.replanCount,
+      executionCount: params.executionCount,
+      createdAt: Date.now()
+    })
   }
 
   private buildPausedTrackedSteps(

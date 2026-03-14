@@ -817,7 +817,6 @@ export default class NLU {
       await BRAIN.talk(String(output), true)
     }
   }
-
   private async runSkillWriterCreateSkill(
     utterance: NLPUtterance
   ): Promise<void> {
