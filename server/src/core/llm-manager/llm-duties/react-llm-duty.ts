@@ -450,15 +450,13 @@ export class ReActLLMDuty extends LLMDuty {
         }
 
         // Emit plan summary as text, then show the widget
-        const planningProgressMessage = buildProgressMessageFromSteps(
-          planResult.steps
-        )
+        const planningProgressMessage =
+          planResult.summary ||
+          buildProgressMessageFromSteps(planResult.steps)
         if (planningProgressMessage) {
           await this.emitProgress(
             this.toProgressiveMessage(planningProgressMessage)
           )
-        } else if (planResult.summary) {
-          await this.emitProgress(this.toProgressiveMessage(planResult.summary))
         }
         emitPlanWidget(
           trackedSteps,
@@ -771,19 +769,17 @@ export class ReActLLMDuty extends LLMDuty {
             LogHelper.debug(
               `Recovery re-plan ${replanCount}/${MAX_REPLANS}: ${pendingSteps.map((s) => s.function).join(' -> ')}`
             )
-            const recoveryProgressMessage = buildProgressMessageFromSteps(
-              recoveryPlanResult.steps
-            )
+            const recoveryProgressMessage =
+              recoveryPlanResult.summary ||
+              buildProgressMessageFromSteps(recoveryPlanResult.steps)
             if (recoveryProgressMessage) {
+              if (recoveryPlanResult.summary) {
+                LogHelper.debug(
+                  `Recovery plan summary: "${recoveryPlanResult.summary}"`
+                )
+              }
               await this.emitProgress(
                 this.toProgressiveMessage(recoveryProgressMessage)
-              )
-            } else if (recoveryPlanResult.summary) {
-              LogHelper.debug(
-                `Recovery plan summary: "${recoveryPlanResult.summary}"`
-              )
-              await this.emitProgress(
-                this.toProgressiveMessage(recoveryPlanResult.summary)
               )
             }
 
