@@ -173,20 +173,24 @@ export async function runExecutionSelfObservationPhase(
   const historySection = formatExecutionHistory(executionHistory)
   const baseSystemPrompt = `You are evaluating whether execution should continue after the current plan finished.
 
-Use only the user request and collected observations.
+<task>
+Use only the user request and collected observations to decide whether the request is complete or whether more tool steps are still needed.
+</task>
 
-Return ONLY one of:
-- {"type":"handoff","intent":"answer","draft":"..."} when the request is fully completed.
-- {"type":"replan","functions":["toolkit_id.tool_id.function_name",...],"reason":"..."} when more tool steps are still needed.
-
-Rules:
+<decision_contract>
+- Return ONLY one of:
+  - {"type":"handoff","intent":"answer","draft":"..."} when the request is fully completed.
+  - {"type":"replan","functions":["toolkit_id.tool_id.function_name",...],"reason":"..."} when more tool steps are still needed.
+- Treat the task as complete only when every requested deliverable is already satisfied or explicitly blocked by the observations.
+- If any requested artifact, transformation, verification, write step, or follow-up action is still missing, choose "replan".
 - Base your decision strictly on observations, not assumptions.
 - If unsure, choose "replan" and provide the minimum next functions needed.
 - Treat inferred runtime signals (timezone, locale, VPN/proxy, IP/location hints) as environment hints, not confirmed owner facts.
 - If the remaining gap is a missing owner fact or a missing dedicated retrieval step before a write/report step, choose "replan" instead of assuming.
 - If the current best answer would still rely on weak hints or unresolved uncertainty that context or memory could reduce, choose "replan" and add grounding steps instead of handing off an answer.
 - For "replan", "reason" must be a short progress update in present progressive form, written in neutral or first-person phrasing, and end with "...". Example: "Checking additional context files...".
-- "draft" should be a concise handoff payload for the final answer phase.`
+- "draft" should be a concise handoff payload for the final answer phase.
+</decision_contract>`
   const systemPrompt = buildPhaseSystemPrompt(
     baseSystemPrompt,
     'execution'
@@ -195,7 +199,7 @@ Rules:
   const contextManifestSection = buildContextManifestSection(
     caller.getContextManifest()
   )
-  const prompt = `${selfModelSection}\n\n${contextManifestSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nCurrent plan status: no pending steps remain.\nDecide whether to finish now or continue with additional steps.`
+  const prompt = `<self_model>\n${selfModelSection}\n</self_model>\n\n<context_manifest>\n${contextManifestSection}\n</context_manifest>\n\n<execution_history>\n${historySection}\n</execution_history>\n\n<user_request>\n${caller.input}\n</user_request>\n\n<current_plan_status>\nNo pending steps remain.\n</current_plan_status>\n\n<task>\nDecide whether to finish now or continue with additional steps.\n</task>`
 
   const schema = {
     type: 'object',
@@ -517,7 +521,7 @@ async function resolveToolFunctionWithNativeTools(
     })
   )
 
-  const prompt = `Tool: ${toolkitId}.${toolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}${contextManifestSection ? `\n\n${contextManifestSection}` : ''}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide arguments.`
+  const prompt = `<tool>\n${toolkitId}.${toolId}\n</tool>\n\n<current_plan_step>\n${stepLabel}\n</current_plan_step>\n\n${toolkitContextSection}${contextManifestSection ? `\n\n${contextManifestSection}` : ''}\n\n${executionMemorySection}\n\n<execution_history>\n${historySection}\n</execution_history>\n\n<user_request>\n${caller.input}\n</user_request>\n\n<task>\nSelect the appropriate function for the current plan step and provide arguments.\n</task>`
 
   const result = await caller.callLLMWithTools(
     prompt,
@@ -706,7 +710,7 @@ async function resolveToolFunctionWithJSONMode(
     RESOLVE_FUNCTION_SYSTEM_PROMPT,
     'execution'
   )
-  const prompt = `Tool: ${effectiveToolkitId}.${effectiveToolId}\nCurrent Plan Step: "${stepLabel}"\n\n${toolkitContextSection}${contextManifestSection ? `\n\n${contextManifestSection}` : ''}\n\n${executionMemorySection}\n\nAvailable Functions:\n${functionsSection}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nSelect the appropriate function for the current plan step and provide tool_input.`
+  const prompt = `<tool>\n${effectiveToolkitId}.${effectiveToolId}\n</tool>\n\n<current_plan_step>\n${stepLabel}\n</current_plan_step>\n\n${toolkitContextSection}${contextManifestSection ? `\n\n${contextManifestSection}` : ''}\n\n${executionMemorySection}\n\n<available_functions>\n${functionsSection}\n</available_functions>\n\n<execution_history>\n${historySection}\n</execution_history>\n\n<user_request>\n${caller.input}\n</user_request>\n\n<task>\nSelect the appropriate function for the current plan step and provide tool_input.\n</task>`
 
   const resolveSchema = {
     type: 'object',
@@ -1032,7 +1036,7 @@ async function executeFunctionWithNativeTools(
     const retryNote = lastError
       ? `\n\nPrevious attempt failed: ${lastError}.${lastFailedToolInput ? `\nPrevious failed tool_input: ${lastFailedToolInput}\nDo not reuse the same tool_input. Change the arguments to address the failure.` : ' Please fix the arguments.'}`
       : ''
-    const prompt = `Current Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\n\n${toolkitContextSection}${contextManifestSection ? `\n\n${contextManifestSection}` : ''}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}`
+    const prompt = `<current_plan_step>\nNumber: ${currentStepNumber}\nLabel: ${currentStepLabel}\nInstruction: Execute only this step now and focus on this step objective.${previousInputsSection}\n</current_plan_step>\n\n${toolkitContextSection}${contextManifestSection ? `\n\n${contextManifestSection}` : ''}\n\n${executionMemorySection}\n\n<execution_history>\n${historySection}\n</execution_history>\n\n<user_request>\n${caller.input}\n</user_request>${retryNote ? `\n\n<retry_context>\n${retryNote.trim()}\n</retry_context>` : ''}`
 
     const result = await caller.callLLMWithTools(
       prompt,
@@ -1272,7 +1276,7 @@ async function executeFunctionWithJSONMode(
     const retryNote = lastError
       ? `\n\nPrevious attempt failed: ${lastError}.${lastFailedToolInput ? `\nPrevious failed tool_input: ${lastFailedToolInput}\nDo not reuse the same tool_input. Change the arguments to address the failure.` : ' Please fix the tool_input.'}`
       : ''
-    const prompt = `Function: ${qualifiedName}\nDescription: ${functionConfig.description}\nCurrent Plan Step #${currentStepNumber}: "${currentStepLabel}"\nExecute only this step now and focus on this step objective.${previousInputsSection}\nParameters: ${paramsSchema}\n\n${toolkitContextSection}${contextManifestSection ? `\n\n${contextManifestSection}` : ''}\n\n${executionMemorySection}\n\n${historySection}\n\nUser Request: "${caller.input}"${retryNote}\n\nProvide the tool_input for this function.`
+    const prompt = `<function>\nName: ${qualifiedName}\nDescription: ${functionConfig.description}\n</function>\n\n<current_plan_step>\nNumber: ${currentStepNumber}\nLabel: ${currentStepLabel}\nInstruction: Execute only this step now and focus on this step objective.${previousInputsSection}\n</current_plan_step>\n\n<parameters_schema>\n${paramsSchema}\n</parameters_schema>\n\n${toolkitContextSection}${contextManifestSection ? `\n\n${contextManifestSection}` : ''}\n\n${executionMemorySection}\n\n<execution_history>\n${historySection}\n</execution_history>\n\n<user_request>\n${caller.input}\n</user_request>${retryNote ? `\n\n<retry_context>\n${retryNote.trim()}\n</retry_context>` : ''}\n\n<task>\nProvide the tool_input for this function.\n</task>`
 
     const completionResult = await caller.callLLM(
       prompt,

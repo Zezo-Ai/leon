@@ -129,7 +129,7 @@ export async function runPlanningPhase(
   const contextManifestSection = buildContextManifestSection(
     caller.getContextManifest()
   )
-  const prompt = `${catalog.text}${catalogNote}\n\n${selfModelSection}\n\n${contextManifestSection}\n\nEnvironment context is available through structured_knowledge.context tools when needed.\n\nUser Request: "${caller.input}"`
+  const prompt = `<available_catalog>\n${catalog.text}${catalogNote}\n</available_catalog>\n\n<self_model>\n${selfModelSection}\n</self_model>\n\n<context_manifest>\n${contextManifestSection}\n</context_manifest>\n\n<grounding_note>\nEnvironment context is available through structured_knowledge.context tools when needed.\n</grounding_note>\n\n<user_request>\n${caller.input}\n</user_request>`
 
   const planSchema = PLAN_RESPONSE_SCHEMA
 
@@ -243,7 +243,7 @@ export async function runPlanningPhase(
       }
 
       onPlanningStage?.('thinking')
-      const forcedPlanPrompt = `${prompt}\n\nSafety fallback: return ONLY type="plan" with one or more concrete tool steps. Do not return type="final".`
+      const forcedPlanPrompt = `${prompt}\n\n<safety_fallback>\nReturn ONLY type="plan" with one or more concrete tool steps. Do not return type="final".\n</safety_fallback>`
       const forcedPlanSchema = {
         type: 'object',
         properties: {
