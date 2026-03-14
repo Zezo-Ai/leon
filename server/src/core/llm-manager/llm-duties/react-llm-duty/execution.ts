@@ -183,11 +183,14 @@ Use only the user request and collected observations to decide whether the reque
   - {"type":"replan","functions":["toolkit_id.tool_id.function_name",...],"reason":"..."} when more tool steps are still needed.
 - Treat the task as complete only when every requested deliverable is already satisfied or explicitly blocked by the observations.
 - If any requested artifact, transformation, verification, write step, or follow-up action is still missing, choose "replan".
+- If a read, probe, or discovery step reveals another instruction or subtask to carry out, the task is still incomplete until that revealed instruction is executed or explicitly blocked.
+- Reading, quoting, or summarizing an instruction does not count as completing the instruction itself.
 - Base your decision strictly on observations, not assumptions.
 - If unsure, choose "replan" and provide the minimum next functions needed.
 - Treat inferred runtime signals (timezone, locale, VPN/proxy, IP/location hints) as environment hints, not confirmed owner facts.
 - If the remaining gap is a missing owner fact or a missing dedicated retrieval step before a write/report step, choose "replan" instead of assuming.
 - If the current best answer would still rely on weak hints or unresolved uncertainty that context or memory could reduce, choose "replan" and add grounding steps instead of handing off an answer.
+- If your best draft would mention a next step, remaining work, or that something still needs to be done, choose "replan" instead of "handoff".
 - For "replan", "reason" must be a short progress update in present progressive form, written in neutral or first-person phrasing, and end with "...". Example: "Checking additional context files...".
 - "draft" should be a concise handoff payload for the final answer phase.
 </decision_contract>`
