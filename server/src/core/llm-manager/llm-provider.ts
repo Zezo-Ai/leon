@@ -15,6 +15,7 @@ import {
 import { LLM_NAME_WITH_VERSION, LLM_PROVIDER, SERVER_CORE_PATH } from '@/constants'
 import { LogHelper } from '@/helpers/log-helper'
 import { FileHelper } from '@/helpers/file-helper'
+import { mergeStreamingChunk } from '@/core/llm-manager/streaming-chunk'
 import LocalLLMProvider from '@/core/llm-manager/llm-providers/local-llm-provider'
 import GroqLLMProvider from '@/core/llm-manager/llm-providers/groq-llm-provider'
 import OpenRouterLLMProvider from '@/core/llm-manager/llm-providers/openrouter-llm-provider'
@@ -1147,42 +1148,6 @@ export default class LLMProvider {
     )
   }
 
-  private mergeStreamingChunk(
-    accumulated: string,
-    incoming: string
-  ): string {
-    if (!incoming) {
-      return ''
-    }
-
-    if (!accumulated) {
-      return incoming
-    }
-
-    if (accumulated.endsWith(incoming)) {
-      return ''
-    }
-
-    if (incoming.startsWith(accumulated)) {
-      return incoming.slice(accumulated.length)
-    }
-
-    // If this is a long repeated chunk already present, skip it.
-    if (incoming.length >= 32 && accumulated.includes(incoming)) {
-      return ''
-    }
-
-    // Keep only the non-overlapping suffix of incoming.
-    const maxOverlap = Math.min(accumulated.length, incoming.length)
-    for (let overlap = maxOverlap; overlap >= 1; overlap -= 1) {
-      if (accumulated.slice(-overlap) === incoming.slice(0, overlap)) {
-        return incoming.slice(overlap)
-      }
-    }
-
-    return incoming
-  }
-
   private async normalizeStreamingCompletionResult(
     rawResult: AxiosResponse,
     completionParams: CompletionParams
@@ -1225,7 +1190,7 @@ export default class LLMProvider {
         return
       }
 
-      const mergedChunk = this.mergeStreamingChunk(reasoningOutput, reasoningChunk)
+      const mergedChunk = mergeStreamingChunk(reasoningOutput, reasoningChunk)
       if (!mergedChunk || !mergedChunk.trim()) {
         if (trimmed.length >= 16) {
           reasoningChunkCache.add(trimmed)

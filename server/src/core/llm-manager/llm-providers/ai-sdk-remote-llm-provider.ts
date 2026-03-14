@@ -17,6 +17,7 @@ import type {
   OpenAIToolChoice,
   PromptOrChatHistory
 } from '@/core/llm-manager/types'
+import { mergeStreamingChunk } from '@/core/llm-manager/streaming-chunk'
 import { LogHelper } from '@/helpers/log-helper'
 
 type AISDKFlavor =
@@ -292,37 +293,6 @@ export default class AISDKRemoteLLMProvider {
       type: 'object',
       properties: schema
     }
-  }
-
-  private mergeStreamingChunk(accumulated: string, incoming: string): string {
-    if (!incoming) {
-      return ''
-    }
-
-    if (!accumulated) {
-      return incoming
-    }
-
-    if (accumulated.endsWith(incoming)) {
-      return ''
-    }
-
-    if (incoming.startsWith(accumulated)) {
-      return incoming.slice(accumulated.length)
-    }
-
-    if (incoming.length >= 32 && accumulated.includes(incoming)) {
-      return ''
-    }
-
-    const maxOverlap = Math.min(accumulated.length, incoming.length)
-    for (let overlap = maxOverlap; overlap >= 1; overlap -= 1) {
-      if (accumulated.slice(-overlap) === incoming.slice(0, overlap)) {
-        return incoming.slice(overlap)
-      }
-    }
-
-    return incoming
   }
 
   private toTools(tools: OpenAITool[] | undefined): Array<Record<string, unknown>> {
@@ -864,12 +834,22 @@ export default class AISDKRemoteLLMProvider {
         return ''
       }
 
-      if (type === 'text-delta' || type === 'text') {
+      if (type === 'text-delta') {
         const delta = readString(part['delta'], part['textDelta'], part['text'])
         if (!delta) {
           continue
         }
-        const mergedDelta = this.mergeStreamingChunk(state.text, delta)
+        state.text += delta
+        completionParams.onToken?.(delta)
+        continue
+      }
+
+      if (type === 'text') {
+        const delta = readString(part['delta'], part['textDelta'], part['text'])
+        if (!delta) {
+          continue
+        }
+        const mergedDelta = mergeStreamingChunk(state.text, delta)
         if (!mergedDelta) {
           continue
         }
@@ -883,7 +863,7 @@ export default class AISDKRemoteLLMProvider {
         if (!delta) {
           continue
         }
-        const mergedDelta = this.mergeStreamingChunk(state.reasoning, delta)
+        const mergedDelta = mergeStreamingChunk(state.reasoning, delta)
         if (!mergedDelta) {
           continue
         }
