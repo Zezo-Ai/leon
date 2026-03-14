@@ -21,31 +21,34 @@ interface ExecuteOptions {
   captureOutput?: boolean
 }
 
-const CRITICAL_COMMAND_PATTERNS = [
-  'rm -rf /',
-  'rm -rf /*',
-  'mkfs',
-  'format',
-  'fdisk',
-  'kill -9 -1'
-]
+const CRITICAL_COMMAND_SEQUENCES = [
+  ['rm', '-rf', '/'],
+  ['rm', '-rf', '/*'],
+  ['kill', '-9', '-1']
+] as const
 
-const HIGH_RISK_COMMAND_PATTERNS = [
-  'dd if=',
-  'eval $(curl',
-  'eval $(wget'
-]
+const CRITICAL_COMMAND_TOKENS = ['mkfs', 'format', 'fdisk'] as const
+const HIGH_RISK_DD_TOKENS = ['dd'] as const
+const HIGH_RISK_EVAL_DOWNLOAD_TOKENS = ['curl', 'wget'] as const
+const ELEVATED_COMMAND_TOKENS = ['sudo', 'doas', 'pkexec', 'su'] as const
+const PERMISSION_COMMAND_TOKENS = ['chmod', 'chown'] as const
+const PACKAGE_MANAGER_COMMAND_TOKENS = [
+  'apt',
+  'apt-get',
+  'yum',
+  'brew',
+  'pip',
+  'pip3'
+] as const
 
 const MEDIUM_RISK_COMMAND_PATTERNS: string[] = []
 
 const UNSAFE_COMMAND_PATTERNS = [
-  ...CRITICAL_COMMAND_PATTERNS,
-  ...HIGH_RISK_COMMAND_PATTERNS,
   'fork()',
   'while true; do'
 ]
 
-const TERMINAL_AUTH_COMMANDS = new Set(['sudo', 'doas', 'pkexec', 'su'])
+const TERMINAL_AUTH_COMMANDS = new Set(ELEVATED_COMMAND_TOKENS)
 const TERMINAL_AUTH_WRAPPERS = new Set([
   'env',
   'command',
@@ -196,11 +199,21 @@ export default class BashTool extends Tool {
 
   async isSafeCommand(command: string): Promise<boolean> {
     const commandLower = command.toLowerCase()
+    const tokens = this.tokenizeCommand(commandLower)
 
     for (const pattern of UNSAFE_COMMAND_PATTERNS) {
       if (commandLower.includes(pattern)) {
         return false
       }
+    }
+
+    if (
+      this.hasAnyTokenSequence(tokens, CRITICAL_COMMAND_SEQUENCES) ||
+      this.hasCommandToken(tokens, CRITICAL_COMMAND_TOKENS) ||
+      this.hasDangerousDdPattern(tokens) ||
+      this.hasEvalDownloadPattern(tokens)
+    ) {
+      return false
     }
 
     if (this.isDownloadPipedToShell(commandLower)) {
@@ -212,22 +225,23 @@ export default class BashTool extends Tool {
 
   async getCommandRiskLevel(command: string): Promise<string> {
     const commandLower = command.toLowerCase()
+    const tokens = this.tokenizeCommand(commandLower)
 
     let riskLevel = 'low'
 
-    for (const pattern of CRITICAL_COMMAND_PATTERNS) {
-      if (commandLower.includes(pattern)) {
-        riskLevel = 'critical'
-        break
-      }
+    if (
+      this.hasAnyTokenSequence(tokens, CRITICAL_COMMAND_SEQUENCES) ||
+      this.hasCommandToken(tokens, CRITICAL_COMMAND_TOKENS)
+    ) {
+      riskLevel = 'critical'
     }
 
     if (riskLevel === 'low') {
-      for (const pattern of HIGH_RISK_COMMAND_PATTERNS) {
-        if (commandLower.includes(pattern)) {
-          riskLevel = 'high'
-          break
-        }
+      if (
+        this.hasDangerousDdPattern(tokens) ||
+        this.hasEvalDownloadPattern(tokens)
+      ) {
+        riskLevel = 'high'
       }
     }
 
@@ -250,25 +264,23 @@ export default class BashTool extends Tool {
   async getRiskDescription(command: string): Promise<string> {
     const riskLevel = await this.getCommandRiskLevel(command)
     const commandLower = command.toLowerCase()
+    const tokens = this.tokenizeCommand(commandLower)
 
-    if (commandLower.includes('rm')) {
+    if (this.hasCommandToken(tokens, ['rm'])) {
       return 'delete files or directories permanently'
-    } else if (commandLower.includes('sudo')) {
+    } else if (this.hasCommandToken(tokens, ELEVATED_COMMAND_TOKENS)) {
       return 'make system-level changes with elevated privileges'
-    } else if (commandLower.includes('kill')) {
+    } else if (this.hasCommandToken(tokens, ['kill'])) {
       return 'terminate running processes'
-    } else if (
-      commandLower.includes('chmod') ||
-      commandLower.includes('chown')
-    ) {
+    } else if (this.hasCommandToken(tokens, PERMISSION_COMMAND_TOKENS)) {
       return 'change file permissions or ownership'
     } else if (
-      ['apt', 'yum', 'brew', 'pip'].some((pkg) => commandLower.includes(pkg))
+      this.hasCommandToken(tokens, PACKAGE_MANAGER_COMMAND_TOKENS)
     ) {
       return 'install or modify system packages'
     } else if (this.isDownloadPipedToShell(commandLower)) {
       return 'download remote content and execute it as a shell script'
-    } else if (commandLower.includes('curl') || commandLower.includes('wget')) {
+    } else if (this.hasCommandToken(tokens, HIGH_RISK_EVAL_DOWNLOAD_TOKENS)) {
       return 'download content from the internet'
     } else {
       const descriptions: Record<string, string> = {
@@ -308,11 +320,147 @@ export default class BashTool extends Tool {
 
   private isDownloadPipedToShell(commandLower: string): boolean {
     const downloadsRemoteContent =
-      commandLower.includes('curl') || commandLower.includes('wget')
+      this.hasCommandToken(this.tokenizeCommand(commandLower), ['curl', 'wget'])
     const pipesToShell =
       commandLower.includes('| bash') || commandLower.includes('| sh')
 
     return downloadsRemoteContent && pipesToShell
+  }
+
+  private tokenizeCommand(command: string): string[] {
+    const tokens: string[] = []
+    let currentToken = ''
+    let quote: '\'' | '"' | null = null
+    let escaped = false
+
+    const flushToken = (): void => {
+      if (!currentToken) {
+        return
+      }
+
+      tokens.push(currentToken)
+      currentToken = ''
+    }
+
+    for (const char of command) {
+      if (quote) {
+        if (escaped) {
+          currentToken += char
+          escaped = false
+          continue
+        }
+
+        if (char === '\\' && quote === '"') {
+          escaped = true
+          continue
+        }
+
+        if (char === quote) {
+          quote = null
+          continue
+        }
+
+        currentToken += char
+        continue
+      }
+
+      if (char === '\'' || char === '"') {
+        quote = char
+        continue
+      }
+
+      if (
+        char === '\n' ||
+        char === ';' ||
+        char === '|' ||
+        char === '&' ||
+        char === ' ' ||
+        char === '\t' ||
+        char === '\r' ||
+        char === '>' ||
+        char === '<'
+      ) {
+        flushToken()
+        continue
+      }
+
+      currentToken += char
+    }
+
+    flushToken()
+    return tokens
+  }
+
+  private hasTokenSequence(tokens: string[], sequence: string[]): boolean {
+    if (sequence.length === 0 || tokens.length < sequence.length) {
+      return false
+    }
+
+    for (let index = 0; index <= tokens.length - sequence.length; index += 1) {
+      const matches = sequence.every(
+        (token, offset) => tokens[index + offset] === token
+      )
+      if (matches) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  private hasCommandToken(tokens: string[], commands: string[]): boolean {
+    return tokens.some((token) => {
+      const normalizedToken = this.normalizeCommandToken(token)
+      return commands.some(
+        (command) =>
+          normalizedToken === command || normalizedToken.startsWith(`${command}.`)
+      )
+    })
+  }
+
+  private hasDangerousDdPattern(tokens: string[]): boolean {
+    if (!this.hasCommandToken(tokens, HIGH_RISK_DD_TOKENS)) {
+      return false
+    }
+
+    return tokens.some((token) => token.startsWith('if='))
+  }
+
+  private hasEvalDownloadPattern(tokens: string[]): boolean {
+    for (let index = 0; index < tokens.length - 1; index += 1) {
+      if (tokens[index] !== 'eval') {
+        continue
+      }
+
+      const nextToken = tokens[index + 1] || ''
+      if (
+        HIGH_RISK_EVAL_DOWNLOAD_TOKENS.some((token) =>
+          nextToken.startsWith(`$(${token}`)
+        )
+      ) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  private normalizeCommandToken(token: string): string {
+    const strippedToken = token.replace(/^[([{]+|[)\]}]+$/g, '')
+    if (strippedToken.includes('/')) {
+      return strippedToken.split('/').pop() || strippedToken
+    }
+
+    return strippedToken
+  }
+
+  private hasAnyTokenSequence(
+    tokens: string[],
+    sequences: readonly (readonly string[])[]
+  ): boolean {
+    return sequences.some((sequence) =>
+      this.hasTokenSequence(tokens, [...sequence])
+    )
   }
 
   private requiresVisibleTerminal(command: string): boolean {
