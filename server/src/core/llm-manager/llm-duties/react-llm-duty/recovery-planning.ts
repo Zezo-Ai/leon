@@ -121,27 +121,43 @@ export async function runRecoveryPlanningPhase(
           )
           .join('\n')
       : '- none'
-  const prompt = `${catalog.text}${catalogNote}
+  const prompt = `<available_catalog>
+${catalog.text}${catalogNote}
+</available_catalog>
 
+<self_model>
 ${selfModelSection}
+</self_model>
 
+<context_manifest>
 ${contextManifestSection}
+</context_manifest>
 
+<grounding_note>
 Environment context is available through structured_knowledge.context tools when needed.
+</grounding_note>
 
-Recovery Context:
+<recovery_context>
 - Failed Step Function: ${failedStep.function}
 - Failed Step Label: ${failedStep.label}
 - Failed Observation: ${failedExecution?.observation || 'No observation available'}
+</recovery_context>
 
-Current Remaining Steps:
+<remaining_steps>
 ${pendingStepsSection}
+</remaining_steps>
 
+<execution_history>
 ${historySection}
+</execution_history>
 
-User Request: "${caller.input}"
+<user_request>
+${caller.input}
+</user_request>
 
-Create a revised plan from this point to complete the user request.`
+<task>
+Create a revised plan from this point to complete the user request.
+</task>`
 
   const planSchema = PLAN_RESPONSE_SCHEMA
 

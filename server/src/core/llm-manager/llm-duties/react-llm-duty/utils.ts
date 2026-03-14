@@ -9,6 +9,8 @@ import type {
 
 type ExecutionHistoryFormatMode = 'compact' | 'complete'
 
+const COMPACT_EXECUTION_HISTORY_MAX_DETAILED_STEPS = 6
+
 export const formatFilePath = (filePath: string): string => {
   return `[FILE_PATH]${filePath}[/FILE_PATH]`
 }
@@ -342,6 +344,55 @@ function indentBlock(value: string, prefix: string): string {
     .join('\n')
 }
 
+function formatExecutionEntry(
+  execution: ExecutionRecord,
+  index: number,
+  mode: ExecutionHistoryFormatMode
+): string {
+  const observationSummary = formatObservationSummary(
+    execution.observation,
+    mode
+  )
+  const resultSection = observationSummary.includes('\n')
+    ? `\n  Result:\n${indentBlock(observationSummary, '    ')}`
+    : `\n  Result: ${observationSummary}`
+
+  return `Step ${index + 1}: ${execution.function} [${execution.status}]${
+    execution.stepLabel ? ` | Label: "${execution.stepLabel}"` : ''
+  }${
+    execution.requestedToolInput
+      ? `\n  Input: ${clipText(execution.requestedToolInput, 220)}`
+      : ''
+  }${resultSection}`
+}
+
+function formatOlderExecutionSummary(history: ExecutionRecord[]): string {
+  const statusCounts = history.reduce<Record<string, number>>((counts, execution) => {
+    const status = execution.status || 'unknown'
+    counts[status] = (counts[status] || 0) + 1
+    return counts
+  }, {})
+  const statusSummary = Object.entries(statusCounts)
+    .map(([status, count]) => `${status}=${count}`)
+    .join(', ')
+
+  const notableSteps = [
+    ...new Set(
+      history
+        .slice(-3)
+        .map((execution) => execution.stepLabel || execution.function)
+        .map((value) => value.trim())
+        .filter((value) => Boolean(value))
+    )
+  ]
+  const notableSummary =
+    notableSteps.length > 0
+      ? ` | recent earlier steps: ${clipText(notableSteps.join(' ; '), 180)}`
+      : ''
+
+  return `Earlier Steps: ${history.length} summarized${statusSummary ? ` | ${statusSummary}` : ''}${notableSummary}`
+}
+
 export function formatExecutionHistory(
   history: ExecutionRecord[],
   mode: ExecutionHistoryFormatMode = 'compact'
@@ -349,22 +400,37 @@ export function formatExecutionHistory(
   if (history.length === 0) {
     return 'Previous Executions: none'
   }
-  return `Previous Executions:\n${history
-    .map((exec, i) => {
-      const observationSummary = formatObservationSummary(exec.observation, mode)
-      const resultSection = observationSummary.includes('\n')
-        ? `\n  Result:\n${indentBlock(observationSummary, '    ')}`
-        : `\n  Result: ${observationSummary}`
 
-      return `Step ${i + 1}: ${exec.function} [${exec.status}]${
-        exec.stepLabel ? ` | Label: "${exec.stepLabel}"` : ''
-      }${
-        exec.requestedToolInput
-          ? `\n  Input: ${clipText(exec.requestedToolInput, 220)}`
-          : ''
-      }${resultSection}`
-    })
-    .join('\n')}`
+  const renderedEntries: string[] = []
+
+  if (
+    mode === 'compact' &&
+    history.length > COMPACT_EXECUTION_HISTORY_MAX_DETAILED_STEPS
+  ) {
+    const detailedStartIndex =
+      history.length - COMPACT_EXECUTION_HISTORY_MAX_DETAILED_STEPS
+    const olderHistory = history.slice(0, detailedStartIndex)
+    const recentHistory = history.slice(detailedStartIndex)
+
+    renderedEntries.push(formatOlderExecutionSummary(olderHistory))
+    renderedEntries.push(
+      ...recentHistory.map((execution, offset) =>
+        formatExecutionEntry(
+          execution,
+          detailedStartIndex + offset,
+          mode
+        )
+      )
+    )
+  } else {
+    renderedEntries.push(
+      ...history.map((execution, index) =>
+        formatExecutionEntry(execution, index, mode)
+      )
+    )
+  }
+
+  return `Previous Executions:\n${renderedEntries.join('\n')}`
 }
 
 /**

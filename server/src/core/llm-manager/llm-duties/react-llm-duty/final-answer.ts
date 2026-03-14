@@ -28,37 +28,55 @@ export async function runFinalAnswerPhase(
   LogHelper.debug('Synthesizing final answer from execution history...')
 
   const historySection = formatExecutionHistory(executionHistory, 'complete')
-  const defaultBaseSystemPrompt = `You are synthesizing a final answer from tool execution results. Provide a clear, helpful, and complete response to the user based on the observations collected.
+  const defaultBaseSystemPrompt = `You are synthesizing a final answer from tool execution results.
 
-    Important:
-    - The execution loop is already finished.
-    - Do not promise additional actions.
-    - Do not say "let me", "I will", or any future-step phrasing.
-    - Return a completed answer based only on available observations.
-    - Start with the direct answer.
-    - Keep answer length proportionate to the request. Simple questions should stay compact; nuanced questions can be fuller.
-    - Add only the minimum uncertainty or boundary note needed for honesty.
-    - Avoid both clipped one-liners and long over-explanations.
-    - Do not turn a simple answer into a long boundary essay unless the user asked for detail.
-    - Use history, observations, handoffs, and self-model for facts and continuity, not as phrasing templates.
+<role>
+Provide a clear, helpful, and complete response to the user based on the observations collected.
+</role>
 
-    ${FORMATTING_RULES}`
+<source_priority>
+- Execution history and observations are the factual source of truth.
+- The owner request defines the required deliverable.
+- Leon Self-Model context may shape continuity and phrasing, but not facts.
+</source_priority>
+
+<answer_rules>
+- The execution loop is already finished.
+- Do not promise additional actions.
+- Do not say "let me", "I will", or any future-step phrasing.
+- Return a completed answer based only on available observations.
+- Start with the direct answer.
+- Keep answer length proportionate to the request. Simple questions should stay compact; nuanced questions can be fuller.
+- Add only the minimum uncertainty or boundary note needed for honesty.
+- Avoid both clipped one-liners and long over-explanations.
+- Do not turn a simple answer into a long boundary essay unless the user asked for detail.
+- Use history, observations, handoffs, and self-model for facts and continuity, not as phrasing templates.
+</answer_rules>
+
+${FORMATTING_RULES}`
   const defaultSystemPrompt = buildPhaseSystemPrompt(
     defaultBaseSystemPrompt,
     'final_answer'
   )
   const handoffBaseSystemPrompt = `You are producing the final user response from a phase handoff.
 
-The handoff intent and factual payload are authoritative.
-The draft is raw material, not final wording.
+<source_priority>
+- The handoff intent is binding.
+- Execution history is the factual source of truth when available.
+- The handoff draft carries semantic meaning, constraints, and commitments, but it is not final wording.
+- Persona, mood, and self-model may shape phrasing only. They must not override intent, facts, or constraints.
+</source_priority>
 
-Rules:
+<intent_rules>
 - Keep the same user-facing intent:
   - clarification: ask one concise clarification question.
   - cancelled: confirm that execution is stopped.
   - blocked: explain what blocks completion and what must be configured.
   - error: explain the failure concisely and safely.
   - answer: provide the completed answer.
+</intent_rules>
+
+<rewrite_rules>
 - Preserve the request-relevant facts, constraints, and commitments from the draft and execution history.
 - Rewrite the response fully in your current mood, tone and present state.
 - Do not treat tone, emotional framing, or self-assessments in the draft as authoritative content.
@@ -73,6 +91,7 @@ Rules:
 - Use history, observations, handoffs, and self-model for facts and continuity, not as phrasing templates.
 - If a Leon Self-Model Snapshot is provided and it clearly supports one useful low-risk follow-up, you may end with one concise optional suggestion or question.
 - Return plain text only.
+</rewrite_rules>
 
 ${FORMATTING_RULES}`
   const handoffSystemPrompt = buildPhaseSystemPrompt(
@@ -80,8 +99,8 @@ ${FORMATTING_RULES}`
     'final_answer'
   )
   const prompt = handoffSignal
-    ? `${buildSelfModelSection(caller.getSelfModelSnapshot())}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nHandoff intent: "${handoffSignal.intent}"\nHandoff draft: "${handoffSignal.draft}"\nHandoff source: "${handoffSignal.source}"\n\nProduce the final user-facing response.`
-    : `${buildSelfModelSection(caller.getSelfModelSnapshot())}\n\n${historySection}\n\nUser Request: "${caller.input}"\n\nBased on the execution results above, provide a final answer to the user.`
+    ? `<self_model>\n${buildSelfModelSection(caller.getSelfModelSnapshot())}\n</self_model>\n\n<execution_history>\n${historySection}\n</execution_history>\n\n<user_request>\n${caller.input}\n</user_request>\n\n<handoff>\nIntent: ${handoffSignal.intent}\nDraft: ${handoffSignal.draft}\nSource: ${handoffSignal.source}\n</handoff>\n\n<task>\nProduce the final user-facing response.\n</task>`
+    : `<self_model>\n${buildSelfModelSection(caller.getSelfModelSnapshot())}\n</self_model>\n\n<execution_history>\n${historySection}\n</execution_history>\n\n<user_request>\n${caller.input}\n</user_request>\n\n<task>\nBased on the execution results above, provide a final answer to the user.\n</task>`
   const systemPrompt = handoffSignal ? handoffSystemPrompt : defaultSystemPrompt
 
   const buildFinalAnswerPromptSections = (
