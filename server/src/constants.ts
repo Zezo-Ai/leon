@@ -338,7 +338,11 @@ export const SHOULD_START_PYTHON_TCP_SERVER = !(
 )
 export const LEON_DISABLED_CONTEXT_FILES =
   process.env['LEON_DISABLED_CONTEXT_FILES'] || ''
-export const LLM_PROVIDER = process.env['LEON_LLM_PROVIDER']
+export const LLM_PROVIDER = process.env['LEON_LLM_PROVIDER'] || 'ollama'
+export const WORKFLOW_LLM_PROVIDER =
+  process.env['LEON_WORKFLOW_LLM_PROVIDER'] || LLM_PROVIDER
+export const AGENT_LLM_PROVIDER =
+  process.env['LEON_AGENT_LLM_PROVIDER'] || LLM_PROVIDER
 // export const LLM_VERSION = 'v0.2.Q4_K_S'
 // export const LLM_VERSION = '8B-Instruct.Q5_K_S'
 // export const LLM_VERSION = '2.9-llama3-8b.Q5_K_S'

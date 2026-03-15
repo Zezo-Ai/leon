@@ -28,6 +28,8 @@ export enum LLMDuties {
 
 export enum LLMProviders {
   Local = 'local',
+  Ollama = 'ollama',
+  SGLang = 'sglang',
   Groq = 'groq',
   OpenRouter = 'openrouter',
   ZAI = 'zai',

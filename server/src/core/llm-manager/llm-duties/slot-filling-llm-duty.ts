@@ -1,4 +1,4 @@
-import { type ChatHistoryItem, LlamaChatSession } from 'node-llama-cpp'
+import type { ChatHistoryItem, LlamaChatSession } from 'node-llama-cpp'
 
 import {
   DEFAULT_EXECUTE_PARAMS,
@@ -17,7 +17,7 @@ import {
   LLMProviders,
   SlotFillingStatus
 } from '@/core/llm-manager/types'
-import { LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
+import { WORKFLOW_LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
 
 interface SlotFillingLLMDutyParams {
   input: {
@@ -116,6 +116,10 @@ export class SlotFillingLLMDuty extends LLMDuty {
             SlotFillingLLMDuty.session.dispose({ disposeSequence: true })
             LogHelper.info('Session disposed')
           }
+
+          const { LlamaChatSession } = await Function(
+            'return import("node-llama-cpp")'
+          )()
 
           SlotFillingLLMDuty.session = new LlamaChatSession({
             contextSequence: LLM_MANAGER.context.getSequence(),

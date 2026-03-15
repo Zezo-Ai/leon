@@ -1,8 +1,7 @@
-import {
-  type ChatSessionModelFunctions,
-  type ChatHistoryItem,
-  LlamaChat,
-  defineChatSessionFunction
+import type {
+  ChatSessionModelFunctions,
+  ChatHistoryItem,
+  LlamaChat
 } from 'node-llama-cpp'
 
 import {
@@ -23,7 +22,7 @@ import {
   LLMProviders,
   type OpenAITool
 } from '@/core/llm-manager/types'
-import { LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
+import { WORKFLOW_LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
 
 interface ActionCallingLLMDutyParams {
@@ -180,11 +179,14 @@ Follow these rules exactly:
    * This method converts the action schema from the skill configuration
    * to a function schema that can be used by the LLM provider
    */
-  private actionsToFunctionsSchema(
+  private async actionsToFunctionsSchema(
     actions: SkillSchema['actions']
-  ): ChatSessionModelFunctions {
+  ): Promise<ChatSessionModelFunctions> {
     const actionsEntries = Object.entries(actions)
     const functions: ChatSessionModelFunctions = {}
+    const { defineChatSessionFunction } = await Function(
+      'return import("node-llama-cpp")'
+    )()
 
     actionsEntries.forEach(([actionName, action]) => {
       if (!action || !action.type) {
@@ -369,6 +371,10 @@ Follow these rules exactly:
            * We use LlamaChat to have more control over the session (before function calling)
            * @see https://github.com/withcatai/node-llama-cpp/issues/471
            */
+          const { LlamaChat } = await Function(
+            'return import("node-llama-cpp")'
+          )()
+
           ActionCallingLLMDuty.session = new LlamaChat({
             contextSequence: LLM_MANAGER.context.getSequence(),
             autoDisposeSequence: true
@@ -453,7 +459,9 @@ Follow these rules exactly:
       })
 
       const filteredActions = this.filterActionsWithFlow(actions, flow)
-      const functionsSchema = this.actionsToFunctionsSchema(filteredActions)
+      const functionsSchema = await this.actionsToFunctionsSchema(
+        filteredActions
+      )
       const config = LLM_MANAGER.coreLLMDuties[LLMDuties.ActionCalling]
       const completionParams = {
         functions: functionsSchema,

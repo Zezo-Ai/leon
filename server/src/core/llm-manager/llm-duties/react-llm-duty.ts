@@ -1,8 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import type { ChatHistoryItem, LlamaContext } from 'node-llama-cpp'
-import { LlamaChatSession } from 'node-llama-cpp'
+import type { ChatHistoryItem, LlamaContext, LlamaChatSession } from 'node-llama-cpp'
 
 import {
   DEFAULT_INIT_PARAMS,
@@ -33,7 +32,7 @@ import {
   type OpenAIToolChoice
 } from '@/core/llm-manager/types'
 import { ContextStateStore } from '@/core/context-manager/context-state-store'
-import { LLM_PROVIDER as LLM_PROVIDER_NAME, LOGS_PATH } from '@/constants'
+import { AGENT_LLM_PROVIDER as LLM_PROVIDER_NAME, LOGS_PATH } from '@/constants'
 import type { MessageLog } from '@/types'
 
 import {
@@ -242,6 +241,10 @@ export class ReActLLMDuty extends LLMDuty {
           }
 
           ReActLLMDuty.context = await LLM_MANAGER.model.createContext()
+
+          const { LlamaChatSession } = await Function(
+            'return import("node-llama-cpp")'
+          )()
 
           ReActLLMDuty.session = new LlamaChatSession({
             contextSequence: ReActLLMDuty.context.getSequence(),
@@ -1323,6 +1326,9 @@ export class ReActLLMDuty extends LLMDuty {
 
         if (LLM_PROVIDER_NAME === LLMProviders.Local) {
           const tempContext = await LLM_MANAGER.model.createContext()
+          const { LlamaChatSession } = await Function(
+            'return import("node-llama-cpp")'
+          )()
           const tempSession = new LlamaChatSession({
             contextSequence: tempContext.getSequence(),
             autoDisposeSequence: true,
@@ -1544,6 +1550,9 @@ export class ReActLLMDuty extends LLMDuty {
     }
 
     const tempContext = await LLM_MANAGER.model.createContext()
+    const { LlamaChatSession } = await Function(
+      'return import("node-llama-cpp")'
+    )()
     const tempSession = new LlamaChatSession({
       contextSequence: tempContext.getSequence(),
       autoDisposeSequence: true,

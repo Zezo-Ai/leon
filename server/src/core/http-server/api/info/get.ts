@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify'
 
 import type { APIOptions } from '@/core/http-server/http-server'
 import {
+  AGENT_LLM_PROVIDER,
   LEON_VERSION,
   HAS_AFTER_SPEECH,
   HAS_STT,
@@ -9,11 +10,11 @@ import {
   STT_PROVIDER,
   TTS_PROVIDER,
   IS_TELEMETRY_ENABLED,
-  LLM_PROVIDER,
   LEON_ROUTING_MODE,
-  SHOULD_START_PYTHON_TCP_SERVER
+  SHOULD_START_PYTHON_TCP_SERVER,
+  WORKFLOW_LLM_PROVIDER
 } from '@/constants'
-import { LLM_MANAGER, PERSONA } from '@/core'
+import { LLM_MANAGER, LLM_PROVIDER, PERSONA } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { DateHelper } from '@/helpers/date-helper'
 import { SystemHelper } from '@/helpers/system-helper'
@@ -63,7 +64,15 @@ export const getInfo: FastifyPluginAsync<APIOptions> = async (
         usedVRAM,
         llm: {
           enabled: LLM_MANAGER.isLLMEnabled,
-          provider: LLM_PROVIDER
+          provider:
+            AGENT_LLM_PROVIDER === WORKFLOW_LLM_PROVIDER
+              ? AGENT_LLM_PROVIDER
+              : `${WORKFLOW_LLM_PROVIDER}/${AGENT_LLM_PROVIDER}`,
+          workflowProvider: WORKFLOW_LLM_PROVIDER,
+          agentProvider: AGENT_LLM_PROVIDER,
+          workflowModel: LLM_PROVIDER.workflowLLMName,
+          agentModel: LLM_PROVIDER.agentLLMName,
+          localModel: LLM_PROVIDER.localLLMName
         },
         stt: {
           enabled: HAS_STT,

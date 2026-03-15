@@ -7,24 +7,19 @@ import axios, { type AxiosResponse } from 'axios'
 import {
   type CompletionParams,
   type LLMPromptAbortReason,
-  type LLMDuties,
   type OpenAIToolCall,
   type PromptOrChatHistory,
+  LLMDuties,
   LLMProviders
 } from '@/core/llm-manager/types'
-import { LLM_NAME_WITH_VERSION, LLM_PROVIDER, SERVER_CORE_PATH } from '@/constants'
+import {
+  AGENT_LLM_PROVIDER,
+  SERVER_CORE_PATH,
+  WORKFLOW_LLM_PROVIDER
+} from '@/constants'
 import { LogHelper } from '@/helpers/log-helper'
 import { FileHelper } from '@/helpers/file-helper'
 import { mergeStreamingChunk } from '@/core/llm-manager/streaming-chunk'
-import LocalLLMProvider from '@/core/llm-manager/llm-providers/local-llm-provider'
-import GroqLLMProvider from '@/core/llm-manager/llm-providers/groq-llm-provider'
-import OpenRouterLLMProvider from '@/core/llm-manager/llm-providers/openrouter-llm-provider'
-import ZAILLMProvider from '@/core/llm-manager/llm-providers/z-ai-llm-provider'
-import OpenAILLMProvider from '@/core/llm-manager/llm-providers/openai-llm-provider'
-import AnthropicLLMProvider from '@/core/llm-manager/llm-providers/anthropic-llm-provider'
-import MoonshotAILLMProvider from '@/core/llm-manager/llm-providers/moonshotai-llm-provider'
-import CerebrasLLMProvider from '@/core/llm-manager/llm-providers/cerebras-llm-provider'
-import HuggingFaceLLMProvider from '@/core/llm-manager/llm-providers/huggingface-llm-provider'
 import { BRAIN, LLM_MANAGER } from '@/core'
 
 interface CompletionResult {
@@ -56,20 +51,25 @@ interface NormalizedCompletionResult {
 interface PromptAbortError extends Error {
   promptAbortReason?: LLMPromptAbortReason
 }
-type Provider =
-  | LocalLLMProvider
-  | GroqLLMProvider
-  | OpenRouterLLMProvider
-  | ZAILLMProvider
-  | OpenAILLMProvider
-  | AnthropicLLMProvider
-  | MoonshotAILLMProvider
-  | CerebrasLLMProvider
-  | HuggingFaceLLMProvider
-  | undefined
+interface Provider {
+  modelName?: string
+  runChatCompletion: (
+    promptOrChatHistory: PromptOrChatHistory,
+    completionParams: CompletionParams
+  ) => Promise<unknown>
+  dispose?: () => void
+}
+type ProviderRole = 'workflow' | 'agent'
+
+const LOCAL_SERVER_PROVIDERS = new Set<LLMProviders>([
+  LLMProviders.Ollama,
+  LLMProviders.SGLang
+])
 
 const LLM_PROVIDERS_MAP = {
   [LLMProviders.Local]: 'local-llm-provider',
+  [LLMProviders.Ollama]: 'ollama-llm-provider',
+  [LLMProviders.SGLang]: 'sglang-llm-provider',
   [LLMProviders.Groq]: 'groq-llm-provider',
   [LLMProviders.OpenRouter]: 'openrouter-llm-provider',
   [LLMProviders.ZAI]: 'z-ai-llm-provider',
@@ -79,8 +79,6 @@ const LLM_PROVIDERS_MAP = {
   [LLMProviders.Cerebras]: 'cerebras-llm-provider',
   [LLMProviders.HuggingFace]: 'huggingface-llm-provider'
 }
-const DEFAULT_MAX_EXECUTION_TIMOUT =
-  LLM_PROVIDER === LLMProviders.Local ? 32_000 : 120_000
 const DEFAULT_MAX_EXECUTION_RETRIES = 2
 const DEFAULT_REMOTE_PROVIDER_ERROR_RETRIES = 1
 const TIMEOUT_RETRY_INCREMENT_MS = 30_000
@@ -93,7 +91,8 @@ const DEFAULT_MAX_TOKENS = 8_192
 export default class LLMProvider {
   private static instance: LLMProvider
 
-  private llmProvider: Provider = undefined
+  private workflowLLMProvider: Provider | undefined = undefined
+  private agentLLMProvider: Provider | undefined = undefined
   private lastProviderErrorMessage: string | null = null
 
   constructor() {
@@ -106,19 +105,45 @@ export default class LLMProvider {
   }
 
   public get isLLMProviderReady(): boolean {
-    return !!this.llmProvider
+    return !!this.workflowLLMProvider || !!this.agentLLMProvider
   }
 
   public get agentLLMName(): string {
-    if (!this.llmProvider) {
+    const provider = this.getProviderForDuty(LLMDuties.ReAct)
+    if (!provider) {
       return 'unknown'
     }
 
-    return this.llmProvider.modelName || 'unknown'
+    return provider.modelName || 'unknown'
+  }
+
+  public get workflowLLMName(): string {
+    const provider = this.getProviderForDuty(null)
+    if (!provider) {
+      return 'unknown'
+    }
+
+    return provider.modelName || 'unknown'
   }
 
   public get localLLMName(): string {
-    return LLM_NAME_WITH_VERSION
+    const workflowProviderName = this.getProviderNameForDuty(null)
+    const agentProviderName = this.getProviderNameForDuty(LLMDuties.ReAct)
+    if (
+      LOCAL_SERVER_PROVIDERS.has(workflowProviderName) &&
+      this.workflowLLMProvider?.modelName
+    ) {
+      return this.workflowLLMProvider.modelName
+    }
+
+    if (
+      LOCAL_SERVER_PROVIDERS.has(agentProviderName) &&
+      this.agentLLMProvider?.modelName
+    ) {
+      return this.agentLLMProvider.modelName
+    }
+
+    return 'none'
   }
 
   public consumeLastProviderErrorMessage(): string | null {
@@ -134,37 +159,115 @@ export default class LLMProvider {
     LogHelper.title('LLM Provider')
     LogHelper.info('Initializing LLM provider...')
 
-    if (!Object.values(LLMProviders).includes(LLM_PROVIDER as LLMProviders)) {
-      LogHelper.error(
-        `The LLM provider "${LLM_PROVIDER}" does not exist or is not yet supported`
-      )
+    const configuredProviders = new Set<LLMProviders>([
+      WORKFLOW_LLM_PROVIDER as LLMProviders,
+      AGENT_LLM_PROVIDER as LLMProviders
+    ])
 
-      return false
+    for (const providerName of configuredProviders) {
+      if (providerName === LLMProviders.Local) {
+        LogHelper.error(
+          'The "local" node-llama-cpp provider is no longer supported. Use "ollama" or "sglang" instead.'
+        )
+
+        return false
+      }
+
+      if (!Object.values(LLMProviders).includes(providerName)) {
+        LogHelper.error(
+          `The LLM provider "${providerName}" does not exist or is not yet supported`
+        )
+
+        return false
+      }
     }
 
-    // Dynamically set the provider
+    this.disposeCurrentProviders()
+    this.workflowLLMProvider = await this.createProvider(
+      WORKFLOW_LLM_PROVIDER as LLMProviders,
+      'workflow'
+    )
+    this.agentLLMProvider = await this.createProvider(
+      AGENT_LLM_PROVIDER as LLMProviders,
+      'agent'
+    )
+
+    this.assertLocalProviderCompatibility()
+
+    LogHelper.title('LLM Provider')
+    LogHelper.success(
+      `Initialized workflow="${WORKFLOW_LLM_PROVIDER}" agent="${AGENT_LLM_PROVIDER}" providers`
+    )
+
+    return true
+  }
+
+  private async createProvider(
+    providerName: LLMProviders,
+    role: ProviderRole
+  ): Promise<Provider> {
     const { default: provider } = await FileHelper.dynamicImportFromFile(
       path.join(
         SERVER_CORE_PATH,
         'llm-manager',
         'llm-providers',
-        `${LLM_PROVIDERS_MAP[LLM_PROVIDER as LLMProviders]}.js`
+        `${LLM_PROVIDERS_MAP[providerName]}.js`
       )
     )
 
-    this.disposeCurrentProvider()
-    this.llmProvider = new provider()
-
-    LogHelper.title('LLM Provider')
-    LogHelper.success(`Initialized with "${LLM_PROVIDER}" provider`)
-
-    return true
+    return new provider(role) as Provider
   }
 
-  private disposeCurrentProvider(): void {
-    const provider = this.llmProvider as { dispose?: () => void } | undefined
+  private disposeCurrentProviders(): void {
+    const providers = new Set([
+      this.workflowLLMProvider as { dispose?: () => void } | undefined,
+      this.agentLLMProvider as { dispose?: () => void } | undefined
+    ])
 
-    provider?.dispose?.()
+    for (const provider of providers) {
+      provider?.dispose?.()
+    }
+  }
+
+  private getProviderNameForDuty(dutyType: LLMDuties | null): LLMProviders {
+    return dutyType === LLMDuties.ReAct
+      ? (AGENT_LLM_PROVIDER as LLMProviders)
+      : (WORKFLOW_LLM_PROVIDER as LLMProviders)
+  }
+
+  private getProviderForDuty(dutyType: LLMDuties | null): Provider | undefined {
+    return dutyType === LLMDuties.ReAct
+      ? this.agentLLMProvider
+      : this.workflowLLMProvider
+  }
+
+  private getDefaultTimeoutForProvider(providerName: LLMProviders): number {
+    return providerName === LLMProviders.Local ? 32_000 : 120_000
+  }
+
+  private assertLocalProviderCompatibility(): void {
+    const workflowProviderName = WORKFLOW_LLM_PROVIDER as LLMProviders
+    const agentProviderName = AGENT_LLM_PROVIDER as LLMProviders
+    const workflowIsLocal = LOCAL_SERVER_PROVIDERS.has(workflowProviderName)
+    const agentIsLocal = LOCAL_SERVER_PROVIDERS.has(agentProviderName)
+
+    if (!workflowIsLocal || !agentIsLocal) {
+      return
+    }
+
+    if (workflowProviderName !== agentProviderName) {
+      throw new Error(
+        `Workflow and agent local providers must match. Received workflow="${workflowProviderName}" and agent="${agentProviderName}".`
+      )
+    }
+
+    const workflowModel = this.workflowLLMProvider?.modelName || ''
+    const agentModel = this.agentLLMProvider?.modelName || ''
+    if (workflowModel !== agentModel) {
+      throw new Error(
+        `Workflow and agent local models must match for provider "${workflowProviderName}". Received workflow="${workflowModel}" and agent="${agentModel}".`
+      )
+    }
   }
 
   private normalizeCompletionResultForLocalProvider(
@@ -347,6 +450,7 @@ export default class LLMProvider {
   }
 
   private normalizeToolChoiceForCompatibility(
+    providerName: LLMProviders,
     toolChoice: CompletionParams['toolChoice'],
     tools: CompletionParams['tools']
   ): CompletionParams['toolChoice'] {
@@ -362,7 +466,7 @@ export default class LLMProvider {
     // values are not consistently supported across routed endpoints and can fail
     // with 404 "No endpoints found...". Omit tool_choice and keep the tool list
     // constrained for maximum routing compatibility.
-    if (LLM_PROVIDER === LLMProviders.OpenRouter) {
+    if (providerName === LLMProviders.OpenRouter) {
       if (toolChoice === 'required') {
         LogHelper.title('LLM Provider')
         LogHelper.debug(
@@ -382,7 +486,7 @@ export default class LLMProvider {
 
     // Z.AI currently supports tool_choice="auto". Omit unsupported values
     // (named/required/none) to preserve compatibility.
-    if (LLM_PROVIDER === LLMProviders.ZAI) {
+    if (providerName === LLMProviders.ZAI) {
       if (typeof toolChoice !== 'string') {
         LogHelper.title('LLM Provider')
         LogHelper.debug(
@@ -648,6 +752,7 @@ export default class LLMProvider {
   }
 
   private buildProviderErrorMessage(
+    providerName: LLMProviders,
     error: string,
     details = '',
     isRemoteProvider = false
@@ -658,7 +763,7 @@ export default class LLMProvider {
         : 'llm_provider_http_error',
       '',
       {
-        '{{ provider }}': LLM_PROVIDER,
+        '{{ provider }}': providerName,
         '{{ error }}': error,
         '{{ api_error }}': details ? `\n${details}` : ''
       }
@@ -1150,7 +1255,8 @@ export default class LLMProvider {
 
   private async normalizeStreamingCompletionResult(
     rawResult: AxiosResponse,
-    completionParams: CompletionParams
+    completionParams: CompletionParams,
+    providerName: LLMProviders
   ): Promise<NormalizedCompletionResult> {
     const responseStream = rawResult.data
     if (!this.isReadableStream(responseStream)) {
@@ -1174,7 +1280,7 @@ export default class LLMProvider {
     const isResponsesAPIProvider = [
       LLMProviders.OpenAI,
       LLMProviders.OpenRouter
-    ].includes(LLM_PROVIDER as LLMProviders)
+    ].includes(providerName)
 
     const appendReasoningChunk = (reasoningChunk: string): void => {
       if (!reasoningChunk) {
@@ -1650,6 +1756,9 @@ export default class LLMProvider {
     promptOrChatHistory: PromptOrChatHistory,
     completionParams: CompletionParams
   ): Promise<CompletionResult | null> {
+    completionParams.dutyType = completionParams.dutyType ?? null
+    const providerName = this.getProviderNameForDuty(completionParams.dutyType)
+    const provider = this.getProviderForDuty(completionParams.dutyType)
     const trackProviderErrors = completionParams.trackProviderErrors !== false
     if (trackProviderErrors) {
       this.lastProviderErrorMessage = null
@@ -1658,17 +1767,16 @@ export default class LLMProvider {
     const measureExecutionTimeLabel = `Inference time for "${completionParams.dutyType}" duty`
 
     LogHelper.title('LLM Provider')
-    LogHelper.info(`Using "${LLM_PROVIDER}" provider for completion...`)
+    LogHelper.info(`Using "${providerName}" provider for completion...`)
     LogHelper.time(measureExecutionTimeLabel)
 
-    if (!this.llmProvider) {
+    if (!provider) {
       LogHelper.error('LLM provider is not ready')
       return null
     }
 
-    completionParams.dutyType = completionParams.dutyType ?? null
     completionParams.timeout =
-      completionParams.timeout ?? DEFAULT_MAX_EXECUTION_TIMOUT
+      completionParams.timeout ?? this.getDefaultTimeoutForProvider(providerName)
     completionParams.maxRetries =
       completionParams.maxRetries ?? DEFAULT_MAX_EXECUTION_RETRIES
     completionParams.data = completionParams.data ?? null
@@ -1700,6 +1808,7 @@ export default class LLMProvider {
     }
 
     const normalizedToolChoice = this.normalizeToolChoiceForCompatibility(
+      providerName,
       completionParams.toolChoice,
       completionParams.tools
     )
@@ -1722,7 +1831,7 @@ export default class LLMProvider {
 
     const isJSONMode = completionParams.data !== null
     const shouldStreamOutput = completionParams.shouldStream === true
-    const isRemoteProvider = LLM_PROVIDER !== LLMProviders.Local
+    const isRemoteProvider = providerName !== LLMProviders.Local
 
     const abortController = new AbortController()
     let timeoutHandle: NodeJS.Timeout | null = null
@@ -1815,7 +1924,7 @@ export default class LLMProvider {
     let rawResultPromise: Promise<unknown>
     try {
       rawResultPromise = Promise.resolve(
-        this.llmProvider.runChatCompletion(
+        provider.runChatCompletion(
           promptOrChatHistory,
           completionParamsWithAbort
         )
@@ -1828,6 +1937,7 @@ export default class LLMProvider {
 
       if (trackProviderErrors) {
         this.lastProviderErrorMessage = this.buildProviderErrorMessage(
+          providerName,
           String(e),
           this.buildProviderErrorDetails(e),
           isRemoteProvider
@@ -2007,6 +2117,7 @@ export default class LLMProvider {
             : undefined
 
         this.lastProviderErrorMessage = this.buildProviderErrorMessage(
+          providerName,
           statusLike !== undefined
             ? `${String(e)} (statusCode=${String(statusLike)})`
             : String(e),
@@ -2087,7 +2198,8 @@ export default class LLMProvider {
               } as AxiosResponse)
         const normalized = await this.normalizeStreamingCompletionResult(
           streamResponse,
-          completionParams
+          completionParams,
+          providerName
         )
 
         rawResult = normalized.rawResult
@@ -2095,7 +2207,7 @@ export default class LLMProvider {
         usedOutputTokens = normalized.usedOutputTokens
         toolCalls = normalized.toolCalls
         reasoning = normalized.reasoning
-      } else if (LLM_PROVIDER === LLMProviders.Local) {
+      } else if (providerName === LLMProviders.Local) {
         if (completionParams.session) {
           const {
             rawResult: result,
@@ -2113,12 +2225,14 @@ export default class LLMProvider {
       } else if (
         [
           LLMProviders.Groq,
+          LLMProviders.Ollama,
+          LLMProviders.SGLang,
           LLMProviders.ZAI,
           LLMProviders.Anthropic,
           LLMProviders.MoonshotAI,
           LLMProviders.Cerebras,
           LLMProviders.HuggingFace
-        ].includes(LLM_PROVIDER as LLMProviders)
+        ].includes(providerName)
       ) {
         const normalized = this.normalizeCompletionResultForOpenAICompatibleProvider(
           rawResult as AxiosResponse
@@ -2131,7 +2245,7 @@ export default class LLMProvider {
         reasoning = normalized.reasoning
       } else if (
         [LLMProviders.OpenAI, LLMProviders.OpenRouter].includes(
-          LLM_PROVIDER as LLMProviders
+          providerName
         )
       ) {
         const parsedResponseData = this.parseProviderResponseData(
@@ -2151,7 +2265,7 @@ export default class LLMProvider {
         toolCalls = normalized.toolCalls
         reasoning = normalized.reasoning
       } else {
-        LogHelper.error(`The LLM provider "${LLM_PROVIDER}" is not yet supported`)
+        LogHelper.error(`The LLM provider "${providerName}" is not yet supported`)
         return null
       }
 
@@ -2196,7 +2310,7 @@ export default class LLMProvider {
 
       LogHelper.title('LLM Provider')
       LogHelper.warning(
-        `Received empty completion payload (no text/tool_calls/tokens) from "${LLM_PROVIDER}".${providerPayloadSnippet ? ` Payload: ${providerPayloadSnippet}` : ''}`
+        `Received empty completion payload (no text/tool_calls/tokens) from "${providerName}".${providerPayloadSnippet ? ` Payload: ${providerPayloadSnippet}` : ''}`
       )
 
       if (remainingRetries > 0) {
@@ -2209,6 +2323,7 @@ export default class LLMProvider {
 
       if (trackProviderErrors) {
         this.lastProviderErrorMessage = this.buildProviderErrorMessage(
+          providerName,
           'Provider returned an empty completion payload (no text, no tool call, no token usage)',
           providerPayloadSnippet,
           isRemoteProvider

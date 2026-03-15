@@ -9,6 +9,7 @@ import type {
 } from 'node-llama-cpp'
 
 import {
+  AGENT_LLM_PROVIDER,
   HAS_LLM,
   HAS_LLM_ACTION_RECOGNITION,
   HAS_LLM_NLG,
@@ -19,7 +20,7 @@ import {
   LLM_MINIMUM_TOTAL_VRAM,
   LLM_NAME_WITH_VERSION,
   LLM_PATH,
-  LLM_PROVIDER,
+  WORKFLOW_LLM_PROVIDER,
   LLM_SKILL_ROUTER_DUTY_SKILL_LIST_PATH
 } from '@/constants'
 import { LogHelper } from '@/helpers/log-helper'
@@ -197,7 +198,7 @@ export default class LLMManager {
    * files that only need to be loaded once
    */
   private async singleLoad(): Promise<void> {
-    if (LLM_PROVIDER === LLMProviders.Local && !this._localModel) {
+    if (WORKFLOW_LLM_PROVIDER === LLMProviders.Local && !this._localModel) {
       throw new Error('Local LLM model is not loaded yet')
     }
 
@@ -258,24 +259,6 @@ export default class LLMManager {
 
   public async loadLLM(): Promise<void> {
     LogHelper.time('LLM Manager load LLM')
-    /**
-     * Get Llama even if LLM is not enabled because it provides good utilities
-     * for graphics card information and other useful stuff
-     */
-    try {
-      const { LlamaLogLevel, getLlama } = await Function(
-        'return import("node-llama-cpp")'
-      )()
-
-      this._llama = await getLlama({
-        // logLevel: LlamaLogLevel.disabled
-        logLevel: LlamaLogLevel.debug
-      })
-    } catch (e) {
-      LogHelper.title('LLM Manager')
-      LogHelper.error(`LLM Manager failed to load. Cannot get model: ${e}`)
-    }
-
     if (!HAS_LLM) {
       LogHelper.title('LLM Manager')
       LogHelper.warning(
@@ -285,7 +268,35 @@ export default class LLMManager {
       return
     }
 
-    if (LLM_PROVIDER === LLMProviders.Local) {
+    const usesDeprecatedLocalProvider =
+      WORKFLOW_LLM_PROVIDER === LLMProviders.Local ||
+      AGENT_LLM_PROVIDER === LLMProviders.Local
+    if (usesDeprecatedLocalProvider) {
+      LogHelper.title('LLM Manager')
+      LogHelper.error(
+        'The "local" node-llama-cpp provider is no longer supported. Use "ollama" or "sglang" instead.'
+      )
+
+      return
+    }
+
+    if (
+      WORKFLOW_LLM_PROVIDER === LLMProviders.Local ||
+      AGENT_LLM_PROVIDER === LLMProviders.Local
+    ) {
+      try {
+        const { LlamaLogLevel, getLlama } = await Function(
+          'return import("node-llama-cpp")'
+        )()
+
+        this._llama = await getLlama({
+          logLevel: LlamaLogLevel.debug
+        })
+      } catch (e) {
+        LogHelper.title('LLM Manager')
+        LogHelper.error(`LLM Manager failed to load. Cannot get model: ${e}`)
+      }
+
       const [freeVRAMInGB, totalVRAMInGB] = await Promise.all([
         SystemHelper.getFreeVRAM(),
         SystemHelper.getTotalVRAM()
@@ -688,9 +699,13 @@ export default class LLMManager {
         LogHelper.error(`LLM Manager failed to load. Cannot load model: ${e}`)
       }
     } else {
-      if (!Object.values(LLMProviders).includes(LLM_PROVIDER as LLMProviders)) {
+      if (
+        !Object.values(LLMProviders).includes(
+          WORKFLOW_LLM_PROVIDER as LLMProviders
+        )
+      ) {
         LogHelper.warning(
-          `The LLM provider "${LLM_PROVIDER}" does not exist or is not yet supported`
+          `The workflow LLM provider "${WORKFLOW_LLM_PROVIDER}" does not exist or is not yet supported`
         )
 
         return
@@ -719,7 +734,7 @@ export default class LLMManager {
     this._shouldWarmUpLLMDuties =
       (IS_PRODUCTION_ENV || HAS_WARM_UP_LLM_DUTIES) &&
       this._isLLMEnabled &&
-      LLM_PROVIDER === LLMProviders.Local
+      WORKFLOW_LLM_PROVIDER === LLMProviders.Local
 
     try {
       // Post checking after loading the LLM
