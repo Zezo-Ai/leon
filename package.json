@@ -102,7 +102,6 @@
     "@sinclair/typebox": "0.31.23",
     "@tobilu/qmd": "2.0.1",
     "ai": "6.0.108",
-    "ai-sdk-ollama": "3.8.0",
     "ai-sdk-openai-websocket-fetch": "1.0.0",
     "ajv": "8.12.0",
     "ajv-formats": "2.1.1",

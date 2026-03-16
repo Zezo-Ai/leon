@@ -6,7 +6,6 @@ import { createMoonshotAI } from '@ai-sdk/moonshotai'
 import { createHuggingFace } from '@ai-sdk/huggingface'
 import { createCerebras } from '@ai-sdk/cerebras'
 import { createGroq } from '@ai-sdk/groq'
-import { createOllama } from 'ai-sdk-ollama'
 import { createWebSocketFetch } from 'ai-sdk-openai-websocket-fetch'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 
@@ -25,7 +24,6 @@ type AISDKFlavor =
   | 'openai-responses'
   | 'openrouter'
   | 'openai-compatible'
-  | 'ollama'
   | 'anthropic'
   | 'moonshotai'
   | 'huggingface'
@@ -69,10 +67,7 @@ export default class AISDKRemoteLLMProvider {
   protected readonly model: string
 
   private readonly config: AISDKRemoteProviderConfig
-  private readonly languageModel: unknown | undefined
-  private readonly ollamaProvider:
-    | ReturnType<typeof createOllama>
-    | undefined
+  private readonly languageModel: unknown
   private openAIWebSocketFetch:
     | ReturnType<typeof createWebSocketFetch>
     | undefined
@@ -94,10 +89,7 @@ export default class AISDKRemoteLLMProvider {
     LogHelper.success('New instance')
 
     this.checkAPIKey()
-    this.ollamaProvider =
-      this.config.flavor === 'ollama' ? this.createOllamaProvider() : undefined
-    this.languageModel =
-      this.config.flavor === 'ollama' ? undefined : this.createLanguageModel()
+    this.languageModel = this.createLanguageModel()
   }
 
   public get modelName(): string {
@@ -217,49 +209,8 @@ export default class AISDKRemoteLLMProvider {
 
     throw new Error(`Unsupported AI SDK flavor: ${this.config.flavor}`)
   }
-
-  private createOllamaProvider(): ReturnType<typeof createOllama> {
-    const apiKey = this.apiKey || ''
-    const headers = this.config.headers?.(apiKey)
-
-    return createOllama({
-      baseURL: this.config.baseURL,
-      ...(apiKey ? { apiKey } : {}),
-      ...(headers && Object.keys(headers).length > 0 ? { headers } : {})
-    })
-  }
-
-  private shouldEnableOllamaThinking(
-    completionParams: CompletionParams
-  ): boolean {
-    const managedReasoningMode = this.resolveManagedReasoningMode(
-      completionParams
-    )
-
-    if (managedReasoningMode) {
-      return managedReasoningMode !== 'off'
-    }
-
-    return false
-  }
-
-  private getLanguageModel(completionParams: CompletionParams): unknown {
-    if (this.config.flavor !== 'ollama') {
-      return this.languageModel
-    }
-
-    if (!this.ollamaProvider) {
-      throw new Error('Ollama provider is not initialized')
-    }
-
-    return this.ollamaProvider(this.model, {
-      // Leon already owns retries, tool-call handling, and JSON recovery.
-      reliableToolCalling: false,
-      reliableObjectGeneration: false,
-      // Avoid consuming output budgets in hidden reasoning unless Leon
-      // explicitly asks for it.
-      think: this.shouldEnableOllamaThinking(completionParams)
-    })
+  private getLanguageModel(): unknown {
+    return this.languageModel
   }
 
   private getOpenAIWebSocketFetch(): ReturnType<typeof createWebSocketFetch> {
@@ -821,7 +772,7 @@ export default class AISDKRemoteLLMProvider {
   ): Promise<Record<string, unknown>> {
     const state = this.createCallState()
     const callOptions = this.buildCallOptions(prompt, completionParams)
-    const languageModel = this.getLanguageModel(completionParams)
+    const languageModel = this.getLanguageModel()
     const result = await (
       languageModel as {
         doGenerate: (
@@ -875,7 +826,7 @@ export default class AISDKRemoteLLMProvider {
   ): Promise<Record<string, unknown>> {
     const state = this.createCallState()
     const callOptions = this.buildCallOptions(prompt, completionParams)
-    const languageModel = this.getLanguageModel(completionParams)
+    const languageModel = this.getLanguageModel()
     const result = await (
       languageModel as {
         doStream: (

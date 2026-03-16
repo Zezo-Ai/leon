@@ -62,14 +62,12 @@ interface Provider {
 type ProviderRole = 'workflow' | 'agent'
 
 const LOCAL_SERVER_PROVIDERS = new Set<LLMProviders>([
-  LLMProviders.Ollama,
   LLMProviders.LlamaCPP,
   LLMProviders.SGLang
 ])
 
 const LLM_PROVIDERS_MAP = {
   [LLMProviders.Local]: 'local-llm-provider',
-  [LLMProviders.Ollama]: 'ollama-llm-provider',
   [LLMProviders.LlamaCPP]: 'llamacpp-llm-provider',
   [LLMProviders.SGLang]: 'sglang-llm-provider',
   [LLMProviders.Groq]: 'groq-llm-provider',
@@ -169,7 +167,7 @@ export default class LLMProvider {
     for (const providerName of configuredProviders) {
       if (providerName === LLMProviders.Local) {
         LogHelper.error(
-          'The "local" node-llama-cpp provider is no longer supported. Use "ollama" or "sglang" instead.'
+          'The "local" node-llama-cpp provider is no longer supported. Use "llamacpp" or "sglang" instead.'
         )
 
         return false
@@ -2251,7 +2249,6 @@ export default class LLMProvider {
       } else if (
         [
           LLMProviders.Groq,
-          LLMProviders.Ollama,
           LLMProviders.LlamaCPP,
           LLMProviders.SGLang,
           LLMProviders.ZAI,

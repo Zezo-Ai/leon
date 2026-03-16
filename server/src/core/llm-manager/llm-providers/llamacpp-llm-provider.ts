@@ -520,9 +520,7 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
         '--cache-type-k',
         'q8_0',
         '--cache-type-v',
-        'q8_0',
-        '--n-gpu-layers',
-        'all'
+        'q8_0'
       ],
       {
         cwd: process.cwd(),

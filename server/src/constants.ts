@@ -338,7 +338,7 @@ export const SHOULD_START_PYTHON_TCP_SERVER = !(
 )
 export const LEON_DISABLED_CONTEXT_FILES =
   process.env['LEON_DISABLED_CONTEXT_FILES'] || ''
-export const LLM_PROVIDER = process.env['LEON_LLM_PROVIDER'] || 'ollama'
+export const LLM_PROVIDER = process.env['LEON_LLM_PROVIDER'] || 'llamacpp'
 export const WORKFLOW_LLM_PROVIDER =
   process.env['LEON_WORKFLOW_LLM_PROVIDER'] || LLM_PROVIDER
 export const AGENT_LLM_PROVIDER =

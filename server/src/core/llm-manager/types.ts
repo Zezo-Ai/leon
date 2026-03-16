@@ -28,7 +28,6 @@ export enum LLMDuties {
 
 export enum LLMProviders {
   Local = 'local',
-  Ollama = 'ollama',
   LlamaCPP = 'llamacpp',
   SGLang = 'sglang',
   Groq = 'groq',

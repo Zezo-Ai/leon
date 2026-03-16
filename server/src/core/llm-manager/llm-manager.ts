@@ -274,7 +274,7 @@ export default class LLMManager {
     if (usesDeprecatedLocalProvider) {
       LogHelper.title('LLM Manager')
       LogHelper.error(
-        'The "local" node-llama-cpp provider is no longer supported. Use "ollama" or "sglang" instead.'
+        'The "local" node-llama-cpp provider is no longer supported. Use "llamacpp" or "sglang" instead.'
       )
 
       return
