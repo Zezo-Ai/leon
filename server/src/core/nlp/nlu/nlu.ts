@@ -733,6 +733,10 @@ export default class NLU {
         : {}
     const hasExplicitMemoryWrite =
       reactData['hasExplicitMemoryWrite'] === true
+    const llmMetrics =
+      reactData['llmMetrics'] && typeof reactData['llmMetrics'] === 'object'
+        ? (reactData['llmMetrics'] as Record<string, unknown>)
+        : null
     const finalIntent =
       typeof reactData['finalIntent'] === 'string'
         ? (reactData['finalIntent'] as
@@ -823,7 +827,22 @@ export default class NLU {
     }
 
     if (output && !BRAIN.isMuted) {
-      await BRAIN.talk(String(output), true)
+      await BRAIN.talk(
+        llmMetrics
+          ? {
+              text: String(output),
+              speech: String(output),
+              llmMetrics: {
+                inputTokens: Number(llmMetrics['inputTokens'] || 0),
+                outputTokens: Number(llmMetrics['outputTokens'] || 0),
+                totalTokens: Number(llmMetrics['totalTokens'] || 0),
+                durationMs: Number(llmMetrics['durationMs'] || 0),
+                tokensPerSecond: Number(llmMetrics['tokensPerSecond'] || 0)
+              }
+            }
+          : String(output),
+        true
+      )
     }
   }
   private async runSkillWriterCreateSkill(

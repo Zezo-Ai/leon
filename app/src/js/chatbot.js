@@ -216,7 +216,8 @@ export default class Chatbot {
               ? bubble.originalString
               : bubble.string,
             save: false,
-            isCreatingFromLoadingFeed: true
+            isCreatingFromLoadingFeed: true,
+            metrics: bubble.llmMetrics || null
           })
 
           if (i + 1 === this.parsedBubbles.length) {
@@ -289,6 +290,7 @@ export default class Chatbot {
     const {
       who,
       string,
+      metrics = null,
       save = true,
       bubbleId,
       isCreatingFromLoadingFeed = false,
@@ -324,6 +326,10 @@ export default class Chatbot {
       this.feed.appendChild(container)
     }
     container.appendChild(bubble)
+
+    if (who === 'leon' && metrics) {
+      container.appendChild(this.createMetricsElement(metrics))
+    }
 
     let widgetComponentTree = null
     let widgetSupportedEvents = null
@@ -381,7 +387,7 @@ export default class Chatbot {
     }
 
     if (save) {
-      this.saveBubble(who, originalString, formattedString, messageId)
+      this.saveBubble(who, originalString, formattedString, messageId, metrics)
     }
 
     return container
@@ -481,7 +487,7 @@ export default class Chatbot {
     }
   }
 
-  saveBubble(who, originalString, string, messageId) {
+  saveBubble(who, originalString, string, messageId, metrics = null) {
     if (!this.noBubbleMessage.classList.contains('hide')) {
       this.noBubbleMessage.classList.add('hide')
     }
@@ -495,7 +501,8 @@ export default class Chatbot {
       who,
       string,
       originalString,
-      messageId
+      messageId,
+      llmMetrics: metrics
     })
     localStorage.setItem('bubbles', JSON.stringify(this.parsedBubbles))
     this.scrollDown()
@@ -523,6 +530,52 @@ export default class Chatbot {
     }
 
     return message
+  }
+
+  formatMetrics(metrics) {
+    if (!metrics) {
+      return ''
+    }
+
+    const inputTokens = Number(metrics.inputTokens || 0)
+    const outputTokens = Number(metrics.outputTokens || 0)
+    const totalTokens = Number(metrics.totalTokens || inputTokens + outputTokens)
+    const durationSeconds = Number(metrics.durationMs || 0) / 1_000
+    const tokensPerSecond = Number(metrics.tokensPerSecond || 0)
+
+    return `${totalTokens} (i:${inputTokens}/o:${outputTokens}) tok • ${durationSeconds.toFixed(1)}s • ${tokensPerSecond.toFixed(2)} t/s`
+  }
+
+  createMetricsElement(metrics) {
+    const metricsElement = document.createElement('div')
+
+    metricsElement.className = 'bubble-metrics'
+    metricsElement.textContent = this.formatMetrics(metrics)
+
+    return metricsElement
+  }
+
+  updateBubbleMetrics(container, metrics) {
+    if (!container) {
+      return
+    }
+
+    const existingMetricsElement = container.querySelector('.bubble-metrics')
+
+    if (!metrics) {
+      if (existingMetricsElement) {
+        existingMetricsElement.remove()
+      }
+
+      return
+    }
+
+    if (existingMetricsElement) {
+      existingMetricsElement.textContent = this.formatMetrics(metrics)
+      return
+    }
+
+    container.appendChild(this.createMetricsElement(metrics))
   }
 
   getLatestReasoningContainer() {
@@ -555,17 +608,30 @@ export default class Chatbot {
       }
     }
 
-    const widgetString =
-      typeof newData === 'string' ? newData : JSON.stringify(newData)
+    const isTextAnswerPayload = Boolean(
+      newData &&
+        typeof newData === 'object' &&
+        typeof newData.answer === 'string' &&
+        !newData.widget &&
+        !newData.componentTree
+    )
+    const bubbleString = isTextAnswerPayload
+      ? newData.answer
+      : typeof newData === 'string'
+        ? newData
+        : JSON.stringify(newData)
+    const metrics =
+      isTextAnswerPayload && newData.llmMetrics ? newData.llmMetrics : null
 
     const beforeElement = isPlanWidget ? null : nextSibling
 
     this.createBubble({
       who: 'leon',
-      string: widgetString,
+      string: bubbleString,
       save: isPlanWidget,
       messageId: replaceMessageId,
-      beforeElement
+      beforeElement,
+      metrics
     })
 
     /**

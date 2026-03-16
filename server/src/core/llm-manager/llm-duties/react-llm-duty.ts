@@ -189,6 +189,7 @@ export class ReActLLMDuty extends LLMDuty {
   protected input: LLMDutyParams['input'] = null
   private totalInputTokens = 0
   private totalOutputTokens = 0
+  private executionStartedAt = 0
   private hasStreamedTokenEmission = false
   private hasExplicitMemoryWrite = false
   private reasoningGenerationId: string | null = null
@@ -265,6 +266,7 @@ export class ReActLLMDuty extends LLMDuty {
     LogHelper.title(this.name)
     LogHelper.info('Executing...')
 
+    this.executionStartedAt = Date.now()
     this.totalInputTokens = 0
     this.totalOutputTokens = 0
     this.hasStreamedTokenEmission = false
@@ -2556,6 +2558,11 @@ export class ReActLLMDuty extends LLMDuty {
       `Total tokens — input: ${this.totalInputTokens} | output: ${this.totalOutputTokens} | combined: ${this.totalInputTokens + this.totalOutputTokens}`
     )
 
+    const durationMs = Math.max(Date.now() - this.executionStartedAt, 0)
+    const totalTokens = this.totalInputTokens + this.totalOutputTokens
+    const tokensPerSecond =
+      durationMs > 0 ? Number(((totalTokens / durationMs) * 1_000).toFixed(2)) : 0
+
     return {
       dutyType: LLMDuties.ReAct,
       systemPrompt: this.systemPrompt,
@@ -2564,6 +2571,13 @@ export class ReActLLMDuty extends LLMDuty {
       data: {
         hasExplicitMemoryWrite: this.hasExplicitMemoryWrite,
         finalIntent: this.finalResponseIntent,
+        llmMetrics: {
+          inputTokens: this.totalInputTokens,
+          outputTokens: this.totalOutputTokens,
+          totalTokens,
+          durationMs,
+          tokensPerSecond
+        },
         executionHistory: this.lastExecutionHistory.map((item) => ({
           function: item.function,
           status: item.status,
