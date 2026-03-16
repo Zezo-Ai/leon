@@ -63,12 +63,14 @@ type ProviderRole = 'workflow' | 'agent'
 
 const LOCAL_SERVER_PROVIDERS = new Set<LLMProviders>([
   LLMProviders.Ollama,
+  LLMProviders.LlamaCPP,
   LLMProviders.SGLang
 ])
 
 const LLM_PROVIDERS_MAP = {
   [LLMProviders.Local]: 'local-llm-provider',
   [LLMProviders.Ollama]: 'ollama-llm-provider',
+  [LLMProviders.LlamaCPP]: 'llamacpp-llm-provider',
   [LLMProviders.SGLang]: 'sglang-llm-provider',
   [LLMProviders.Groq]: 'groq-llm-provider',
   [LLMProviders.OpenRouter]: 'openrouter-llm-provider',
@@ -200,6 +202,12 @@ export default class LLMProvider {
     )
 
     return true
+  }
+
+  public dispose(): void {
+    this.disposeCurrentProviders()
+    this.workflowLLMProvider = undefined
+    this.agentLLMProvider = undefined
   }
 
   private async createProvider(
@@ -504,6 +512,16 @@ export default class LLMProvider {
       }
     }
 
+    if (providerName === LLMProviders.LlamaCPP) {
+      if (typeof toolChoice !== 'string') {
+        LogHelper.title('LLM Provider')
+        LogHelper.debug(
+          'llama.cpp compatibility: converted named tool_choice to "required".'
+        )
+        return 'required'
+      }
+    }
+
     return toolChoice
   }
 
@@ -522,8 +540,13 @@ export default class LLMProvider {
   }
 
   private shouldDisableThinkingForForcedToolChoice(
+    providerName: LLMProviders,
     completionParams: CompletionParams
   ): boolean {
+    if (providerName !== LLMProviders.LlamaCPP) {
+      return false
+    }
+
     return (
       Array.isArray(completionParams.tools) &&
       completionParams.tools.length > 0 &&
@@ -1819,13 +1842,16 @@ export default class LLMProvider {
     }
 
     if (
-      this.shouldDisableThinkingForForcedToolChoice(completionParams) &&
+      this.shouldDisableThinkingForForcedToolChoice(
+        providerName,
+        completionParams
+      ) &&
       completionParams.disableThinking !== true
     ) {
       completionParams.disableThinking = true
       LogHelper.title('LLM Provider')
       LogHelper.debug(
-        'Tool-calling compatibility: disabled thinking because tool_choice is forced.'
+        'llama.cpp compatibility: disabled thinking because tool_choice is forced.'
       )
     }
 
@@ -2226,6 +2252,7 @@ export default class LLMProvider {
         [
           LLMProviders.Groq,
           LLMProviders.Ollama,
+          LLMProviders.LlamaCPP,
           LLMProviders.SGLang,
           LLMProviders.ZAI,
           LLMProviders.Anthropic,

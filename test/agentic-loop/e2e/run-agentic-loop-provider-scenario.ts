@@ -1,10 +1,9 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import type { AgenticProvider } from './provider-matrix'
-import { PROVIDER_API_KEY_ENV } from './provider-matrix'
+import { PROVIDER_REQUIRED_ENV } from './provider-matrix'
 
 const RESULT_PREFIX = '__AGENTIC_LOOP_RESULT__'
 const PROGRESS_PREFIX = '__AGENTIC_LOOP_PROGRESS__'
@@ -85,7 +84,7 @@ function summarizeValue(value: string, maxLength = 220): string {
 
 async function main(): Promise<void> {
   const providerArg = process.argv[2] as AgenticProvider | undefined
-  if (!providerArg || !(providerArg in PROVIDER_API_KEY_ENV)) {
+  if (!providerArg || !(providerArg in PROVIDER_REQUIRED_ENV)) {
     printResult({
       provider: (providerArg || 'openai') as AgenticProvider,
       skipped: true,
@@ -95,21 +94,21 @@ async function main(): Promise<void> {
   }
 
   const provider = providerArg
-  const apiKeyEnv = PROVIDER_API_KEY_ENV[provider]
-  if (!process.env[apiKeyEnv]) {
+  const requiredEnv = PROVIDER_REQUIRED_ENV[provider]
+  if (!process.env[requiredEnv]) {
     printResult({
       provider,
       skipped: true,
-      reason: `missing_${apiKeyEnv.toLowerCase()}`
+      reason: `missing_${requiredEnv.toLowerCase()}`
     })
     return
   }
 
   process.env['LEON_NODE_ENV'] = 'testing'
   process.env['LEON_LLM_PROVIDER'] = provider
+  process.env['LEON_WORKFLOW_LLM_PROVIDER'] = provider
+  process.env['LEON_AGENT_LLM_PROVIDER'] = provider
 
-  const currentDir = fileURLToPath(new URL('.', import.meta.url))
-  const rootDir = path.resolve(currentDir, '..', '..', '..')
   const tempAssetPath = path.join(
     os.tmpdir(),
     `leon-agentic-loop-${provider}-${Date.now()}.txt`
@@ -155,7 +154,7 @@ async function main(): Promise<void> {
    * Wrap tool execution so the parent spec can assert on real tool usage
    * without changing the production ReAct path.
    */
-  TOOL_EXECUTOR.executeTool = async (input) => {
+  TOOL_EXECUTOR.executeTool = async (input): Promise<unknown> => {
     const toolResult = await originalExecuteTool(input)
     const toolName = `${input.toolkitId}.${input.toolId}.${input.functionName || 'unknown'}`
     const serializedInput = input.toolInput || ''

@@ -79,7 +79,9 @@ function extractTestNamePattern(argv: string[]): string | null {
   return null
 }
 
-function resolveProviderMatrix(pattern: string | null) {
+function resolveProviderMatrix(
+  pattern: string | null
+): typeof PROVIDER_MATRIX {
   if (!pattern) {
     return PROVIDER_MATRIX
   }
@@ -165,7 +167,9 @@ async function runProviderScenario(
       env: {
         ...process.env,
         LEON_NODE_ENV: 'testing',
-        LEON_LLM_PROVIDER: provider
+        LEON_LLM_PROVIDER: provider,
+        LEON_WORKFLOW_LLM_PROVIDER: provider,
+        LEON_AGENT_LLM_PROVIDER: provider
       },
       all: true,
       reject: false,
@@ -227,12 +231,12 @@ async function runProviderScenario(
 }
 
 describe('agentic loop e2e', () => {
-  for (const { provider, apiKeyEnv } of ACTIVE_PROVIDER_MATRIX) {
+  for (const { provider, requiredEnv } of ACTIVE_PROVIDER_MATRIX) {
     /**
      * Missing credentials should skip that provider cleanly rather than fail
      * the whole matrix.
      */
-    it.skipIf(!process.env[apiKeyEnv])(
+    it.skipIf(!process.env[requiredEnv])(
       `runs the 3-turn scenario on ${provider}`,
       async () => {
         const result = await runProviderScenario(provider)

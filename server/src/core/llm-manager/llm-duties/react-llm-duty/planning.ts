@@ -200,7 +200,7 @@ export async function runPlanningPhase(
       prompt,
       planSystemPrompt,
       planTools,
-      'auto',
+      { type: 'function', function: { name: 'create_plan' } },
       history,
       false,
       buildPlanningPromptSections({

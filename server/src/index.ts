@@ -259,6 +259,8 @@ import { SystemHelper } from '@/helpers/system-helper'
     )
   }
   const shutdown = (exitCode = 0): void => {
+    LLM_PROVIDER.dispose()
+
     if (global.pythonTCPServerProcess?.pid) {
       kill(global.pythonTCPServerProcess.pid as number)
     }
