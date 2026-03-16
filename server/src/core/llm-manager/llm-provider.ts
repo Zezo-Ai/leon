@@ -33,6 +33,9 @@ interface CompletionResult {
   thoughtTokensBudget?: number
   usedInputTokens: number
   usedOutputTokens: number
+  generationDurationMs: number
+  providerDecodeDurationMs?: number
+  providerTokensPerSecond?: number
   temperature: number
   reasoning?: string
   /**
@@ -45,6 +48,9 @@ interface NormalizedCompletionResult {
   rawResult: string
   usedInputTokens: number
   usedOutputTokens: number
+  generationDurationMs?: number
+  providerDecodeDurationMs?: number
+  providerTokensPerSecond?: number
   toolCalls?: OpenAIToolCall[]
   reasoning?: string
 }
@@ -884,6 +890,11 @@ export default class LLMProvider {
       typeof parsedCompletionResult['usage'] === 'object'
         ? (parsedCompletionResult['usage'] as Record<string, unknown>)
         : {}
+    const timings =
+      parsedCompletionResult['timings'] &&
+      typeof parsedCompletionResult['timings'] === 'object'
+        ? (parsedCompletionResult['timings'] as Record<string, unknown>)
+        : {}
 
     const contentField = message['content']
     const normalizedContent =
@@ -918,6 +929,25 @@ export default class LLMProvider {
             : typeof usage['output_tokens'] === 'number'
               ? (usage['output_tokens'] as number)
           : 0
+    }
+
+    const providerDecodeDurationMs =
+      typeof timings['predicted_ms'] === 'number'
+        ? (timings['predicted_ms'] as number)
+        : typeof timings['predictedMs'] === 'number'
+          ? (timings['predictedMs'] as number)
+          : 0
+    const providerTokensPerSecond =
+      typeof timings['predicted_per_second'] === 'number'
+        ? (timings['predicted_per_second'] as number)
+        : typeof timings['predictedPerSecond'] === 'number'
+          ? (timings['predictedPerSecond'] as number)
+          : 0
+    if (providerDecodeDurationMs > 0) {
+      result.providerDecodeDurationMs = providerDecodeDurationMs
+    }
+    if (providerTokensPerSecond > 0) {
+      result.providerTokensPerSecond = providerTokensPerSecond
     }
 
     const reasoning = this.extractOpenAICompatibleReasoning(message)
@@ -1292,6 +1322,8 @@ export default class LLMProvider {
     let reasoningOutput = ''
     let usedInputTokens = 0
     let usedOutputTokens = 0
+    let providerDecodeDurationMs = 0
+    let providerTokensPerSecond = 0
     let buffer = ''
 
     const toolCallsByIndex: Record<number, OpenAIToolCall> = {}
@@ -1354,6 +1386,39 @@ export default class LLMProvider {
       }
     }
 
+    const updateTimingFromObject = (payload: Record<string, unknown>): void => {
+      const timings =
+        payload['timings'] && typeof payload['timings'] === 'object'
+          ? (payload['timings'] as Record<string, unknown>)
+          : null
+
+      if (!timings) {
+        return
+      }
+
+      const predictedMs =
+        typeof timings['predicted_ms'] === 'number'
+          ? (timings['predicted_ms'] as number)
+          : typeof timings['predictedMs'] === 'number'
+            ? (timings['predictedMs'] as number)
+            : 0
+
+      if (predictedMs > 0) {
+        providerDecodeDurationMs = predictedMs
+      }
+
+      const predictedPerSecond =
+        typeof timings['predicted_per_second'] === 'number'
+          ? (timings['predicted_per_second'] as number)
+          : typeof timings['predictedPerSecond'] === 'number'
+            ? (timings['predictedPerSecond'] as number)
+            : 0
+
+      if (predictedPerSecond > 0) {
+        providerTokensPerSecond = predictedPerSecond
+      }
+    }
+
     const getOrCreateResponseToolCall = (
       toolCallId: string,
       fallbackIndex: number
@@ -1409,6 +1474,7 @@ export default class LLMProvider {
     const applyOpenAICompatibleStreamingChunk = (
       parsedChunk: Record<string, unknown>
     ): void => {
+      updateTimingFromObject(parsedChunk)
       const usage = parsedChunk['usage']
       if (usage && typeof usage === 'object') {
         updateTokenUsageFromObject(usage as Record<string, unknown>, 'chat')
@@ -1506,6 +1572,7 @@ export default class LLMProvider {
       parsedChunk: Record<string, unknown>,
       eventName: string
     ): void => {
+      updateTimingFromObject(parsedChunk)
       const type =
         typeof parsedChunk['type'] === 'string'
           ? (parsedChunk['type'] as string)
@@ -1747,6 +1814,8 @@ export default class LLMProvider {
       rawResult: textOutput,
       usedInputTokens,
       usedOutputTokens,
+      ...(providerDecodeDurationMs > 0 ? { providerDecodeDurationMs } : {}),
+      ...(providerTokensPerSecond > 0 ? { providerTokensPerSecond } : {}),
       ...(reasoningOutput.trim().length > 0
         ? { reasoning: reasoningOutput.trim() }
         : {}),
@@ -1860,6 +1929,8 @@ export default class LLMProvider {
     const abortController = new AbortController()
     let timeoutHandle: NodeJS.Timeout | null = null
     let hasStartedStreaming = false
+    const completionStartedAt = Date.now()
+    let generationStartedAt: number | null = null
     const callerAbortSignal = completionParams.signal
     const userOnToken = completionParams.onToken
     const userOnReasoningToken = completionParams.onReasoningToken
@@ -1870,6 +1941,7 @@ export default class LLMProvider {
     const markStreamStarted = (): void => {
       if (!hasStartedStreaming) {
         hasStartedStreaming = true
+        generationStartedAt = Date.now()
         if (timeoutHandle) {
           clearTimeout(timeoutHandle)
           timeoutHandle = null
@@ -2177,6 +2249,9 @@ export default class LLMProvider {
 
     let usedInputTokens = 0
     let usedOutputTokens = 0
+    let generationDurationMs = 0
+    let providerDecodeDurationMs: number | undefined
+    let providerTokensPerSecond: number | undefined
     let toolCalls: OpenAIToolCall[] | undefined
     let reasoning: string | undefined
 
@@ -2229,6 +2304,11 @@ export default class LLMProvider {
         rawResult = normalized.rawResult
         usedInputTokens = normalized.usedInputTokens
         usedOutputTokens = normalized.usedOutputTokens
+        providerDecodeDurationMs = normalized.providerDecodeDurationMs
+        providerTokensPerSecond = normalized.providerTokensPerSecond
+        generationDurationMs =
+          normalized.generationDurationMs ??
+          Math.max(Date.now() - (generationStartedAt ?? completionStartedAt), 0)
         toolCalls = normalized.toolCalls
         reasoning = normalized.reasoning
       } else if (providerName === LLMProviders.Local) {
@@ -2245,6 +2325,10 @@ export default class LLMProvider {
           rawResult = result
           usedInputTokens = inputTokens
           usedOutputTokens = outputTokens
+          generationDurationMs = Math.max(
+            Date.now() - (generationStartedAt ?? completionStartedAt),
+            0
+          )
         }
       } else if (
         [
@@ -2265,6 +2349,12 @@ export default class LLMProvider {
         rawResult = normalized.rawResult
         usedInputTokens = normalized.usedInputTokens
         usedOutputTokens = normalized.usedOutputTokens
+        providerDecodeDurationMs = normalized.providerDecodeDurationMs
+        generationDurationMs = Math.max(
+          Date.now() - (generationStartedAt ?? completionStartedAt),
+          0
+        )
+        providerTokensPerSecond = normalized.providerTokensPerSecond
         toolCalls = normalized.toolCalls
         reasoning = normalized.reasoning
       } else if (
@@ -2286,6 +2376,12 @@ export default class LLMProvider {
         rawResult = normalized.rawResult
         usedInputTokens = normalized.usedInputTokens
         usedOutputTokens = normalized.usedOutputTokens
+        providerDecodeDurationMs = normalized.providerDecodeDurationMs
+        providerTokensPerSecond = normalized.providerTokensPerSecond
+        generationDurationMs = Math.max(
+          Date.now() - (generationStartedAt ?? completionStartedAt),
+          0
+        )
         toolCalls = normalized.toolCalls
         reasoning = normalized.reasoning
       } else {
@@ -2452,6 +2548,9 @@ export default class LLMProvider {
       // Current used context size
       usedInputTokens,
       usedOutputTokens,
+      generationDurationMs,
+      ...(providerDecodeDurationMs ? { providerDecodeDurationMs } : {}),
+      ...(providerTokensPerSecond ? { providerTokensPerSecond } : {}),
       ...(reasoning ? { reasoning } : {}),
       ...(toolCalls ? { toolCalls } : {})
     }

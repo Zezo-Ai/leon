@@ -17,7 +17,7 @@ import { BIN_PATH, LOGS_PATH } from '@/constants'
 import { LogHelper } from '@/helpers/log-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 
-const LLAMACPP_BASE_URL = 'http://127.0.0.1:8080/v1'
+const LLAMACPP_BASE_URL = 'http://0.0.0.0:8080/v1'
 const LLAMACPP_READY_TIMEOUT_MS = 120_000
 const LLAMACPP_READY_POLL_INTERVAL_MS = 250
 const LLAMA_SERVER_LOG_RESET_INTERVAL_MS = 12 * 60 * 60 * 1_000
@@ -237,7 +237,11 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
     let reasoning = ''
     let promptTokens = 0
     let completionTokens = 0
+    let predictedPerSecond = 0
+    let predictedMs = 0
     let buffer = ''
+    let firstStreamBlockAt: number | null = null
+    let lastStreamBlockAt: number | null = null
 
     const applyChunk = (chunk: Record<string, unknown>): void => {
       const usage =
@@ -250,6 +254,26 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
         }
         if (typeof usage['completion_tokens'] === 'number') {
           completionTokens = usage['completion_tokens'] as number
+        }
+      }
+
+      const timings =
+        chunk['timings'] && typeof chunk['timings'] === 'object'
+          ? (chunk['timings'] as Record<string, unknown>)
+          : null
+
+      if (timings) {
+        if (typeof timings['prompt_n'] === 'number') {
+          promptTokens = timings['prompt_n'] as number
+        }
+        if (typeof timings['predicted_n'] === 'number') {
+          completionTokens = timings['predicted_n'] as number
+        }
+        if (typeof timings['predicted_per_second'] === 'number') {
+          predictedPerSecond = timings['predicted_per_second'] as number
+        }
+        if (typeof timings['predicted_ms'] === 'number') {
+          predictedMs = timings['predicted_ms'] as number
         }
       }
 
@@ -271,12 +295,22 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
 
       const content = delta['content']
       if (typeof content === 'string' && content.length > 0) {
+        const now = Date.now()
+        if (firstStreamBlockAt === null) {
+          firstStreamBlockAt = now
+        }
+        lastStreamBlockAt = now
         text += content
         completionParams.onToken?.(content)
       }
 
       const reasoningChunk = this.readReasoningChunk(delta)
       if (reasoningChunk) {
+        const now = Date.now()
+        if (firstStreamBlockAt === null) {
+          firstStreamBlockAt = now
+        }
+        lastStreamBlockAt = now
         reasoning += reasoningChunk
         completionParams.onReasoningToken?.(reasoningChunk)
       }
@@ -359,8 +393,23 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
           usage: {
             prompt_tokens: promptTokens,
             completion_tokens: completionTokens
-          }
+          },
+          ...((predictedMs > 0 || predictedPerSecond > 0 ||
+            (firstStreamBlockAt !== null && lastStreamBlockAt !== null))
+            ? {
+                timings: {
+                  predicted_ms:
+                    predictedMs > 0
+                      ? predictedMs
+                      : Math.max(lastStreamBlockAt! - firstStreamBlockAt!, 0),
+                  ...(predictedPerSecond > 0
+                    ? { predicted_per_second: predictedPerSecond }
+                    : {})
+                }
+              }
+            : {})
         })
+
       })
 
       stream.on('error', (error) => {
@@ -551,7 +600,9 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
         '--cache-type-k',
         'q8_0',
         '--cache-type-v',
-        'q8_0'
+        'q8_0',
+        '--parallel',
+        '1'
       ],
       {
         cwd: process.cwd(),

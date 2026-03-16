@@ -154,7 +154,11 @@ export default class AISDKRemoteLLMProvider {
         ...(headers && Object.keys(headers).length > 0 ? { headers } : {})
       })
 
-      return provider.chat(this.model)
+      return provider.chat(this.model, {
+        usage: {
+          include: true
+        }
+      })
     }
 
     if (this.config.flavor === 'anthropic') {
@@ -725,7 +729,31 @@ export default class AISDKRemoteLLMProvider {
     }
   }
 
-  private buildOpenAICompatiblePayload(state: CallState): Record<string, unknown> {
+  private appendProviderMetadataUsageFromUnknown(
+    state: CallState,
+    providerMetadata: unknown
+  ): void {
+    if (!providerMetadata || typeof providerMetadata !== 'object') {
+      return
+    }
+
+    const providerMetadataObject = providerMetadata as Record<string, unknown>
+
+    if (
+      providerMetadataObject['openrouter'] &&
+      typeof providerMetadataObject['openrouter'] === 'object'
+    ) {
+      const openrouterMetadata = providerMetadataObject['openrouter'] as Record<
+        string,
+        unknown
+      >
+      this.appendUsageFromUnknown(state, openrouterMetadata['usage'])
+    }
+  }
+
+  private buildOpenAICompatiblePayload(
+    state: CallState
+  ): Record<string, unknown> {
     const toolCalls: OpenAIToolCall[] = state.toolCallOrder
       .map((toolCallId, index) => {
         const call = state.toolCallsById[toolCallId]
@@ -816,6 +844,7 @@ export default class AISDKRemoteLLMProvider {
     }
 
     this.appendUsageFromUnknown(state, result['usage'])
+    this.appendProviderMetadataUsageFromUnknown(state, result['providerMetadata'])
 
     return this.buildOpenAICompatiblePayload(state)
   }
@@ -833,6 +862,7 @@ export default class AISDKRemoteLLMProvider {
           options: Record<string, unknown>
         ) => Promise<{
           stream: AsyncIterable<Record<string, unknown>>
+          response?: unknown
         }>
       }
     ).doStream(callOptions)
@@ -971,6 +1001,10 @@ export default class AISDKRemoteLLMProvider {
 
       if (type === 'finish' || type === 'finish-step') {
         this.appendUsageFromUnknown(state, part['usage'])
+        this.appendProviderMetadataUsageFromUnknown(
+          state,
+          part['providerMetadata']
+        )
         continue
       }
 
@@ -990,21 +1024,13 @@ export default class AISDKRemoteLLMProvider {
     prompt: PromptOrChatHistory,
     completionParams: CompletionParams
   ): Promise<AxiosResponse> {
-    return new Promise(async (resolve, reject) => {
-      try {
-        this.checkAPIKey()
+    this.checkAPIKey()
 
-        const responseData =
-          completionParams.shouldStream === true
-            ? await this.runStreamingCompletion(prompt, completionParams)
-            : await this.runNonStreamingCompletion(prompt, completionParams)
-
-        return resolve({
-          data: responseData
-        } as AxiosResponse)
-      } catch (e) {
-        return reject(e instanceof Error ? e : new Error(String(e)))
-      }
-    })
+    return (completionParams.shouldStream === true
+      ? this.runStreamingCompletion(prompt, completionParams)
+      : this.runNonStreamingCompletion(prompt, completionParams)
+    ).then((responseData) => ({
+      data: responseData
+    })) as Promise<AxiosResponse>
   }
 }

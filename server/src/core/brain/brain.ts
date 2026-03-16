@@ -33,7 +33,23 @@ interface LLMAnswerMetrics {
   inputTokens: number
   outputTokens: number
   totalTokens: number
+  finalAnswerOutputTokens?: number
   durationMs: number
+  finalAnswerDurationMs?: number
+  finalAnswerTokensPerSecond?: number
+  finalAnswerCharsPerSecond?: number
+  outputCharsPerSecond?: number
+  averagedPhaseTokensPerSecond?: number
+  phaseMetrics?: {
+    planning: { outputTokens: number, durationMs: number, tokensPerSecond: number }
+    execution: { outputTokens: number, durationMs: number, tokensPerSecond: number }
+    recovery: { outputTokens: number, durationMs: number, tokensPerSecond: number }
+    final_answer: { outputTokens: number, durationMs: number, tokensPerSecond: number }
+  }
+  turnInputTokens?: number
+  turnOutputTokens?: number
+  turnTotalTokens?: number
+  ttftMs?: number
   tokensPerSecond: number
 }
 

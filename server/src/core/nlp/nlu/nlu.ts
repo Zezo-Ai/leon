@@ -836,7 +836,56 @@ export default class NLU {
                 inputTokens: Number(llmMetrics['inputTokens'] || 0),
                 outputTokens: Number(llmMetrics['outputTokens'] || 0),
                 totalTokens: Number(llmMetrics['totalTokens'] || 0),
+                finalAnswerOutputTokens: Number(
+                  llmMetrics['finalAnswerOutputTokens'] || 0
+                ),
                 durationMs: Number(llmMetrics['durationMs'] || 0),
+                finalAnswerDurationMs: Number(
+                  llmMetrics['finalAnswerDurationMs'] || 0
+                ),
+                finalAnswerTokensPerSecond: Number(
+                  llmMetrics['finalAnswerTokensPerSecond'] || 0
+                ),
+                finalAnswerCharsPerSecond: Number(
+                  llmMetrics['finalAnswerCharsPerSecond'] || 0
+                ),
+                outputCharsPerSecond: Number(
+                  llmMetrics['outputCharsPerSecond'] || 0
+                ),
+                averagedPhaseTokensPerSecond: Number(
+                  llmMetrics['averagedPhaseTokensPerSecond'] || 0
+                ),
+                ...(llmMetrics['phaseMetrics'] &&
+                typeof llmMetrics['phaseMetrics'] === 'object'
+                  ? {
+                      phaseMetrics: llmMetrics['phaseMetrics'] as {
+                        planning: {
+                          outputTokens: number
+                          durationMs: number
+                          tokensPerSecond: number
+                        }
+                        execution: {
+                          outputTokens: number
+                          durationMs: number
+                          tokensPerSecond: number
+                        }
+                        recovery: {
+                          outputTokens: number
+                          durationMs: number
+                          tokensPerSecond: number
+                        }
+                        final_answer: {
+                          outputTokens: number
+                          durationMs: number
+                          tokensPerSecond: number
+                        }
+                      }
+                    }
+                  : {}),
+                turnInputTokens: Number(llmMetrics['turnInputTokens'] || 0),
+                turnOutputTokens: Number(llmMetrics['turnOutputTokens'] || 0),
+                turnTotalTokens: Number(llmMetrics['turnTotalTokens'] || 0),
+                ttftMs: Number(llmMetrics['ttftMs'] || 0),
                 tokensPerSecond: Number(llmMetrics['tokensPerSecond'] || 0)
               }
             }

@@ -541,16 +541,33 @@ export default class Chatbot {
     const outputTokens = Number(metrics.outputTokens || 0)
     const totalTokens = Number(metrics.totalTokens || inputTokens + outputTokens)
     const durationSeconds = Number(metrics.durationMs || 0) / 1_000
-    const tokensPerSecond = Number(metrics.tokensPerSecond || 0)
+    const tokensPerSecond = Number(
+      metrics.tokensPerSecond || metrics.averagedPhaseTokensPerSecond || 0
+    )
 
-    return `${totalTokens} (i:${inputTokens}/o:${outputTokens}) tok • ${durationSeconds.toFixed(1)}s • ${tokensPerSecond.toFixed(2)} t/s`
+    return `
+      <span class="bubble-metric-item">
+        <i class="ri-copper-coin-line" aria-hidden="true"></i>
+        <span>${totalTokens} (i:${inputTokens}/o:${outputTokens}) tok</span>
+      </span>
+      <span class="bubble-metric-separator" aria-hidden="true">•</span>
+      <span class="bubble-metric-item">
+        <i class="ri-time-line" aria-hidden="true"></i>
+        <span>${durationSeconds.toFixed(1)}s</span>
+      </span>
+      <span class="bubble-metric-separator" aria-hidden="true">•</span>
+      <span class="bubble-metric-item">
+        <i class="ri-flashlight-line" aria-hidden="true"></i>
+        <span>${tokensPerSecond.toFixed(2)} t/s</span>
+      </span>
+    `.trim()
   }
 
   createMetricsElement(metrics) {
     const metricsElement = document.createElement('div')
 
     metricsElement.className = 'bubble-metrics'
-    metricsElement.textContent = this.formatMetrics(metrics)
+    metricsElement.innerHTML = this.formatMetrics(metrics)
 
     return metricsElement
   }
@@ -571,7 +588,7 @@ export default class Chatbot {
     }
 
     if (existingMetricsElement) {
-      existingMetricsElement.textContent = this.formatMetrics(metrics)
+      existingMetricsElement.innerHTML = this.formatMetrics(metrics)
       return
     }
 
