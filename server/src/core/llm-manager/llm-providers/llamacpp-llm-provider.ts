@@ -13,13 +13,14 @@ import type {
   CompletionParams,
   PromptOrChatHistory
 } from '@/core/llm-manager/types'
-import { BIN_PATH } from '@/constants'
+import { BIN_PATH, LOGS_PATH } from '@/constants'
 import { LogHelper } from '@/helpers/log-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 
 const LLAMACPP_BASE_URL = 'http://127.0.0.1:8080/v1'
 const LLAMACPP_READY_TIMEOUT_MS = 120_000
 const LLAMACPP_READY_POLL_INTERVAL_MS = 250
+const LLAMA_SERVER_LOG_RESET_INTERVAL_MS = 12 * 60 * 60 * 1_000
 const LLAMACPP_SERVER_URL = new URL(LLAMACPP_BASE_URL)
 const LLAMACPP_MODELS_URL = new URL(
   'models',
@@ -34,6 +35,7 @@ const LLAMACPP_SERVER_PORT = Number(
   LLAMACPP_SERVER_URL.port ||
     (LLAMACPP_SERVER_URL.protocol === 'https:' ? 443 : 80)
 )
+const LLAMA_SERVER_LOG_PATH = path.join(LOGS_PATH, 'llama-server.log')
 
 function wait(delayMs: number): Promise<void> {
   return new Promise((resolve) => {
@@ -62,6 +64,8 @@ function resolveModelPath(modelPath: string): string {
  */
 export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
   private static serverProcess: ChildProcessWithoutNullStreams | null = null
+  private static serverLogStream: fs.WriteStream | null = null
+  private static nextServerLogResetAt = 0
   private static activeModelPath: string | null = null
   private static serverReady = false
   private static serverReadyPromise: Promise<void> | null = null
@@ -504,6 +508,10 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
     LogHelper.title('llama.cpp LLM Provider')
     LogHelper.info(`Starting llama-server with model "${modelPath}"...`)
 
+    this.writeServerLogLine(
+      `Starting llama-server with model "${modelPath}".`
+    )
+
     const serverProcess = spawn(
       binaryPath,
       [
@@ -546,17 +554,19 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
       LogHelper.warning(
         `llama-server exited with code=${code ?? 'null'} signal=${signal ?? 'null'}`
       )
+
+      this.writeServerLogLine(
+        `llama-server exited with code=${code ?? 'null'} signal=${signal ?? 'null'}.`
+      )
+      this.closeServerLogStream()
+    })
+
+    serverProcess.stdout.on('data', (data: Buffer) => {
+      this.writeServerLogChunk(data)
     })
 
     serverProcess.stderr.on('data', (data: Buffer) => {
-      const message = data.toString().trim()
-
-      if (!message) {
-        return
-      }
-
-      LogHelper.title('llama.cpp LLM Provider')
-      LogHelper.warning(message)
+      this.writeServerLogChunk(data)
     })
 
     try {
@@ -565,6 +575,7 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
 
       LogHelper.title('llama.cpp LLM Provider')
       LogHelper.success('llama-server is ready')
+      this.writeServerLogLine('llama-server is ready.')
     } catch (error) {
       await this.disposeSharedServer()
       throw error
@@ -649,6 +660,7 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
     this.serverReadyPromise = null
 
     if (!serverProcess?.pid) {
+      this.closeServerLogStream()
       return
     }
 
@@ -658,7 +670,80 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
       })
     })
 
+    this.writeServerLogLine('Stopped llama-server.')
+    this.closeServerLogStream()
+
     LogHelper.title('llama.cpp LLM Provider')
     LogHelper.info('Stopped llama-server')
+  }
+
+  private static writeServerLogChunk(chunk: Buffer): void {
+    const stream = this.ensureServerLogStream()
+
+    stream.write(chunk)
+  }
+
+  private static writeServerLogLine(message: string): void {
+    const stream = this.ensureServerLogStream()
+
+    stream.write(`[${new Date().toISOString()}] ${message}\n`)
+  }
+
+  private static ensureServerLogStream(): fs.WriteStream {
+    const now = Date.now()
+
+    if (!this.serverLogStream) {
+      const { flags, nextResetAt } = this.getServerLogOpenState(now)
+
+      fs.mkdirSync(LOGS_PATH, { recursive: true })
+      this.serverLogStream = fs.createWriteStream(LLAMA_SERVER_LOG_PATH, {
+        flags
+      })
+      this.nextServerLogResetAt = nextResetAt
+
+      return this.serverLogStream
+    }
+
+    if (now >= this.nextServerLogResetAt) {
+      this.serverLogStream.end()
+      this.serverLogStream = fs.createWriteStream(LLAMA_SERVER_LOG_PATH, {
+        flags: 'w'
+      })
+      this.nextServerLogResetAt = now + LLAMA_SERVER_LOG_RESET_INTERVAL_MS
+    }
+
+    return this.serverLogStream
+  }
+
+  private static getServerLogOpenState(now: number): {
+    flags: 'a' | 'w'
+    nextResetAt: number
+  } {
+    if (!fs.existsSync(LLAMA_SERVER_LOG_PATH)) {
+      return {
+        flags: 'w',
+        nextResetAt: now + LLAMA_SERVER_LOG_RESET_INTERVAL_MS
+      }
+    }
+
+    const { mtimeMs } = fs.statSync(LLAMA_SERVER_LOG_PATH)
+
+    if (now - mtimeMs >= LLAMA_SERVER_LOG_RESET_INTERVAL_MS) {
+      return {
+        flags: 'w',
+        nextResetAt: now + LLAMA_SERVER_LOG_RESET_INTERVAL_MS
+      }
+    }
+
+    return {
+      flags: 'a',
+      nextResetAt: mtimeMs + LLAMA_SERVER_LOG_RESET_INTERVAL_MS
+    }
+  }
+
+  private static closeServerLogStream(): void {
+    this.serverLogStream?.end()
+    this.serverLogStream = null
+    this.nextServerLogResetAt = 0
   }
 }
