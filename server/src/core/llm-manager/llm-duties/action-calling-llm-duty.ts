@@ -595,18 +595,11 @@ Follow these rules exactly:
       } else {
         // Remote provider path: use native tool calling
         const openAITools = this.actionsToOpenAITools(filteredActions)
-        const toolChoice =
-          preselectedSingleActionName && openAITools.length === 1
-            ? ({
-                type: 'function' as const,
-                function: { name: preselectedSingleActionName }
-              } as const)
-            : ('auto' as const)
 
         completionResult = await LLM_PROVIDER.prompt(prompt, {
           ...completionParams,
           tools: openAITools,
-          toolChoice
+          toolChoice: 'auto'
         })
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

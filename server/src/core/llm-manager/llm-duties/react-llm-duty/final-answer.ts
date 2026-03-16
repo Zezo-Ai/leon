@@ -190,7 +190,7 @@ ${FORMATTING_RULES}`
           prompt,
           systemPrompt,
           [answerTool],
-          { type: 'function', function: { name: 'provide_answer' } },
+          'auto',
           caller.history,
           false,
           buildFinalAnswerPromptSections(prompt, systemPrompt, [

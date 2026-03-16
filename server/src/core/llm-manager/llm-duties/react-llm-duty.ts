@@ -1870,7 +1870,7 @@ export class ReActLLMDuty extends LLMDuty {
     prompt: string,
     systemPrompt: string,
     tools: OpenAITool[],
-    toolChoice: OpenAIToolChoice,
+    toolChoice?: OpenAIToolChoice,
     history?: MessageLog[],
     shouldStreamToUser?: boolean,
     promptSections?: PromptLogSection[],
@@ -1889,10 +1889,8 @@ export class ReActLLMDuty extends LLMDuty {
     const phase = options?.phase ?? 'execution'
     const completionStartedAt = Date.now()
     const phasePolicy = getPhasePolicy(phase)
-    // Keep tool_choice explicit at call sites. This avoids hidden behavior and
-    // lets phases decide when forcing a tool is worth disabling thinking.
     const effectiveToolChoice: OpenAIToolChoice | undefined =
-      tools.length === 0 ? undefined : toolChoice
+      tools.length === 0 ? undefined : (toolChoice ?? 'auto')
     const reasoningMode =
       options?.disableThinking === true
         ? 'off'
@@ -1978,7 +1976,7 @@ export class ReActLLMDuty extends LLMDuty {
         prompt,
         systemPrompt,
         tools,
-        toolChoice,
+        effectiveToolChoice,
         history
       )
 
@@ -2629,7 +2627,7 @@ export class ReActLLMDuty extends LLMDuty {
     prompt: string,
     systemPrompt: string,
     tools: OpenAITool[],
-    toolChoice: OpenAIToolChoice,
+    toolChoice: OpenAIToolChoice | undefined,
     history?: MessageLog[]
   ): Promise<void> {
     const promptTokens =
@@ -2640,9 +2638,11 @@ export class ReActLLMDuty extends LLMDuty {
     const totalEstimatedTokens =
       promptTokens + toolSchemaTokens + historyTokens
     const forcedChoice =
-      typeof toolChoice === 'string'
-        ? toolChoice
-        : `forced:${toolChoice.function.name}`
+      toolChoice === undefined
+        ? 'omitted'
+        : typeof toolChoice === 'string'
+          ? toolChoice
+          : `forced:${toolChoice.function.name}`
 
     const diagnosisMessage = BRAIN.wernicke('react.tool_call.diagnosis', '', {
       '{{ provider }}': LLM_PROVIDER_NAME,

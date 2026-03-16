@@ -138,7 +138,7 @@ export interface LLMCaller {
     prompt: string,
     systemPrompt: string,
     tools: OpenAITool[],
-    toolChoice: OpenAIToolChoice,
+    toolChoice?: OpenAIToolChoice,
     history?: MessageLog[],
     shouldStreamToUser?: boolean,
     promptSections?: PromptLogSection[],

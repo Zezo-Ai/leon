@@ -1045,7 +1045,7 @@ async function executeFunctionWithNativeTools(
       prompt,
       executeSystemPrompt,
       [tool],
-      { type: 'function', function: { name: functionName } },
+      'auto',
       undefined,
       false,
       buildExecutionPromptSections({
