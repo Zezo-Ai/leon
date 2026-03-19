@@ -6,7 +6,11 @@ import { fileURLToPath } from 'node:url'
 
 import { downloadFile } from 'ipull'
 
-import { TOOLKITS_PATH } from '@bridge/constants'
+import {
+  NVIDIA_LIBS_PATH,
+  PYTORCH_TORCH_PATH,
+  TOOLKITS_PATH
+} from '@bridge/constants'
 import { ToolkitConfig } from '@sdk/toolkit-config'
 import { reportToolOutput } from '@sdk/tool-reporter'
 import {
@@ -55,6 +59,19 @@ export abstract class Tool {
     }
     return args[runtimeIndex + 1] === 'tool'
   })()
+
+  private static readonly nvidiaLibraryFolders = [
+    'cublas',
+    'cudnn',
+    'cuda_cudart',
+    'cuda_cupti',
+    'cusparse',
+    'cusparselt',
+    'cusparse_full',
+    'nccl',
+    'nvshmem',
+    'nvjitlink'
+  ]
 
   /**
    * Tool settings loaded from toolkit settings.json
@@ -297,6 +314,7 @@ export abstract class Tool {
   ): string {
     try {
       const startTime = Date.now()
+      const env = this.getBundledLibraryEnv()
 
       const result = execSync(
         `"${binaryPath}" ${args
@@ -305,7 +323,8 @@ export abstract class Tool {
         {
           encoding: execOptions.encoding || 'utf8',
           timeout: execOptions.timeout,
-          cwd: execOptions.cwd
+          cwd: execOptions.cwd,
+          env
         }
       )
 
@@ -361,9 +380,11 @@ export abstract class Tool {
     return new Promise((resolve, reject) => {
       const startTime = Date.now()
       let outputBuffer = ''
+      const env = this.getBundledLibraryEnv()
 
       const childProcess = spawn(binaryPath, args, {
-        cwd: execOptions.cwd
+        cwd: execOptions.cwd,
+        env
       })
 
       // Handle stdout
@@ -466,6 +487,39 @@ export abstract class Tool {
         }, execOptions.timeout)
       }
     })
+  }
+
+  private getBundledLibraryEnv(): NodeJS.ProcessEnv {
+    const env = { ...process.env }
+    const sharedLibraryPaths = this.getBundledLibraryPaths()
+
+    if (sharedLibraryPaths.length === 0) {
+      return env
+    }
+
+    const envKey =
+      process.platform === 'win32'
+        ? 'PATH'
+        : process.platform === 'darwin'
+          ? 'DYLD_LIBRARY_PATH'
+          : 'LD_LIBRARY_PATH'
+    const existingValue = env[envKey]
+
+    env[envKey] = [...sharedLibraryPaths, existingValue]
+      .filter(Boolean)
+      .join(path.delimiter)
+
+    return env
+  }
+
+  private getBundledLibraryPaths(): string[] {
+    const bundledPaths = [path.join(PYTORCH_TORCH_PATH, 'torch', 'lib')]
+
+    for (const folderName of Tool.nvidiaLibraryFolders) {
+      bundledPaths.push(path.join(NVIDIA_LIBS_PATH, folderName, 'lib'))
+    }
+
+    return bundledPaths.filter((candidate) => fs.existsSync(candidate))
   }
 
   /**

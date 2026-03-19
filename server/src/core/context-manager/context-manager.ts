@@ -85,6 +85,7 @@ export default class ContextManager {
     this.probeHelper,
     DEFAULT_CONTEXT_REFRESH_TTL_MS,
     {
+      getWorkflowLLMName: () => LLM_PROVIDER.workflowLLMName,
       getAgentLLMName: () => LLM_PROVIDER.agentLLMName,
       getLocalLLMName: () => LLM_PROVIDER.localLLMName
     }
@@ -439,6 +440,8 @@ export default class ContextManager {
       ...this.getContextRefreshWorkerArgs(),
       '--filename',
       definition.filename,
+      '--workflow-llm-name',
+      LLM_PROVIDER.workflowLLMName,
       '--agent-llm-name',
       LLM_PROVIDER.agentLLMName,
       '--local-llm-name',

@@ -18,7 +18,7 @@ import {
   SOCKET_SERVER
 } from '@/core'
 import { LLMProviders, LLMDuties } from '@/core/llm-manager/types'
-import { LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
+import { WORKFLOW_LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
 import { StringHelper } from '@/helpers/string-helper'
 
 type ParaphraseLLMDutyParams = LLMDutyParams

@@ -1,5 +1,7 @@
 {
   "cuda": "12",
+  "cuda_cudart": "12.9.79",
+  "cuda_cupti": "12.9.79",
   "cudnn": "9.17.1.4",
   "cublas": "12.9.1.4",
   "cusparse": "0.8.1.1",

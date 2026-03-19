@@ -4,29 +4,33 @@
  */
 export const PROVIDER_MATRIX = [
   {
+    provider: 'llamacpp',
+    requiredEnv: 'LEON_LLAMACPP_MODEL_PATH'
+  },
+  {
     provider: 'openrouter',
-    apiKeyEnv: 'LEON_OPENROUTER_API_KEY'
+    requiredEnv: 'LEON_OPENROUTER_API_KEY'
   },
   {
     provider: 'openai',
-    apiKeyEnv: 'LEON_OPENAI_API_KEY'
+    requiredEnv: 'LEON_OPENAI_API_KEY'
   },
   {
     provider: 'anthropic',
-    apiKeyEnv: 'LEON_ANTHROPIC_API_KEY'
+    requiredEnv: 'LEON_ANTHROPIC_API_KEY'
   },
   {
     provider: 'moonshotai',
-    apiKeyEnv: 'LEON_MOONSHOTAI_API_KEY'
+    requiredEnv: 'LEON_MOONSHOTAI_API_KEY'
   },
   {
     provider: 'zai',
-    apiKeyEnv: 'LEON_ZAI_API_KEY'
+    requiredEnv: 'LEON_ZAI_API_KEY'
   }
 ] as const
 
 export type AgenticProvider = (typeof PROVIDER_MATRIX)[number]['provider']
 
-export const PROVIDER_API_KEY_ENV = Object.fromEntries(
-  PROVIDER_MATRIX.map(({ provider, apiKeyEnv }) => [provider, apiKeyEnv])
+export const PROVIDER_REQUIRED_ENV = Object.fromEntries(
+  PROVIDER_MATRIX.map(({ provider, requiredEnv }) => [provider, requiredEnv])
 ) as Record<AgenticProvider, string>

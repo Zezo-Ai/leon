@@ -24,7 +24,10 @@ core/config/**/*.json
 bin/coqui/*
 bin/flite/*
 bin/nvidia/*
-bin/pytorch/torch/*
+bin/pytorch/torch
+bin/llama.cpp/llama.cpp
+bin/cmake/cmake
+bin/ninja/ninja
 scripts/out/*.md
 
 package-lock.json

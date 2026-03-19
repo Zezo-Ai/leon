@@ -122,6 +122,9 @@ export default class Client {
     this.socket.on('init-llm', (status) => {
       this.setInitStatus('llm', status)
     })
+    this.socket.on('init-llama-server-boot', (status) => {
+      this.setInitStatus('llamaServerBoot', status)
+    })
     this.socket.on('warmup-llm-duties', (status) => {
       this.setInitStatus('llmDutiesWarmUp', status)
     })
@@ -178,6 +181,12 @@ export default class Client {
         return
       }
 
+      const answerText = typeof data === 'string' ? data : data.answer
+      const llmMetrics =
+        data && typeof data === 'object' && data.llmMetrics
+          ? data.llmMetrics
+          : null
+
       /**
        * Just save the bubble if the newest bubble is from the streaming.
        * Otherwise, create a new bubble
@@ -192,16 +201,30 @@ export default class Client {
       const isBubbleFromStreaming = Boolean(streamedBubbleContainerElement)
 
       if (isBubbleFromStreaming && streamedBubbleContainerElement) {
-        this.chatbot.saveBubble('leon', data)
+        this.chatbot.saveBubble(
+          'leon',
+          answerText,
+          this.chatbot.formatMessage(answerText),
+          null,
+          llmMetrics
+        )
 
         // Slightly delay the update to avoid the stream animation to be interrupted
         setTimeout(() => {
           // Update the text of the bubble (quick emoji fix)
           streamedBubbleContainerElement.querySelector('p.bubble').innerHTML =
-            this.chatbot.formatMessage(data)
+            this.chatbot.formatMessage(answerText)
+          this.chatbot.updateBubbleMetrics(
+            streamedBubbleContainerElement,
+            llmMetrics
+          )
         }, 2_500)
       } else {
-        this.chatbot.receivedFrom('leon', data)
+        this.chatbot.createBubble({
+          who: 'leon',
+          string: answerText,
+          metrics: llmMetrics
+        })
       }
       this.chatbot.scrollDown({ force: true })
 

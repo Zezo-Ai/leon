@@ -9,6 +9,9 @@ import generateJSONSchemas from '../generate/generate-json-schemas'
 import setupDotenv from './setup-dotenv'
 import setupCore from './setup-core'
 import setupSkills from './setup-skills/setup-skills'
+import setupCMake from './setup-cmake'
+import setupNinja from './setup-ninja'
+import setupLlamaCPP from './setup-llama-cpp'
 import setupLocalLLM from './setup-local-llm'
 import setupQMDLLM from './setup-qmd-llm'
 import setupNVIDIALibs from './setup-nvidia-libs.js'
@@ -31,13 +34,16 @@ import setFfprobePermissions from './set-ffprobe-permissions'
     await setupSkills()
     LoaderHelper.stop()
     if (!IS_GITHUB_ACTIONS) {
+      await setupCMake()
+      await setupNinja()
+      await setupLlamaCPP()
       await setupLocalLLM()
       await setupQMDLLM()
       await setupNVIDIALibs()
       await setupPyTorch()
     } else {
       LogHelper.info(
-        'Skipping local LLM, QMD models, NVIDIA, and PyTorch setups because it is running in CI'
+        'Skipping CMake, Ninja, llama.cpp, local LLM, QMD models, NVIDIA, and PyTorch setups because it is running in CI'
       )
     }
 

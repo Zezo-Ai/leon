@@ -137,15 +137,34 @@ import { SystemHelper } from '@/helpers/system-helper'
   }
 
   try {
-    await LLM_PROVIDER.init()
+    // Start the HTTP server before heavyweight LLM startup so the client can
+    // render the initialization UI while local providers continue booting.
+    await HTTP_SERVER.init()
+  } catch (e) {
+    LogHelper.error(`HTTP server failed to init: ${e}`)
+  }
+
+  // Start the socket server as early as possible so init status events can
+  // flow to the client while the rest of Leon keeps booting.
+  await SOCKET_SERVER.init()
+  PULSE_MANAGER.start()
+
+  let isLLMProviderReady = false
+
+  try {
+    isLLMProviderReady = await LLM_PROVIDER.init()
   } catch (e) {
     LogHelper.error(`LLM Provider failed to init: ${e}`)
   }
 
-  try {
-    await LLM_MANAGER.loadLLM()
-  } catch (e) {
-    LogHelper.error(`LLM Manager failed to load: ${e}`)
+  if (isLLMProviderReady) {
+    try {
+      await LLM_MANAGER.loadLLM()
+    } catch (e) {
+      LogHelper.error(`LLM Manager failed to load: ${e}`)
+    }
+  } else {
+    LogHelper.warning('Skipping LLM Manager load because LLM Provider is not ready')
   }
 
   try {
@@ -213,20 +232,9 @@ import { SystemHelper } from '@/helpers/system-helper'
   })
   await translationDuty.execute()*/
 
-  try {
-    // Start the HTTP server
-    await HTTP_SERVER.init()
-  } catch (e) {
-    LogHelper.error(`HTTP server failed to init: ${e}`)
-  }
-
   // TODO
   // Register HTTP API endpoints
   // await HTTP_API.register()
-
-  // Start the socket server
-  SOCKET_SERVER.init()
-  PULSE_MANAGER.start()
 
   // Check for updates on startup and every 24 hours
   if (IS_PRODUCTION_ENV) {
@@ -259,6 +267,8 @@ import { SystemHelper } from '@/helpers/system-helper'
     )
   }
   const shutdown = (exitCode = 0): void => {
+    LLM_PROVIDER.dispose()
+
     if (global.pythonTCPServerProcess?.pid) {
       kill(global.pythonTCPServerProcess.pid as number)
     }

@@ -16,7 +16,7 @@ from .utils import (
     format_file_path,
     extract_archive,
 )
-from ..constants import TOOLKITS_PATH
+from ..constants import TOOLKITS_PATH, NVIDIA_LIBS_PATH, PYTORCH_TORCH_PATH
 import subprocess
 import sys
 import time
@@ -25,6 +25,19 @@ import shutil
 
 # Progress callback type for reporting tool progress
 ProgressCallback = Callable[[Dict[str, Optional[Union[str, int, float]]]], None]
+
+NVIDIA_LIBRARY_FOLDERS = [
+    "cublas",
+    "cudnn",
+    "cuda_cudart",
+    "cuda_cupti",
+    "cusparse",
+    "cusparselt",
+    "cusparse_full",
+    "nccl",
+    "nvshmem",
+    "nvjitlink",
+]
 
 
 # Command execution options
@@ -171,6 +184,35 @@ class BaseTool(ABC):
             tool_group_id,
         )
 
+    def _get_bundled_library_paths(self) -> List[str]:
+        bundled_paths = [os.path.join(PYTORCH_TORCH_PATH, "torch", "lib")]
+
+        for folder_name in NVIDIA_LIBRARY_FOLDERS:
+            bundled_paths.append(os.path.join(NVIDIA_LIBS_PATH, folder_name, "lib"))
+
+        return [candidate for candidate in bundled_paths if os.path.isdir(candidate)]
+
+    def _get_command_env(self) -> Dict[str, str]:
+        env = os.environ.copy()
+        bundled_paths = self._get_bundled_library_paths()
+
+        if not bundled_paths:
+            return env
+
+        if is_windows():
+            env_var_name = "PATH"
+        elif is_macos():
+            env_var_name = "DYLD_LIBRARY_PATH"
+        else:
+            env_var_name = "LD_LIBRARY_PATH"
+
+        existing_value = env.get(env_var_name, "")
+        env[env_var_name] = os.pathsep.join(
+            [*bundled_paths, existing_value] if existing_value else bundled_paths
+        )
+
+        return env
+
     def execute_command(self, options: ExecuteCommandOptions) -> str:
         """Execute a command with proper Leon messaging and progress tracking"""
 
@@ -238,6 +280,7 @@ class BaseTool(ABC):
                 shell=True,
                 timeout=exec_options.get("timeout") if exec_options else None,
                 cwd=exec_options.get("cwd") if exec_options else None,
+                env=self._get_command_env(),
             )
 
             execution_time = int((time.time() - start_time) * 1000)
@@ -311,6 +354,7 @@ class BaseTool(ABC):
                 stderr=subprocess.PIPE,
                 text=True,
                 cwd=exec_options.get("cwd") if exec_options else None,
+                env=self._get_command_env(),
             )
 
             # Read output in real time

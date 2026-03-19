@@ -5,13 +5,18 @@ import {
   NVIDIA_LIBS_PATH,
   NVIDIA_CUBLAS_PATH,
   NVIDIA_CUDNN_PATH,
+  NVIDIA_CUDA_CUDART_PATH,
+  NVIDIA_CUDA_CUPTI_PATH,
   NVIDIA_CUSPARSE_PATH,
+  NVIDIA_CUSPARSELT_PATH,
   NVIDIA_CUSPARSE_FULL_PATH,
   NVIDIA_NCCL_PATH,
   NVIDIA_NVSHMEM_PATH,
   NVIDIA_NVJITLINK_PATH,
   NVIDIA_CUBLAS_MANIFEST_PATH,
   NVIDIA_CUDNN_MANIFEST_PATH,
+  NVIDIA_CUDA_CUDART_MANIFEST_PATH,
+  NVIDIA_CUDA_CUPTI_MANIFEST_PATH,
   NVIDIA_CUSPARSE_MANIFEST_PATH,
   NVIDIA_CUSPARSE_FULL_MANIFEST_PATH,
   NVIDIA_NCCL_MANIFEST_PATH,
@@ -20,11 +25,15 @@ import {
   NVIDIA_CUDA_VERSION,
   NVIDIA_CUBLAS_VERSION,
   NVIDIA_CUDNN_VERSION,
+  NVIDIA_CUDA_CUDART_VERSION,
+  NVIDIA_CUDA_CUPTI_VERSION,
   NVIDIA_CUSPARSE_VERSION,
   NVIDIA_CUSPARSE_FULL_VERSION,
   NVIDIA_NCCL_VERSION,
   NVIDIA_NVSHMEM_VERSION,
-  NVIDIA_NVJITLINK_VERSION
+  NVIDIA_NVJITLINK_VERSION,
+  PYTORCH_NVIDIA_PATH,
+  PYTORCH_TORCH_PATH
 } from '@/constants'
 import { FileHelper } from '@/helpers/file-helper'
 import { SystemHelper } from '@/helpers/system-helper'
@@ -46,6 +55,32 @@ function mapToNvidiaArch(cpuArch) {
   }
 
   return 'x86_64'
+}
+
+async function ensureDirectoryLink(linkPath, targetPath) {
+  if (!fs.existsSync(targetPath)) {
+    return
+  }
+
+  await fs.promises.rm(linkPath, { recursive: true, force: true })
+  await fs.promises.mkdir(path.dirname(linkPath), { recursive: true })
+
+  const relativeTarget = path.relative(path.dirname(linkPath), targetPath)
+  const linkType = SystemHelper.isWindows() ? 'junction' : 'dir'
+
+  await fs.promises.symlink(relativeTarget, linkPath, linkType)
+}
+
+async function ensureCompatibilityLinks() {
+  await ensureDirectoryLink(NVIDIA_CUSPARSELT_PATH, NVIDIA_CUSPARSE_PATH)
+  await ensureDirectoryLink(
+    path.join(NVIDIA_LIBS_PATH, 'cuda_runtime'),
+    NVIDIA_CUDA_CUDART_PATH
+  )
+
+  if (fs.existsSync(PYTORCH_TORCH_PATH)) {
+    await ensureDirectoryLink(PYTORCH_NVIDIA_PATH, NVIDIA_LIBS_PATH)
+  }
 }
 
 /**
@@ -77,6 +112,10 @@ function getNVIDIADownloadURL(library, version) {
     return `https://developer.download.nvidia.com/compute/cuda/redist/libcublas/${OS_TYPE}-${arch}/libcublas-${OS_TYPE}-${arch}-${version}-archive.${ext}`
   } else if (library === 'cudnn') {
     return `https://developer.download.nvidia.com/compute/cudnn/redist/cudnn/${OS_TYPE}-${arch}/cudnn-${OS_TYPE}-${arch}-${version}_cuda${NVIDIA_CUDA_VERSION}-archive.${ext}`
+  } else if (library === 'cuda_cudart') {
+    return `https://developer.download.nvidia.com/compute/cuda/redist/cuda_cudart/${OS_TYPE}-${arch}/cuda_cudart-${OS_TYPE}-${arch}-${version}-archive.${ext}`
+  } else if (library === 'cuda_cupti') {
+    return `https://developer.download.nvidia.com/compute/cuda/redist/cuda_cupti/${OS_TYPE}-${arch}/cuda_cupti-${OS_TYPE}-${arch}-${version}-archive.${ext}`
   } else if (library === 'cusparse') {
     return `https://developer.download.nvidia.com/compute/cusparselt/redist/libcusparse_lt/${OS_TYPE}-${arch}/libcusparse_lt-${OS_TYPE}-${arch}-${version}_cuda${NVIDIA_CUDA_VERSION}-archive.${ext}`
   } else if (library === 'cusparse_full') {
@@ -223,6 +262,22 @@ async function setupNVIDIALibs() {
       NVIDIA_CUDNN_MANIFEST_PATH
     )
 
+    // Install/update CUDA cudart runtime
+    await installNVIDIALibrary(
+      'cuda_cudart',
+      NVIDIA_CUDA_CUDART_VERSION,
+      NVIDIA_CUDA_CUDART_PATH,
+      NVIDIA_CUDA_CUDART_MANIFEST_PATH
+    )
+
+    // Install/update CUDA CUPTI
+    await installNVIDIALibrary(
+      'cuda_cupti',
+      NVIDIA_CUDA_CUPTI_VERSION,
+      NVIDIA_CUDA_CUPTI_PATH,
+      NVIDIA_CUDA_CUPTI_MANIFEST_PATH
+    )
+
     // Install/update cuSPARSE-Lt (Linux only, both x86_64 and aarch64)
     if (SystemHelper.isLinux()) {
       try {
@@ -292,6 +347,8 @@ async function setupNVIDIALibs() {
         LogHelper.warning(`NVSHMEM installation skipped: ${error.message}`)
       }
     }
+
+    await ensureCompatibilityLinks()
 
     LogHelper.success(`NVIDIA libraries setup complete in: ${NVIDIA_LIBS_PATH}`)
   } catch (error) {

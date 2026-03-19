@@ -3,6 +3,7 @@ import { ContextProbeHelper } from '@/core/context-manager/context-probe-helper'
 
 interface WorkerInput {
   filename: string
+  workflowLlmName: string
   agentLlmName: string
   localLlmName: string
 }
@@ -10,6 +11,7 @@ interface WorkerInput {
 function parseArgs(argv: string[]): WorkerInput {
   const input: WorkerInput = {
     filename: '',
+    workflowLlmName: 'unknown',
     agentLlmName: 'unknown',
     localLlmName: 'unknown'
   }
@@ -23,6 +25,12 @@ function parseArgs(argv: string[]): WorkerInput {
 
     if (key === '--filename') {
       input.filename = value
+      index += 1
+      continue
+    }
+
+    if (key === '--workflow-llm-name') {
+      input.workflowLlmName = value
       index += 1
       continue
     }
@@ -53,6 +61,7 @@ async function main(): Promise<void> {
     probeHelper,
     DEFAULT_CONTEXT_REFRESH_TTL_MS,
     {
+      getWorkflowLLMName: () => input.workflowLlmName,
       getAgentLLMName: () => input.agentLlmName,
       getLocalLLMName: () => input.localLlmName
     }

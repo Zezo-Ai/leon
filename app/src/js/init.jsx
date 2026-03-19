@@ -96,11 +96,19 @@ function SuccessListItem({ children }) {
 function Init() {
   const parentRef = useRef(null)
   const [config, setConfig] = useState(() => ({ ...window.leonConfigInfo }))
+  const usesLlamaCPP =
+    config.llm?.workflowProvider === 'llamacpp' ||
+    config.llm?.agentProvider === 'llamacpp'
   const [statusMap, setStatusMap] = useState({
     clientCoreServerHandshake: 'loading',
     tcpServerBoot:
       window.leonConfigInfo?.tcpServer?.enabled === false ? 'success' : 'loading',
     llm: 'loading',
+    llamaServerBoot:
+      window.leonConfigInfo?.llm?.workflowProvider === 'llamacpp' ||
+      window.leonConfigInfo?.llm?.agentProvider === 'llamacpp'
+        ? 'loading'
+        : 'success',
     llmDutiesWarmUp: 'loading'
   })
 
@@ -131,6 +139,9 @@ function Init() {
   const statuses = []
   for (let key of Object.keys(statusMap)) {
     if (key === 'tcpServerBoot' && config.tcpServer?.enabled === false) {
+      statuses.push('success')
+    }
+    else if (key === 'llamaServerBoot' && !usesLlamaCPP) {
       statuses.push('success')
     }
     // If LLM is not enabled, we don't need to check for LLM duties warm up
@@ -183,6 +194,9 @@ function Init() {
             )}
             {config.llm && config.llm.enabled && (
               <Item status={statusMap.llm}>LLM loaded</Item>
+            )}
+            {usesLlamaCPP && (
+              <Item status={statusMap.llamaServerBoot}>llama-server booted</Item>
             )}
             {config.shouldWarmUpLLMDuties && (
               <Item status={statusMap.llmDutiesWarmUp}>

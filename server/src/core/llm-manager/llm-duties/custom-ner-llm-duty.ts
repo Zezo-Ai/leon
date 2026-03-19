@@ -10,7 +10,7 @@ import {
 import { LogHelper } from '@/helpers/log-helper'
 import { LLM_MANAGER, LLM_PROVIDER } from '@/core'
 import { LLMProviders, LLMDuties } from '@/core/llm-manager/types'
-import { LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
+import { WORKFLOW_LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
 
 interface CustomNERLLMDutyParams<T> extends LLMDutyParams {
   data: {

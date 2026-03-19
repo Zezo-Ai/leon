@@ -1,8 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import type { ChatHistoryItem, LlamaContext } from 'node-llama-cpp'
-import { LlamaChatSession } from 'node-llama-cpp'
+import type { ChatHistoryItem, LlamaContext, LlamaChatSession } from 'node-llama-cpp'
 
 import {
   DEFAULT_INIT_PARAMS,
@@ -33,7 +32,7 @@ import {
   type OpenAIToolChoice
 } from '@/core/llm-manager/types'
 import { ContextStateStore } from '@/core/context-manager/context-state-store'
-import { LLM_PROVIDER as LLM_PROVIDER_NAME, LOGS_PATH } from '@/constants'
+import { AGENT_LLM_PROVIDER as LLM_PROVIDER_NAME, LOGS_PATH } from '@/constants'
 import type { MessageLog } from '@/types'
 
 import {
@@ -89,6 +88,13 @@ import {
   normalizeHistoryCompactionSummary,
   toChatHistoryItems
 } from './react-llm-duty/history-compaction'
+import {
+  type AccumulatedLLMMetricsState,
+  type FinalAnswerMetricsSnapshot,
+  type RawPhaseMetrics,
+  deriveLLMMetrics,
+  observeCompletionMetrics
+} from './react-llm-duty/metrics'
 
 const REACT_CONTINUATION_STATE_FILENAME = '.react-execution-continuation-state.json'
 const REACT_HISTORY_COMPACTION_STATE_FILENAME =
@@ -190,6 +196,18 @@ export class ReActLLMDuty extends LLMDuty {
   protected input: LLMDutyParams['input'] = null
   private totalInputTokens = 0
   private totalOutputTokens = 0
+  private totalVisibleOutputTokens = 0
+  private totalOutputChars = 0
+  private totalGenerationDurationMs = 0
+  private phaseMetrics: RawPhaseMetrics = {
+    planning: { outputTokens: 0, durationMs: 0 },
+    execution: { outputTokens: 0, durationMs: 0 },
+    recovery: { outputTokens: 0, durationMs: 0 },
+    final_answer: { outputTokens: 0, durationMs: 0 }
+  }
+  private finalAnswerMetrics: FinalAnswerMetricsSnapshot | null = null
+
+  private executionStartedAt = 0
   private hasStreamedTokenEmission = false
   private hasExplicitMemoryWrite = false
   private reasoningGenerationId: string | null = null
@@ -243,6 +261,10 @@ export class ReActLLMDuty extends LLMDuty {
 
           ReActLLMDuty.context = await LLM_MANAGER.model.createContext()
 
+          const { LlamaChatSession } = await Function(
+            'return import("node-llama-cpp")'
+          )()
+
           ReActLLMDuty.session = new LlamaChatSession({
             contextSequence: ReActLLMDuty.context.getSequence(),
             autoDisposeSequence: true,
@@ -262,8 +284,19 @@ export class ReActLLMDuty extends LLMDuty {
     LogHelper.title(this.name)
     LogHelper.info('Executing...')
 
+    this.executionStartedAt = Date.now()
     this.totalInputTokens = 0
     this.totalOutputTokens = 0
+    this.totalVisibleOutputTokens = 0
+    this.totalOutputChars = 0
+    this.totalGenerationDurationMs = 0
+    this.phaseMetrics = {
+      planning: { outputTokens: 0, durationMs: 0 },
+      execution: { outputTokens: 0, durationMs: 0 },
+      recovery: { outputTokens: 0, durationMs: 0 },
+      final_answer: { outputTokens: 0, durationMs: 0 }
+    }
+    this.finalAnswerMetrics = null
     this.hasStreamedTokenEmission = false
     this.hasExplicitMemoryWrite = false
     this.reasoningGenerationId = StringHelper.random(6, { onlyLetters: true })
@@ -1323,6 +1356,9 @@ export class ReActLLMDuty extends LLMDuty {
 
         if (LLM_PROVIDER_NAME === LLMProviders.Local) {
           const tempContext = await LLM_MANAGER.model.createContext()
+          const { LlamaChatSession } = await Function(
+            'return import("node-llama-cpp")'
+          )()
           const tempSession = new LlamaChatSession({
             contextSequence: tempContext.getSequence(),
             autoDisposeSequence: true,
@@ -1544,6 +1580,9 @@ export class ReActLLMDuty extends LLMDuty {
     }
 
     const tempContext = await LLM_MANAGER.model.createContext()
+    const { LlamaChatSession } = await Function(
+      'return import("node-llama-cpp")'
+    )()
     const tempSession = new LlamaChatSession({
       contextSequence: tempContext.getSequence(),
       autoDisposeSequence: true,
@@ -1569,9 +1608,13 @@ export class ReActLLMDuty extends LLMDuty {
     output: unknown
     usedInputTokens?: number
     usedOutputTokens?: number
+    generationDurationMs?: number
+    providerDecodeDurationMs?: number
+    providerTokensPerSecond?: number
     reasoning?: string
   } | null> {
     const phase = options?.phase ?? 'execution'
+    const completionStartedAt = Date.now()
     const phasePolicy = getPhasePolicy(phase)
     const reasoningMode =
       options?.disableThinking === true
@@ -1639,15 +1682,20 @@ export class ReActLLMDuty extends LLMDuty {
     }
 
     if (result) {
-      this.totalInputTokens += result.usedInputTokens ?? 0
-      this.totalOutputTokens += result.usedOutputTokens ?? 0
-      this.logPromptUsage(
+      const completionEndedAt = Date.now()
+      this.observeCompletionMetrics({
         phase,
-        'json',
-        result.usedInputTokens ?? 0,
-        result.usedOutputTokens ?? 0
-      )
-      this.logPromptReasoning(phase, 'json', result.reasoning)
+        channel: 'json',
+        completionStartedAt,
+        completedAt: completionEndedAt,
+        output: result.output,
+        reasoning: result.reasoning,
+        usedInputTokens: result.usedInputTokens,
+        usedOutputTokens: result.usedOutputTokens,
+        providerDecodeDurationMs: result.providerDecodeDurationMs,
+        providerTokensPerSecond: result.providerTokensPerSecond,
+        generationDurationMs: result.generationDurationMs
+      })
     }
 
     return result
@@ -1664,9 +1712,14 @@ export class ReActLLMDuty extends LLMDuty {
     output: string
     usedInputTokens?: number
     usedOutputTokens?: number
+    generationDurationMs?: number
+    providerDecodeDurationMs?: number
+    providerTokensPerSecond?: number
     reasoning?: string
   } | null> {
     const phase = options?.phase ?? 'execution'
+    const completionStartedAt = Date.now()
+    let firstVisibleTokenAt: number | null = null
     const phasePolicy = getPhasePolicy(phase)
     const reasoningMode =
       options?.disableThinking === true
@@ -1737,6 +1790,12 @@ export class ReActLLMDuty extends LLMDuty {
                     )
               )
 
+              if (phase === 'final_answer' && token.trim()) {
+                if (firstVisibleTokenAt === null) {
+                  firstVisibleTokenAt = Date.now()
+                }
+              }
+
               if (!token || !generationId) {
                 return
               }
@@ -1768,15 +1827,21 @@ export class ReActLLMDuty extends LLMDuty {
       return null
     }
 
-    this.totalInputTokens += result.usedInputTokens ?? 0
-    this.totalOutputTokens += result.usedOutputTokens ?? 0
-    this.logPromptUsage(
+    const completionEndedAt = Date.now()
+    this.observeCompletionMetrics({
       phase,
-      'text',
-      result.usedInputTokens ?? 0,
-      result.usedOutputTokens ?? 0
-    )
-    this.logPromptReasoning(phase, 'text', result.reasoning)
+      channel: 'text',
+      completionStartedAt,
+      completedAt: completionEndedAt,
+      output: result.output,
+      reasoning: result.reasoning,
+      usedInputTokens: result.usedInputTokens,
+      usedOutputTokens: result.usedOutputTokens,
+      providerDecodeDurationMs: result.providerDecodeDurationMs,
+      providerTokensPerSecond: result.providerTokensPerSecond,
+      generationDurationMs: result.generationDurationMs,
+      ...(firstVisibleTokenAt ? { firstTokenAt: firstVisibleTokenAt } : {})
+    })
 
     return {
       output:
@@ -1785,6 +1850,13 @@ export class ReActLLMDuty extends LLMDuty {
           : this.safeJSONStringify(result.output),
       usedInputTokens: result.usedInputTokens,
       usedOutputTokens: result.usedOutputTokens,
+      generationDurationMs: result.generationDurationMs,
+      ...(result.providerTokensPerSecond
+        ? { providerTokensPerSecond: result.providerTokensPerSecond }
+        : {}),
+      ...(result.providerDecodeDurationMs
+        ? { providerDecodeDurationMs: result.providerDecodeDurationMs }
+        : {}),
       ...(result.reasoning ? { reasoning: result.reasoning } : {})
     }
   }
@@ -1798,7 +1870,7 @@ export class ReActLLMDuty extends LLMDuty {
     prompt: string,
     systemPrompt: string,
     tools: OpenAITool[],
-    toolChoice: OpenAIToolChoice,
+    toolChoice?: OpenAIToolChoice,
     history?: MessageLog[],
     shouldStreamToUser?: boolean,
     promptSections?: PromptLogSection[],
@@ -1809,14 +1881,16 @@ export class ReActLLMDuty extends LLMDuty {
     textContent?: string
     usedInputTokens?: number
     usedOutputTokens?: number
+    generationDurationMs?: number
+    providerDecodeDurationMs?: number
+    providerTokensPerSecond?: number
     reasoning?: string
   } | null> {
     const phase = options?.phase ?? 'execution'
+    const completionStartedAt = Date.now()
     const phasePolicy = getPhasePolicy(phase)
-    // Keep tool_choice explicit at call sites. This avoids hidden behavior and
-    // lets phases decide when forcing a tool is worth disabling thinking.
     const effectiveToolChoice: OpenAIToolChoice | undefined =
-      tools.length === 0 ? undefined : toolChoice
+      tools.length === 0 ? undefined : (toolChoice ?? 'auto')
     const reasoningMode =
       options?.disableThinking === true
         ? 'off'
@@ -1902,7 +1976,7 @@ export class ReActLLMDuty extends LLMDuty {
         prompt,
         systemPrompt,
         tools,
-        toolChoice,
+        effectiveToolChoice,
         history
       )
 
@@ -2000,20 +2074,25 @@ export class ReActLLMDuty extends LLMDuty {
       return null
     }
 
-    this.totalInputTokens += completionResult.usedInputTokens ?? 0
-    this.totalOutputTokens += completionResult.usedOutputTokens ?? 0
-    this.logPromptUsage(
-      phase,
-      'tools',
-      completionResult.usedInputTokens ?? 0,
-      completionResult.usedOutputTokens ?? 0
-    )
-    this.logPromptReasoning(phase, 'tools', completionResult.reasoning)
-
-    // Check if the model responded with tool calls
+    const completionEndedAt = Date.now()
     const toolCalls = (
       completionResult as unknown as { toolCalls?: OpenAIToolCall[] }
     ).toolCalls
+    this.observeCompletionMetrics({
+      phase,
+      channel: 'tools',
+      completionStartedAt,
+      completedAt: completionEndedAt,
+      output: completionResult.output,
+      reasoning: completionResult.reasoning,
+      usedInputTokens: completionResult.usedInputTokens,
+      usedOutputTokens: completionResult.usedOutputTokens,
+      providerDecodeDurationMs: completionResult.providerDecodeDurationMs,
+      providerTokensPerSecond: completionResult.providerTokensPerSecond,
+      generationDurationMs: completionResult.generationDurationMs
+    })
+
+    // Check if the model responded with tool calls
     if (toolCalls && toolCalls.length > 0) {
       const firstCall = toolCalls[0]!
       const allowedToolNames = new Set(tools.map((t) => t.function.name))
@@ -2039,6 +2118,13 @@ export class ReActLLMDuty extends LLMDuty {
           textContent: textContentFallback,
           usedInputTokens: completionResult.usedInputTokens,
           usedOutputTokens: completionResult.usedOutputTokens,
+          generationDurationMs: completionResult.generationDurationMs,
+          ...(completionResult.providerTokensPerSecond
+            ? { providerTokensPerSecond: completionResult.providerTokensPerSecond }
+            : {}),
+          ...(completionResult.providerDecodeDurationMs
+            ? { providerDecodeDurationMs: completionResult.providerDecodeDurationMs }
+            : {}),
           ...(completionResult.reasoning
             ? { reasoning: completionResult.reasoning }
             : {})
@@ -2061,6 +2147,13 @@ export class ReActLLMDuty extends LLMDuty {
         },
         usedInputTokens: completionResult.usedInputTokens,
         usedOutputTokens: completionResult.usedOutputTokens,
+        generationDurationMs: completionResult.generationDurationMs,
+        ...(completionResult.providerTokensPerSecond
+          ? { providerTokensPerSecond: completionResult.providerTokensPerSecond }
+          : {}),
+        ...(completionResult.providerDecodeDurationMs
+          ? { providerDecodeDurationMs: completionResult.providerDecodeDurationMs }
+          : {}),
         ...(completionResult.reasoning
           ? { reasoning: completionResult.reasoning }
           : {})
@@ -2080,6 +2173,13 @@ export class ReActLLMDuty extends LLMDuty {
       textContent,
       usedInputTokens: completionResult.usedInputTokens,
       usedOutputTokens: completionResult.usedOutputTokens,
+      generationDurationMs: completionResult.generationDurationMs,
+      ...(completionResult.providerTokensPerSecond
+        ? { providerTokensPerSecond: completionResult.providerTokensPerSecond }
+        : {}),
+      ...(completionResult.providerDecodeDurationMs
+        ? { providerDecodeDurationMs: completionResult.providerDecodeDurationMs }
+        : {}),
       ...(completionResult.reasoning
         ? { reasoning: completionResult.reasoning }
         : {})
@@ -2419,6 +2519,69 @@ export class ReActLLMDuty extends LLMDuty {
     )
   }
 
+  private observeCompletionMetrics(params: {
+    phase: ReactPhase
+    channel: 'json' | 'text' | 'tools'
+    completionStartedAt: number
+    completedAt: number
+    output?: unknown | undefined
+    reasoning?: string | undefined
+    usedInputTokens?: number | undefined
+    usedOutputTokens?: number | undefined
+    generationDurationMs?: number | undefined
+    providerDecodeDurationMs?: number | undefined
+    providerTokensPerSecond?: number | undefined
+    firstTokenAt?: number | null | undefined
+  }): void {
+    const observedMetrics = observeCompletionMetrics({
+      providerName: LLM_PROVIDER_NAME as LLMProviders,
+      accumulator: {
+        totalInputTokens: this.totalInputTokens,
+        totalOutputTokens: this.totalOutputTokens,
+        totalVisibleOutputTokens: this.totalVisibleOutputTokens,
+        totalOutputChars: this.totalOutputChars,
+        totalGenerationDurationMs: this.totalGenerationDurationMs,
+        phaseMetrics: this.phaseMetrics,
+        finalAnswerMetrics: this.finalAnswerMetrics
+      } satisfies AccumulatedLLMMetricsState,
+      phase: params.phase,
+      completionStartedAt: params.completionStartedAt,
+      completedAt: params.completedAt,
+      output: params.output,
+      reasoning: params.reasoning,
+      usedInputTokens: params.usedInputTokens,
+      usedOutputTokens: params.usedOutputTokens,
+      generationDurationMs: params.generationDurationMs,
+      providerDecodeDurationMs: params.providerDecodeDurationMs,
+      providerTokensPerSecond: params.providerTokensPerSecond,
+      ...(params.firstTokenAt ? { firstTokenAt: params.firstTokenAt } : {}),
+      estimateTokensFromText: this.estimateTokensFromText.bind(this),
+      ...(LLM_PROVIDER_NAME === LLMProviders.Local && LLM_MANAGER.model
+        ? {
+            tokenizeLocally: (text: string): number =>
+              LLM_MANAGER.model.tokenize(text).length
+          }
+        : {})
+    })
+    this.totalInputTokens = observedMetrics.accumulator.totalInputTokens
+    this.totalOutputTokens = observedMetrics.accumulator.totalOutputTokens
+    this.totalVisibleOutputTokens =
+      observedMetrics.accumulator.totalVisibleOutputTokens
+    this.totalOutputChars = observedMetrics.accumulator.totalOutputChars
+    this.totalGenerationDurationMs =
+      observedMetrics.accumulator.totalGenerationDurationMs
+    this.phaseMetrics = observedMetrics.accumulator.phaseMetrics
+    this.finalAnswerMetrics = observedMetrics.accumulator.finalAnswerMetrics
+
+    this.logPromptUsage(
+      params.phase,
+      params.channel,
+      params.usedInputTokens ?? 0,
+      params.usedOutputTokens ?? 0
+    )
+    this.logPromptReasoning(params.phase, params.channel, params.reasoning)
+  }
+
   private logPromptReasoning(
     phase: ReactPhase,
     channel: 'json' | 'text' | 'tools',
@@ -2464,7 +2627,7 @@ export class ReActLLMDuty extends LLMDuty {
     prompt: string,
     systemPrompt: string,
     tools: OpenAITool[],
-    toolChoice: OpenAIToolChoice,
+    toolChoice: OpenAIToolChoice | undefined,
     history?: MessageLog[]
   ): Promise<void> {
     const promptTokens =
@@ -2475,9 +2638,11 @@ export class ReActLLMDuty extends LLMDuty {
     const totalEstimatedTokens =
       promptTokens + toolSchemaTokens + historyTokens
     const forcedChoice =
-      typeof toolChoice === 'string'
-        ? toolChoice
-        : `forced:${toolChoice.function.name}`
+      toolChoice === undefined
+        ? 'omitted'
+        : typeof toolChoice === 'string'
+          ? toolChoice
+          : `forced:${toolChoice.function.name}`
 
     const diagnosisMessage = BRAIN.wernicke('react.tool_call.diagnosis', '', {
       '{{ provider }}': LLM_PROVIDER_NAME,
@@ -2547,6 +2712,26 @@ export class ReActLLMDuty extends LLMDuty {
       `Total tokens — input: ${this.totalInputTokens} | output: ${this.totalOutputTokens} | combined: ${this.totalInputTokens + this.totalOutputTokens}`
     )
 
+    const llmMetrics = deriveLLMMetrics({
+      providerName: LLM_PROVIDER_NAME as LLMProviders,
+      normalizedOutput,
+      totalInputTokens: this.totalInputTokens,
+      totalOutputTokens: this.totalOutputTokens,
+      totalVisibleOutputTokens: this.totalVisibleOutputTokens,
+      totalOutputChars: this.totalOutputChars,
+      totalGenerationDurationMs: this.totalGenerationDurationMs,
+      turnDurationMs: Math.max(Date.now() - this.executionStartedAt, 0),
+      phaseMetrics: this.phaseMetrics,
+      finalAnswerMetrics: this.finalAnswerMetrics,
+      estimateTokensFromText: this.estimateTokensFromText.bind(this),
+      ...(LLM_PROVIDER_NAME === LLMProviders.Local && LLM_MANAGER.model
+        ? {
+            tokenizeLocally: (text: string): number =>
+              LLM_MANAGER.model.tokenize(text).length
+          }
+        : {})
+    })
+
     return {
       dutyType: LLMDuties.ReAct,
       systemPrompt: this.systemPrompt,
@@ -2555,6 +2740,7 @@ export class ReActLLMDuty extends LLMDuty {
       data: {
         hasExplicitMemoryWrite: this.hasExplicitMemoryWrite,
         finalIntent: this.finalResponseIntent,
+        llmMetrics,
         executionHistory: this.lastExecutionHistory.map((item) => ({
           function: item.function,
           status: item.status,

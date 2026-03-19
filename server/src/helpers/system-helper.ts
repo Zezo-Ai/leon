@@ -271,6 +271,14 @@ export class SystemHelper {
   }
 
   /**
+   * Check if the machine can support a local LLM based on total VRAM
+   * @example canSupportLocalLLM() // true
+   */
+  public static async canSupportLocalLLM(llama?: Llama): Promise<boolean> {
+    return (await this.getTotalVRAM(llama)) >= 6
+  }
+
+  /**
    * Get the amount of free VRAM (in GB) on the machine
    * @example getFreeVRAM() // 6
    */

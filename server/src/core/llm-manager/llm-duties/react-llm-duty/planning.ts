@@ -1,6 +1,7 @@
 import { LogHelper } from '@/helpers/log-helper'
-import type { OpenAITool } from '@/core/llm-manager/types'
+import { LLMProviders, type OpenAITool } from '@/core/llm-manager/types'
 import type { MessageLog } from '@/types'
+import { AGENT_LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
 
 import {
   PLAN_SYSTEM_PROMPT,
@@ -196,11 +197,17 @@ export async function runPlanningPhase(
       }
     ]
 
+    const isForcedCreatePlanChoice =
+      LLM_PROVIDER_NAME === LLMProviders.LlamaCPP
+    const planningToolChoice = isForcedCreatePlanChoice
+      ? ({ type: 'function', function: { name: 'create_plan' } } as const)
+      : 'auto'
+
     const toolResult = await caller.callLLMWithTools(
       prompt,
       planSystemPrompt,
       planTools,
-      'auto',
+      planningToolChoice,
       history,
       false,
       buildPlanningPromptSections({
@@ -357,7 +364,11 @@ export async function runPlanningPhase(
       }
 
       LogHelper.debug(
-        `Planning: unexpected tool call "${toolResult.unexpectedToolCall.functionName}" while forcing "create_plan", falling back to JSON mode`
+        `Planning: unexpected tool call "${toolResult.unexpectedToolCall.functionName}"${
+          isForcedCreatePlanChoice
+            ? ' while forcing "create_plan"'
+            : ''
+        }, falling back to JSON mode`
       )
     } else {
       const textFallbackParsed = parseOutput(textFallback)

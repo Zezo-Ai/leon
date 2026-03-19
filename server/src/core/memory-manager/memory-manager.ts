@@ -7,9 +7,10 @@ import { gzipSync } from 'node:zlib'
 import {
   CONTEXT_PATH,
   MEMORY_DB_PATH,
-  MEMORY_PATH
+  MEMORY_PATH,
+  WORKFLOW_LLM_PROVIDER
 } from '@/constants'
-import { LLMDuties } from '@/core/llm-manager/types'
+import { LLMDuties, LLMProviders } from '@/core/llm-manager/types'
 import { LogHelper } from '@/helpers/log-helper'
 
 import MemoryRepository from './memory-repository'
@@ -1255,8 +1256,14 @@ No markdown. No explanation.`
         timeout: PERSISTENT_EXTRACTION_TIMEOUT_MS,
         maxRetries: PERSISTENT_EXTRACTION_MAX_RETRIES,
         maxTokens: PERSISTENT_EXTRACTION_MAX_TOKENS,
-        disableThinking: true,
-        trackProviderErrors: false
+        trackProviderErrors: false,
+        /**
+         * Disable thinking when Llama.cpp since local models tend
+         * to loop overthink
+         */
+        ...(WORKFLOW_LLM_PROVIDER === LLMProviders.LlamaCPP
+          ? { disableThinking: true }
+          : {})
       })
 
       if (!completion?.output) {

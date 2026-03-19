@@ -445,11 +445,19 @@ textarea::-webkit-scrollbar-thumb {
 
 .bubble-container {
   padding: 6px;
+  display: flex;
+  flex-direction: column;
+  width: fit-content;
+  max-width: 60%;
 }
 .bubble-container.me {
+  margin-left: auto;
+  align-items: flex-end;
   text-align: right;
 }
 .bubble-container.leon {
+  margin-right: auto;
+  align-items: flex-start;
   text-align: left;
 }
 .show-more {
@@ -468,7 +476,7 @@ textarea::-webkit-scrollbar-thumb {
   padding: 10px 16px;
   border-radius: 16px;
   display: inline-block;
-  max-width: 60%;
+  max-width: 100%;
   word-break: break-word;
   text-align: left;
   opacity: 0;
@@ -476,6 +484,30 @@ textarea::-webkit-scrollbar-thumb {
   overflow: hidden;
   font-size: 1.8rem;
   line-height: 2.4rem;
+}
+.bubble-metrics {
+  cursor: default;
+  margin-top: 2px;
+  padding: 0 4px;
+  font-size: 0.95rem;
+  line-height: 1.2rem;
+  color: var(--grey-color);
+  align-self: flex-end;
+  text-align: right;
+}
+.bubble-metric-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.bubble-metric-item i {
+  font-size: 1rem;
+}
+.bubble-metric-separator {
+  margin: 0 6px;
+}
+#feed .me .bubble-metrics {
+  text-align: right;
 }
 #feed .me .bubble {
   background-color: #1c75db;

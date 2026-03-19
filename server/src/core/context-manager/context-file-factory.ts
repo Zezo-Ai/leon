@@ -23,6 +23,7 @@ import {
 export const DEFAULT_CONTEXT_REFRESH_TTL_MS = 10 * 60 * 1_000
 
 interface LeonRuntimeContextResolvers {
+  getWorkflowLLMName: () => string
   getAgentLLMName: () => string
   getLocalLLMName: () => string
 }

@@ -60,30 +60,6 @@
           },
           "device": {
             "type": "string"
-          },
-          "batchSize": {
-            "type": "number"
-          },
-          "language": {
-            "type": "string"
-          },
-          "returnTimestamps": {
-            "type": "boolean"
-          },
-          "useForcedAligner": {
-            "type": "boolean"
-          },
-          "cudaRuntimePath": {
-            "type": "string"
-          },
-          "torchPath": {
-            "type": "string"
-          },
-          "chunkDuration": {
-            "type": "number"
-          },
-          "cpuBatchSize": {
-            "type": "number"
           }
         },
         "required": [

@@ -29,13 +29,45 @@ interface IsTalkingWithVoiceOptions {
   shouldInterrupt?: boolean
 }
 
+interface LLMAnswerMetrics {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  finalAnswerOutputTokens?: number
+  durationMs: number
+  finalAnswerDurationMs?: number
+  finalAnswerTokensPerSecond?: number
+  finalAnswerCharsPerSecond?: number
+  outputCharsPerSecond?: number
+  averagedPhaseTokensPerSecond?: number
+  phaseMetrics?: {
+    planning: { outputTokens: number, durationMs: number, tokensPerSecond: number }
+    execution: { outputTokens: number, durationMs: number, tokensPerSecond: number }
+    recovery: { outputTokens: number, durationMs: number, tokensPerSecond: number }
+    final_answer: { outputTokens: number, durationMs: number, tokensPerSecond: number }
+  }
+  turnInputTokens?: number
+  turnOutputTokens?: number
+  turnTotalTokens?: number
+  ttftMs?: number
+  tokensPerSecond: number
+}
+
+type QueuedAnswer =
+  | SkillAnswerConfigSchema
+  | {
+      speech: string
+      text?: string
+      llmMetrics?: LLMAnswerMetrics
+    }
+
 const MIN_NB_OF_WORDS_TO_USE_LLM_NLG = 5
 
 export default class Brain {
   private static instance: Brain
   private _lang: ShortLanguageCode = 'en'
   private _isTalkingWithVoice = false
-  private answerQueue = new AnswerQueue<SkillAnswerConfigSchema>()
+  private answerQueue = new AnswerQueue<QueuedAnswer>()
   private answerQueueProcessTimerId: NodeJS.Timeout | undefined = undefined
   private broca: GlobalAnswersSchema = JSON.parse(
     fs.readFileSync(
@@ -184,6 +216,10 @@ export default class Brain {
       const answer = this.answerQueue.pop()
       let textAnswer: string | undefined = ''
       let speechAnswer = ''
+      const llmMetrics =
+        answer && typeof answer === 'object' && 'llmMetrics' in answer
+          ? answer.llmMetrics
+          : undefined
 
       if (answer && answer !== '') {
         textAnswer = typeof answer === 'string' ? answer : answer.text
@@ -277,7 +313,15 @@ export default class Brain {
             ''
           const sentAt = Date.now()
 
-          SOCKET_SERVER.socket?.emit('answer', textAnswer)
+          SOCKET_SERVER.socket?.emit(
+            'answer',
+            llmMetrics
+              ? {
+                  answer: textAnswer,
+                  llmMetrics
+                }
+              : textAnswer
+          )
 
           if (NLU.currentResponseRoute !== 'react') {
             void SELF_MODEL_MANAGER.observeTurn({
@@ -331,7 +375,7 @@ export default class Brain {
    * Make Leon talk by adding the answer to the answer queue
    */
   public async talk(
-    answer: SkillAnswerConfigSchema,
+    answer: QueuedAnswer,
     end = false
   ): Promise<void> {
     LogHelper.title('Brain')

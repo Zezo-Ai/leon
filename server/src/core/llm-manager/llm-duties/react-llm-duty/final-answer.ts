@@ -24,6 +24,13 @@ export async function runFinalAnswerPhase(
   executionHistory: ExecutionRecord[],
   handoffSignal?: FinalResponseSignal | null
 ): Promise<string> {
+  if (
+    handoffSignal?.intent === 'clarification' &&
+    handoffSignal.draft.trim()
+  ) {
+    return handoffSignal.draft.trim()
+  }
+
   LogHelper.title(`${DUTY_NAME} / final_answer`)
   LogHelper.debug('Synthesizing final answer from execution history...')
 
@@ -183,7 +190,7 @@ ${FORMATTING_RULES}`
           prompt,
           systemPrompt,
           [answerTool],
-          { type: 'function', function: { name: 'provide_answer' } },
+          'auto',
           caller.history,
           false,
           buildFinalAnswerPromptSections(prompt, systemPrompt, [

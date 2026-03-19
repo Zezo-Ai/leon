@@ -1,4 +1,4 @@
-import { LlamaChatSession } from 'node-llama-cpp'
+import type { LlamaChatSession } from 'node-llama-cpp'
 
 import {
   DEFAULT_INIT_PARAMS,
@@ -10,7 +10,7 @@ import {
 import { LogHelper } from '@/helpers/log-helper'
 import { LLM_MANAGER, LLM_PROVIDER } from '@/core'
 import { LLMDuties, LLMProviders } from '@/core/llm-manager/types'
-import { LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
+import { WORKFLOW_LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
 import { StringHelper } from '@/helpers/string-helper'
 
 type SkillRouterLLMDutyParams = LLMDutyParams
@@ -87,6 +87,10 @@ export class SkillRouterLLMDuty extends LLMDuty {
             SkillRouterLLMDuty.session.dispose({ disposeSequence: true })
             LogHelper.info('Session disposed')
           }
+
+          const { LlamaChatSession } = await Function(
+            'return import("node-llama-cpp")'
+          )()
 
           SkillRouterLLMDuty.session = new LlamaChatSession({
             contextSequence: LLM_MANAGER.context.getSequence(),

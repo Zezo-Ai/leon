@@ -40,7 +40,11 @@ export class FileHelper {
       ...options
     })
 
-    return downloader.download()
+    try {
+      await downloader.download()
+    } finally {
+      await downloader.close()
+    }
   }
 
   /**

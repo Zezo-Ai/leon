@@ -1,14 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { CPUArchitectures } from '@/types'
 import {
-  LLM_NAME,
-  LLM_NAME_WITH_VERSION,
-  LLM_MINIMUM_TOTAL_VRAM,
   LLM_DIR_PATH,
-  LLM_PATH,
-  LLM_VERSION,
-  LLM_HF_DOWNLOAD_URL
+  LLM_MANIFEST_PATH,
+  LLM_HIGH_TIER_MINIMUM_TOTAL_VRAM,
+  LLM_MINIMUM_TOTAL_VRAM,
+  LLAMACPP_RELEASE_VERSION
 } from '@/constants'
 import { SystemHelper } from '@/helpers/system-helper'
 import { LogHelper } from '@/helpers/log-helper'
@@ -16,21 +15,72 @@ import { FileHelper } from '@/helpers/file-helper'
 import { NetworkHelper } from '@/helpers/network-helper'
 
 /**
- * Download and set up LLM
+ * Download and set up the default local LLM
  * 1. Check minimum hardware requirements
- * 2. Check if Hugging Face is accessible
- * 3. Download the latest LLM from Hugging Face or mirror
- * 4. Create manifest file
+ * 2. Select the default model according to total VRAM
+ * 3. Download the model from Hugging Face or mirror
+ * 4. Create manifest file with the default installed model path
  */
 
-const LLM_MANIFEST_PATH = path.join(LLM_DIR_PATH, 'manifest.json')
-let manifest = null
+const DEFAULT_LLM_OPTIONS = [
+  {
+    minimumTotalVRAM: LLM_HIGH_TIER_MINIMUM_TOTAL_VRAM,
+    name: 'Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive',
+    version: 'Q4_K_M',
+    fileName: 'Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf',
+    downloadURL:
+      'https://huggingface.co/HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive/resolve/main/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf?download=true'
+  },
+  {
+    minimumTotalVRAM: LLM_MINIMUM_TOTAL_VRAM,
+    name: 'Qwen3.5-9B-Uncensored-HauhauCS-Aggressive',
+    version: 'Q4_K_M',
+    fileName: 'Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf',
+    downloadURL:
+      'https://huggingface.co/HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive/resolve/main/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf?download=true'
+  }
+]
 
-async function checkMinimumHardwareRequirements() {
-  LogHelper.info(
-    'Checking minimum hardware requirements can take a few minutes...'
+function readManifest() {
+  if (!fs.existsSync(LLM_MANIFEST_PATH)) {
+    return null
+  }
+
+  try {
+    return JSON.parse(fs.readFileSync(LLM_MANIFEST_PATH, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+function toRelativeModelPath(modelPath) {
+  return path.relative(process.cwd(), modelPath).split(path.sep).join('/')
+}
+
+async function removePreviousDefaultModel(previousModelPath, nextModelPath) {
+  if (!previousModelPath || previousModelPath === nextModelPath) {
+    return
+  }
+
+  const resolvedPreviousModelPath = path.resolve(process.cwd(), previousModelPath)
+
+  // Only delete the previous default model we installed under core/data/models/llm/.
+  if (!resolvedPreviousModelPath.startsWith(`${LLM_DIR_PATH}${path.sep}`)) {
+    return
+  }
+
+  await fs.promises.rm(resolvedPreviousModelPath, { force: true })
+}
+
+function getSelectedModel(totalVRAM) {
+  return (
+    DEFAULT_LLM_OPTIONS.find(
+      ({ minimumTotalVRAM }) => totalVRAM >= minimumTotalVRAM
+    ) || null
   )
+}
 
+async function inspectHardware() {
   const { getLlama, LlamaLogLevel } = await Function(
     'return import("node-llama-cpp")'
   )()
@@ -38,91 +88,118 @@ async function checkMinimumHardwareRequirements() {
     logLevel: LlamaLogLevel.disabled
   })
 
-  if (!(await SystemHelper.hasGPU(llama))) {
+  const [hasGPU, gpuDeviceNames, graphicsComputeAPI, totalVRAM] =
+    await Promise.all([
+      SystemHelper.hasGPU(llama),
+      SystemHelper.getGPUDeviceNames(llama),
+      SystemHelper.getGraphicsComputeAPI(llama),
+      SystemHelper.getTotalVRAM(llama)
+    ])
+
+  return {
+    llama,
+    hasGPU,
+    gpuDeviceNames,
+    graphicsComputeAPI,
+    totalVRAM
+  }
+}
+
+async function canInstallDefaultLLM(hardware) {
+  if (!hardware.hasGPU) {
     return false
   }
 
-  LogHelper.info(
-    `GPU detected: ${(await SystemHelper.getGPUDeviceNames(llama))[0]}`
-  )
-  LogHelper.info(
-    `Graphics compute API: ${await SystemHelper.getGraphicsComputeAPI(llama)}`
-  )
-  LogHelper.info(`Total VRAM: ${await SystemHelper.getTotalVRAM(llama)} GB`)
+  const isLinuxARM64 =
+    SystemHelper.isLinux() &&
+    SystemHelper.getInformation().cpuArchitecture === CPUArchitectures.ARM64
 
-  return (await SystemHelper.getTotalVRAM(llama)) >= LLM_MINIMUM_TOTAL_VRAM
-}
-
-async function downloadLLM() {
-  try {
-    LogHelper.info('Downloading LLM...')
-
-    if (fs.existsSync(LLM_MANIFEST_PATH)) {
-      manifest = JSON.parse(
-        await fs.promises.readFile(LLM_MANIFEST_PATH, 'utf8')
-      )
-
-      LogHelper.info(`Found ${LLM_NAME} ${manifest.version}`)
-      LogHelper.info(`Latest version is ${LLM_VERSION}`)
-    }
-
-    if (!manifest || manifest.version !== LLM_VERSION) {
-      // Just in case the LLM file already exists, delete it first
-      if (fs.existsSync(LLM_PATH)) {
-        await fs.promises.unlink(LLM_PATH)
-      }
-
-      const llmDownloadURL =
-        await NetworkHelper.setHuggingFaceURL(LLM_HF_DOWNLOAD_URL)
-
-      LogHelper.info(
-        `Downloading ${LLM_NAME_WITH_VERSION} from ${llmDownloadURL}...`
-      )
-
-      await FileHelper.downloadFile(llmDownloadURL, LLM_PATH)
-
-      await FileHelper.createManifestFile(
-        LLM_MANIFEST_PATH,
-        LLM_NAME,
-        LLM_VERSION,
-        {
-          llamaCPPVersion: manifest?.llamaCPPVersion
-            ? manifest.llamaCPPVersion
-            : null
-        }
-      )
-      LogHelper.success('Manifest file updated')
-
-      LogHelper.success(`${LLM_NAME_WITH_VERSION} downloaded`)
-      LogHelper.success(`${LLM_NAME_WITH_VERSION} ready`)
-    } else {
-      LogHelper.success(
-        `${LLM_NAME_WITH_VERSION} is already set up and use the latest version`
-      )
-    }
-  } catch (e) {
-    LogHelper.error(`Failed to download LLM: ${e}`)
-    process.exit(1)
+  // Linux ARM64 is only supported when llama.cpp can be built with CUDA.
+  if (isLinuxARM64 && hardware.graphicsComputeAPI !== 'cuda') {
+    return false
   }
+
+  return SystemHelper.canSupportLocalLLM(hardware.llama)
 }
 
-export default async () => {
-  const canSetupLLM = await checkMinimumHardwareRequirements()
+async function downloadLLM(selectedModel) {
+  const manifest = readManifest()
+  const targetPath = path.join(LLM_DIR_PATH, selectedModel.fileName)
+  const defaultInstalledLLMPath = toRelativeModelPath(targetPath)
+  const isCurrentModelInstalled =
+    manifest?.name === selectedModel.name &&
+    manifest?.version === selectedModel.version &&
+    manifest?.defaultInstalledLLMPath === defaultInstalledLLMPath &&
+    fs.existsSync(targetPath)
 
-  if (!canSetupLLM) {
-    const { getLlama, LlamaLogLevel } = await Function(
-      'return import("node-llama-cpp")'
-    )()
-    const llama = await getLlama({
-      logLevel: LlamaLogLevel.disabled
-    })
-    const totalVRAM = await SystemHelper.getTotalVRAM(llama)
-
-    LogHelper.warning(
-      `LLM requires at least ${LLM_MINIMUM_TOTAL_VRAM} GB of total VRAM. Current total VRAM is ${totalVRAM} GB. No worries though, Leon can still run without LLM.`
+  if (isCurrentModelInstalled) {
+    LogHelper.success(
+      `${selectedModel.name} (${selectedModel.version}) is already set up and uses the latest version`
     )
-  } else {
-    await downloadLLM()
-    // Stopped compiling from source since node-llama-cpp already ships with binaries
+
+    return
   }
+
+  await fs.promises.mkdir(LLM_DIR_PATH, { recursive: true })
+  await removePreviousDefaultModel(manifest?.defaultInstalledLLMPath, defaultInstalledLLMPath)
+  await fs.promises.rm(targetPath, { force: true })
+
+  const llmDownloadURL = await NetworkHelper.setHuggingFaceURL(
+    selectedModel.downloadURL
+  )
+
+  LogHelper.info(
+    `Downloading ${selectedModel.name} (${selectedModel.version}) from ${llmDownloadURL}...`
+  )
+
+  await FileHelper.downloadFile(llmDownloadURL, targetPath)
+
+  await FileHelper.createManifestFile(
+    LLM_MANIFEST_PATH,
+    selectedModel.name,
+    selectedModel.version,
+    {
+      llamaCPPVersion: LLAMACPP_RELEASE_VERSION,
+      defaultInstalledLLMPath
+    }
+  )
+
+  LogHelper.success('LLM manifest file updated')
+  LogHelper.success(`${selectedModel.name} (${selectedModel.version}) ready`)
+}
+
+export default async function setupLocalLLM() {
+  LogHelper.info(
+    'Checking local LLM hardware requirements can take a few minutes...'
+  )
+
+  const hardware = await inspectHardware()
+
+  if (hardware.hasGPU) {
+    LogHelper.info(`GPU detected: ${hardware.gpuDeviceNames[0]}`)
+    LogHelper.info(`Graphics compute API: ${hardware.graphicsComputeAPI}`)
+  }
+  LogHelper.info(`Total VRAM: ${hardware.totalVRAM} GB`)
+
+  const canInstall = await canInstallDefaultLLM(hardware)
+
+  if (!canInstall) {
+    LogHelper.warning(
+      `Local LLM support requires at least ${LLM_MINIMUM_TOTAL_VRAM} GB of total VRAM and a supported GPU setup. Current total VRAM is ${hardware.totalVRAM} GB. Leon will continue without installing a default local LLM.`
+    )
+
+    return
+  }
+
+  const selectedModel = getSelectedModel(hardware.totalVRAM)
+
+  if (!selectedModel) {
+    LogHelper.warning(
+      `No default local LLM matches the current total VRAM (${hardware.totalVRAM} GB).`
+    )
+
+    return
+  }
+
+  await downloadLLM(selectedModel)
 }

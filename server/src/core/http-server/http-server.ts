@@ -5,11 +5,12 @@ import fastifyStatic from '@fastify/static'
 
 import {
   API_VERSION,
+  AGENT_LLM_PROVIDER,
   LEON_VERSION,
   LEON_NODE_ENV,
   HAS_OVER_HTTP,
   IS_TELEMETRY_ENABLED,
-  LLM_PROVIDER
+  WORKFLOW_LLM_PROVIDER
 } from '@/constants'
 import { LogHelper } from '@/helpers/log-helper'
 import { DateHelper } from '@/helpers/date-helper'
@@ -62,7 +63,9 @@ export default class HTTPServer {
     LogHelper.info(`Environment: ${LEON_NODE_ENV}`)
     LogHelper.info(`Version: ${LEON_VERSION}`)
     LogHelper.info(`Time zone: ${DateHelper.getTimeZone()}`)
-    LogHelper.info(`LLM provider: ${LLM_PROVIDER}`)
+    LogHelper.info(
+      `LLM providers: workflow=${WORKFLOW_LLM_PROVIDER}, agent=${AGENT_LLM_PROVIDER}`
+    )
     LogHelper.info(`Mood: ${PERSONA.mood.type}`)
     LogHelper.info(`GPU: ${(await SystemHelper.getGPUDeviceNames())[0]}`)
     LogHelper.info(
