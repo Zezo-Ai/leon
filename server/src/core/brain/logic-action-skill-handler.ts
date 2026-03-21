@@ -38,7 +38,26 @@ export class LogicActionSkillHandler {
       BRAIN.skillFriendlyName = skillFriendlyName
 
       let buffer = ''
+      let stderrBuffer = ''
       let lastSkillResult: SkillResult | undefined = undefined
+
+      const flushBufferedOutput = (): void => {
+        if (!buffer.trim()) {
+          return
+        }
+
+        try {
+          const skillResult = JSON.parse(buffer) as SkillResult
+
+          lastSkillResult = skillResult
+          this.handleLogicActionSkillProcessOutput(skillResult)
+          buffer = ''
+        } catch (e) {
+          LogHelper.title(`${BRAIN.skillFriendlyName} skill`)
+          LogHelper.error(`Error on the final output: ${String(e)}`)
+          stderrBuffer += `${stderrBuffer ? '\n' : ''}${String(e)}`
+        }
+      }
 
       // Read skill output
       BRAIN.skillProcess?.stdout.on('data', (data: Buffer) => {
@@ -78,31 +97,37 @@ export class LogicActionSkillHandler {
         }
       })
 
-      // Handle error
+      // stderr can contain regular progress logs from underlying tools, so do not
+      // surface it as a broken skill until the process has actually failed.
       BRAIN.skillProcess?.stderr.on('data', (data: Buffer) => {
-        this.handleLogicActionSkillProcessError(data, intentObjectPath)
+        const chunk = data.toString()
+        stderrBuffer += chunk
+        this.handleLogicActionSkillProcessError(chunk)
+      })
+
+      BRAIN.skillProcess?.on('error', (error: Error) => {
+        stderrBuffer += `${stderrBuffer ? '\n' : ''}${error.message}`
       })
 
       // Catch the end of the skill execution
-      BRAIN.skillProcess?.stdout.on('end', () => {
-        LogHelper.title(`${BRAIN.skillFriendlyName} skill (on end)`)
-
-        // Attempt to process any remaining data in the buffer
-        if (buffer.trim()) {
-          try {
-            const skillResult = JSON.parse(buffer) as SkillResult
-
-            lastSkillResult = skillResult
-            this.handleLogicActionSkillProcessOutput(skillResult)
-          } catch (e) {
-            LogHelper.title(`${BRAIN.skillFriendlyName} skill`)
-            LogHelper.error(`Error on the final output: ${String(e)}`)
-
-            BRAIN.speakSkillError()
-          }
-        }
-
+      BRAIN.skillProcess?.on('close', (code: number | null) => {
+        LogHelper.title(`${BRAIN.skillFriendlyName} skill (on close)`)
+        flushBufferedOutput()
         this.deleteIntentObjFile(intentObjectPath)
+
+        const failureReason = this.getSkillFailureReason(stderrBuffer)
+        const hasUserFacingOutput = Boolean(
+          lastSkillResult?.output?.answer || lastSkillResult?.output?.widget
+        )
+
+        if ((code !== 0 || !lastSkillResult) && !hasUserFacingOutput) {
+          BRAIN.speakSkillError(
+            failureReason ||
+              (code !== null
+                ? `Process exited with code ${code}.`
+                : 'The skill process exited unexpectedly.')
+          )
+        }
 
         resolve({
           utteranceId,
@@ -113,10 +138,8 @@ export class LogicActionSkillHandler {
         })
 
         SOCKET_SERVER.socket?.emit('is-typing', false)
+        BRAIN.skillProcess = undefined
       })
-
-      // Reset the child process
-      BRAIN.skillProcess = undefined
     })
   }
 
@@ -213,17 +236,25 @@ export class LogicActionSkillHandler {
    * Handle the skill process error
    */
   private static handleLogicActionSkillProcessError(
-    data: Buffer,
-    intentObjectPath: string
+    data: string
   ): Error {
-    BRAIN.speakSkillError()
-
-    this.deleteIntentObjFile(intentObjectPath)
-
     LogHelper.title(`${BRAIN.skillFriendlyName} skill`)
-    LogHelper.error(data.toString())
+    LogHelper.warning(data)
 
-    return new Error(data.toString())
+    return new Error(data)
+  }
+
+  private static getSkillFailureReason(stderrBuffer: string): string | null {
+    const lines = stderrBuffer
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+
+    if (lines.length === 0) {
+      return null
+    }
+
+    return lines.slice(-3).join(' ')
   }
 
   /**

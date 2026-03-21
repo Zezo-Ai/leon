@@ -40,11 +40,7 @@ import { SlotFillingLLMDuty } from '@/core/llm-manager/llm-duties/slot-filling-l
 import { ReActLLMDuty } from '@/core/llm-manager/llm-duties/react-llm-duty'
 import { LEON_ROUTING_MODE } from '@/constants'
 import { RoutingMode } from '@/types'
-import {
-  emitPlanWidget,
-  widgetId
-} from '@/core/llm-manager/llm-duties/react-llm-duty/plan-widget'
-import type { TrackedPlanStep } from '@/core/llm-manager/llm-duties/react-llm-duty/types'
+import { WorkflowProgressWidget } from '@/core/nlp/nlu/workflow-progress-widget'
 
 // TODO: delete?
 export const DEFAULT_NLU_RESULT = {
@@ -76,7 +72,7 @@ export default class NLU {
   public conversation = new Conversation('conv0')
   private hasHandledProviderFailure = false
   private _currentResponseRoute: RoutingRoute = 'workflow'
-  private workflowProgressWidgetId: string | null = null
+  private workflowProgress = new WorkflowProgressWidget()
 
   private readonly routingRoutes: Record<RoutingRoute, RoutingRoute> = {
     workflow: 'workflow',
@@ -152,7 +148,7 @@ export default class NLU {
       `Handled LLM provider failure locally: ${providerError}`
     )
 
-    this.resetWorkflowProgress()
+    this.workflowProgress.reset()
     this.conversation.cleanActiveState()
     await NLUProcessResultUpdater.update(DEFAULT_NLU_PROCESS_RESULT)
 
@@ -163,104 +159,11 @@ export default class NLU {
     return true
   }
 
-  private emitWorkflowProgress(
-    steps: TrackedPlanStep[],
-    isUpdate = true
-  ): void {
-    if (!this.workflowProgressWidgetId) {
-      this.workflowProgressWidgetId = widgetId('workflow-progress')
-    }
-
-    emitPlanWidget(steps, null, this.workflowProgressWidgetId, isUpdate)
-  }
-
-  private completeWorkflowProgress(steps: TrackedPlanStep[]): void {
-    this.emitWorkflowProgress(
-      steps.map((step) => ({
-        ...step,
-        status: 'completed'
-      })),
-      true
-    )
-  }
-
-  private resetWorkflowProgress(): void {
-    this.workflowProgressWidgetId = null
-  }
-
-  private buildWorkflowProgressSteps(
-    labels: string[],
-    inProgressIndex: number
-  ): TrackedPlanStep[] {
-    return labels.map((label, index) => ({
-      label,
-      status:
-        index < inProgressIndex
-          ? 'completed'
-          : index === inProgressIndex
-            ? 'in_progress'
-            : 'pending'
-    }))
-  }
-
-  private buildWorkflowPhaseLabels(
-    options?: {
-      includeRouting?: boolean
-      includeChoosingSkill?: boolean
-      includePickingAction?: boolean
-      includeResolvingParameters?: boolean
-      includeRunningSkill?: boolean
-    }
-  ): string[] {
-    const labels: string[] = []
-
-    if (options?.includeRouting) {
-      labels.push('Routing...')
-    }
-    if (options?.includeChoosingSkill) {
-      labels.push('Choosing skill...')
-    }
-    if (options?.includePickingAction) {
-      labels.push('Picking action...')
-    }
-    if (options?.includeResolvingParameters) {
-      labels.push('Resolving parameters...')
-    }
-    if (options?.includeRunningSkill) {
-      labels.push('Running skill...')
-    }
-
-    return labels
-  }
-
   private startWorkflowProgressForTurn(
     routingMode: RoutingMode,
     hasPendingAction: boolean
   ): void {
-    this.resetWorkflowProgress()
-
-    if (routingMode === RoutingMode.Agent) {
-      return
-    }
-
-    const labels = hasPendingAction
-      ? this.buildWorkflowPhaseLabels({
-          includeRouting: routingMode === RoutingMode.Smart,
-          includeResolvingParameters: true
-        })
-      : routingMode === RoutingMode.Smart
-        ? this.buildWorkflowPhaseLabels({
-            includeRouting: true
-          })
-        : this.buildWorkflowPhaseLabels({
-            includeChoosingSkill: true
-          })
-
-    if (labels.length === 0) {
-      return
-    }
-
-    this.emitWorkflowProgress(this.buildWorkflowProgressSteps(labels, 0), false)
+    this.workflowProgress.startTurn(routingMode, hasPendingAction)
   }
 
   private async chooseSkill(utterance: NLPUtterance): Promise<NLPSkill | null> {
@@ -555,16 +458,8 @@ export default class NLU {
 
     const leonMode = this.getLeonMode()
     if (leonMode === RoutingMode.Workflow) {
-      this.completeWorkflowProgress(
-        this.buildWorkflowProgressSteps(
-          this.buildWorkflowPhaseLabels({
-            includeChoosingSkill: true,
-            includePickingAction: true
-          }),
-          1
-        )
-      )
-      this.resetWorkflowProgress()
+      this.workflowProgress.completeSelectionNotFound()
+      this.workflowProgress.reset()
       const utterance = this._nluProcessResult.new.utterance as NLPUtterance
       if (!utterance) {
         return
@@ -584,15 +479,8 @@ export default class NLU {
       reason: 'skill_not_found'
     }
     if (leonMode === RoutingMode.Smart) {
-      this.completeWorkflowProgress(
-        this.buildWorkflowProgressSteps(
-          this.buildWorkflowPhaseLabels({
-            includeRouting: true
-          }),
-          0
-        )
-      )
-      this.resetWorkflowProgress()
+      this.workflowProgress.completeRoutingOnly()
+      this.workflowProgress.reset()
     }
     LogHelper.title('NLU')
     LogHelper.info(
@@ -873,23 +761,7 @@ export default class NLU {
   private async handleActionSuccess(
     actionCallingOutput: ActionCallingSuccessOutput
   ): Promise<void> {
-    const leonMode = this.getLeonMode()
-    const hasRoutingStep = leonMode === RoutingMode.Smart
-    const hadPendingAction = this.conversation.hasPendingAction()
-    const progressLabels = this.buildWorkflowPhaseLabels({
-      includeRouting: hasRoutingStep,
-      includeChoosingSkill: !hadPendingAction,
-      includePickingAction: !hadPendingAction,
-      includeResolvingParameters: hadPendingAction,
-      includeRunningSkill: true
-    })
-    this.emitWorkflowProgress(
-      this.buildWorkflowProgressSteps(
-        progressLabels,
-        progressLabels.length - 1
-      ),
-      true
-    )
+    this.workflowProgress.startAction(actionCallingOutput.name)
 
     await NLUProcessResultUpdater.update({
       new: {
@@ -913,25 +785,14 @@ export default class NLU {
 
       this.conversation.cleanActiveState()
       await NLUProcessResultUpdater.update(DEFAULT_NLU_PROCESS_RESULT)
-      this.completeWorkflowProgress(
-        this.buildWorkflowProgressSteps(
-          progressLabels,
-          progressLabels.length - 1
-        )
-      )
-      this.resetWorkflowProgress()
+      this.workflowProgress.completeAll()
+      this.workflowProgress.reset()
 
       return
     }
 
     if (processedData.core?.next_action) {
-      this.completeWorkflowProgress(
-        this.buildWorkflowProgressSteps(
-          progressLabels,
-          progressLabels.length - 1
-        )
-      )
-      this.resetWorkflowProgress()
+      this.workflowProgress.completeAll()
       await this.jumpToNextAction(processedData.core.next_action)
 
       return
@@ -961,13 +822,8 @@ export default class NLU {
        * By returning here, we do not advance the flow.
        * The current action remains and ready for the next user input
        */
-      this.completeWorkflowProgress(
-        this.buildWorkflowProgressSteps(
-          progressLabels,
-          progressLabels.length - 1
-        )
-      )
-      this.resetWorkflowProgress()
+      this.workflowProgress.completeAll()
+      this.workflowProgress.reset()
       return
     }
 
@@ -987,29 +843,14 @@ export default class NLU {
      */
     this.conversation.cleanActiveState()
     await NLUProcessResultUpdater.update(DEFAULT_NLU_PROCESS_RESULT)
-    this.completeWorkflowProgress(
-      this.buildWorkflowProgressSteps(
-        progressLabels,
-        progressLabels.length - 1
-      )
-    )
-    this.resetWorkflowProgress()
+    this.workflowProgress.completeAll()
+    this.workflowProgress.reset()
   }
 
   private async handleActionMissingParams(
     actionCallingOutput: ActionCallingMissingParamsOutput
   ): Promise<void> {
-    const leonMode = this.getLeonMode()
-    const hadPendingAction = this.conversation.hasPendingAction()
-    const labels = this.buildWorkflowPhaseLabels({
-      includeRouting: leonMode === RoutingMode.Smart,
-      includeChoosingSkill: !hadPendingAction,
-      includePickingAction: !hadPendingAction,
-      includeResolvingParameters: true
-    })
-    this.completeWorkflowProgress(
-      this.buildWorkflowProgressSteps(labels, labels.length - 1)
-    )
+    this.workflowProgress.completeAll()
 
     LogHelper.title('NLU')
     LogHelper.warning(
@@ -1041,7 +882,7 @@ export default class NLU {
       )
     }
 
-    this.resetWorkflowProgress()
+    this.workflowProgress.reset()
   }
 
   /**
@@ -1051,17 +892,7 @@ export default class NLU {
     const hasPendingAction = this.conversation.hasPendingAction()
 
     if (hasPendingAction) {
-      const leonMode = this.getLeonMode()
-      this.emitWorkflowProgress(
-        this.buildWorkflowProgressSteps(
-          this.buildWorkflowPhaseLabels({
-            includeRouting: leonMode === RoutingMode.Smart,
-            includeResolvingParameters: true
-          }),
-          leonMode === RoutingMode.Smart ? 1 : 0
-        ),
-        true
-      )
+      this.workflowProgress.showResolvingParameters()
       const [slotName] = this.conversation.activeState.missingParameters
       const actionConfig = this._nluProcessResult.actionConfig
       const param = actionConfig?.parameters?.[slotName as string]
@@ -1256,7 +1087,7 @@ export default class NLU {
             )
             PERSONA.refreshContextInfo()
             if (routingDecision.route === this.routingRoutes.react) {
-              this.resetWorkflowProgress()
+              this.workflowProgress.reset()
               this.conversation.cleanActiveState()
               await NLUProcessResultUpdater.update(DEFAULT_NLU_PROCESS_RESULT)
               await this.runReAct(utterance)
@@ -1269,9 +1100,10 @@ export default class NLU {
             }
 
             if (shouldPickSkillAction) {
+              this.workflowProgress.showChoosingSkill()
               const chosenSkill = await this.chooseSkill(utterance)
               if (this.hasHandledProviderFailure) {
-                this.resetWorkflowProgress()
+                this.workflowProgress.reset()
                 return resolve(null)
               }
 
@@ -1279,15 +1111,8 @@ export default class NLU {
 
               if (!isSkillFound) {
                 if (routingDecision.mode === RoutingMode.Smart) {
-                  this.completeWorkflowProgress(
-                    this.buildWorkflowProgressSteps(
-                      this.buildWorkflowPhaseLabels({
-                        includeRouting: true
-                      }),
-                      0
-                    )
-                  )
-                  this.resetWorkflowProgress()
+                  this.workflowProgress.completeRoutingOnly()
+                  this.workflowProgress.reset()
                   await this.runReAct(utterance)
                   return resolve(null)
                 }
@@ -1299,24 +1124,14 @@ export default class NLU {
               await NLUProcessResultUpdater.update({
                 skillName: chosenSkill
               })
-              this.emitWorkflowProgress(
-                this.buildWorkflowProgressSteps(
-                  this.buildWorkflowPhaseLabels({
-                    includeRouting: routingDecision.mode === RoutingMode.Smart,
-                    includeChoosingSkill: true,
-                    includePickingAction: true
-                  }),
-                  routingDecision.mode === RoutingMode.Smart ? 2 : 1
-                ),
-                true
-              )
+              this.workflowProgress.showPickingAction()
 
               const parsedActionCallingOutputs = await this.chooseSkillAction(
                 utterance,
                 chosenSkill
               )
               if (this.hasHandledProviderFailure) {
-                this.resetWorkflowProgress()
+                this.workflowProgress.reset()
                 return resolve(null)
               }
 

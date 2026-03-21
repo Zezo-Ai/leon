@@ -497,7 +497,7 @@ export default class Brain {
         }" skill: ${String(e)}`
       )
 
-      this.speakSkillError()
+      this.speakSkillError(String(e))
 
       return {
         executionTime
@@ -508,10 +508,14 @@ export default class Brain {
   /**
    * Speak about an error happened regarding a specific skill
    */
-  public speakSkillError(): void {
-    const speech = `${this.wernicke('random_skill_errors', '', {
+  public speakSkillError(reason?: string): void {
+    const fallbackSpeech = `${this.wernicke('random_skill_errors', '', {
       '{{ skill_name }}': this._skillFriendlyName
     })}!`
+    const formattedReason = reason?.trim()
+    const speech = formattedReason
+      ? `${fallbackSpeech} Reason: ${formattedReason}`
+      : fallbackSpeech
 
     if (!this.isMuted) {
       this.talk(speech)
