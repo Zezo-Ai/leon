@@ -210,9 +210,6 @@ Retrieve it in the next action: \`paramsHelper.getContextData('my_key')\` (TS) o
 ### Getting User Utterance
 The raw user utterance is available as \`params.utterance\` (TS) or \`params['utterance']\` (Python).
 
-### Getting Entities
-NLP-extracted entities (numbers, dates, etc.) are in \`params.entities\` (TS) or \`params['entities']\` (Python).
-
 ### Parameters
 Define parameters in the skill.json:
 - By default, all parameters are **required**
@@ -220,6 +217,7 @@ Define parameters in the skill.json:
 - Parameter descriptions should be 8-128 characters
 - Supported types: string, number, boolean, object, custom
 - For string parameters, you can use \`enum\` to restrict to specific values
+- Action code should primarily read \`action_arguments\` plus \`context_data\`, not \`params.entities\`
 
 ### Missing Parameter Follow-ups
 When a required parameter is missing, Leon will ask the user for it. You can customize these questions in \`missing_param_follow_ups\`:

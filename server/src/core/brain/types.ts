@@ -85,18 +85,6 @@ export interface ActionParams {
   }
 }
 
-// TODO: delete
-/*export interface ActionParams {
-  lang: ShortLanguageCode
-  utterance: NLPUtterance
-  new_utterance: NLPUtterance
-  current_entities: NEREntity[]
-  entities: NEREntity[]
-  current_resolvers: NLUResolver[]
-  resolvers: NLUResolver[]
-  slots: { [key: string]: NLUSlot['value'] | undefined }
-}*/
-
 export interface IntentObject {
   id: string
   lang: ShortLanguageCode

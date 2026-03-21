@@ -7,13 +7,28 @@ import { ParamsHelper } from '@sdk/params-helper'
 import { Settings } from '@sdk/settings'
 import ToolManager, { isMissingToolSettingsError } from '@sdk/tool-manager'
 import ElevenLabsAudioTool from '@sdk/tools/elevenlabs_audio'
-import { formatBytes, formatFilePath } from '@sdk/utils'
+import {
+  formatBytes,
+  formatFilePath,
+  normalizeLanguageCode
+} from '@sdk/utils'
 
 interface MusicAudioToolkitSkillSettings extends Record<string, unknown> {
   elevenlabs_dubbing_source_lang?: string
   elevenlabs_dubbing_num_speakers?: number
   elevenlabs_dubbing_watermark?: boolean
   elevenlabs_dubbing_poll_interval?: number
+}
+
+function getLanguageDisplayName(languageCode: string): string {
+  try {
+    return (
+      new Intl.DisplayNames(['en'], { type: 'language' }).of(languageCode) ||
+      languageCode
+    )
+  } catch {
+    return languageCode
+  }
 }
 
 export const run: ActionFunction = async function (
@@ -23,15 +38,10 @@ export const run: ActionFunction = async function (
   const audioPathArg =
     paramsHelper.getActionArgument('audio_path') ||
     (paramsHelper.findActionArgumentFromContext('audio_path') as string)
-  const targetLanguage =
+  const targetLanguageInput =
     (paramsHelper.getActionArgument('target_language') as string) ||
+    paramsHelper.getContextData<string>('target_language_code') ||
     paramsHelper.getContextData<string>('target_language')
-  const targetLanguageISOCode =
-    paramsHelper
-      .findAllEntitiesFromContext('language')[0]
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-expect-error
-      ?.option.slice(0, 2) || null
 
   try {
     const settings = new Settings<MusicAudioToolkitSkillSettings>()
@@ -56,12 +66,21 @@ export const run: ActionFunction = async function (
       return
     }
 
-    if (!targetLanguage) {
+    if (!targetLanguageInput) {
       leon.answer({
         key: 'target_language_missing'
       })
       return
     }
+
+    const targetLanguageCode = normalizeLanguageCode(targetLanguageInput)
+    if (!targetLanguageCode) {
+      leon.answer({
+        key: 'target_language_missing'
+      })
+      return
+    }
+    const targetLanguageLabel = getLanguageDisplayName(targetLanguageCode)
 
     // Get file info
     const audioStats = await fs.promises.stat(audioPath)
@@ -74,7 +93,7 @@ export const run: ActionFunction = async function (
       key: 'dubbing_started',
       data: {
         audio_path: formatFilePath(audioPath),
-        target_language: targetLanguage,
+        target_language: targetLanguageLabel,
         source_language: sourceLang,
         file_size: audioSizeMB,
         num_speakers: numSpeakers === 0 ? 'auto-detect' : numSpeakers.toString()
@@ -87,7 +106,7 @@ export const run: ActionFunction = async function (
     // Create dubbing project
     const dubbingResponse = await tool.createDubbing(
       audioPath,
-      targetLanguageISOCode,
+      targetLanguageCode,
       apiKey,
       sourceLang,
       numSpeakers,
@@ -102,7 +121,7 @@ export const run: ActionFunction = async function (
       data: {
         dubbing_id: dubbingId,
         expected_duration: `${expectedDuration}s`,
-        target_language: targetLanguage
+        target_language: targetLanguageLabel
       }
     })
 
@@ -161,12 +180,12 @@ export const run: ActionFunction = async function (
     const outputExt = isVideo ? '.mp4' : '.mp3'
     const dubbedPath = path.join(
       audioDir,
-      `${audioName}_${targetLanguage}${outputExt}`
+      `${audioName}_${targetLanguageCode}${outputExt}`
     )
 
     await tool.downloadDubbedFile(
       dubbingId,
-      targetLanguageISOCode,
+      targetLanguageCode,
       dubbedPath,
       apiKey
     )
@@ -191,7 +210,7 @@ export const run: ActionFunction = async function (
       key: 'dubbing_completed',
       data: {
         dubbed_path: formatFilePath(dubbedPath),
-        target_language: targetLanguage,
+        target_language: targetLanguageLabel,
         file_size: dubbedSizeMB,
         dubbing_id: dubbingId
       },

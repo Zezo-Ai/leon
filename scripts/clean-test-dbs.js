@@ -11,30 +11,29 @@ export default () =>
   new Promise(async (resolve, reject) => {
     LogHelper.info('Cleaning test DB files...')
 
-    const skillDomains = await SkillDomainHelper.getSkillDomains()
+    const skillNames = await SkillDomainHelper.listSkillFolders()
 
-    for (const currentDomain of skillDomains.values()) {
-      const skillKeys = Object.keys(currentDomain.skills)
+    for (const skillName of skillNames) {
+      const skillConfigPath = SkillDomainHelper.getNewSkillConfigPath(skillName)
+      if (!skillConfigPath) {
+        continue
+      }
 
-      for (let j = 0; j < skillKeys.length; j += 1) {
-        const currentSkill = currentDomain.skills[skillKeys[j]]
+      try {
+        // TODO: handle case where the memory folder contain multiple DB nodes
+        const dbFolder = join(skillConfigPath.replace(/\/skill\.json$/, ''), 'memory')
+        const dbTestFiles = (await fs.promises.readdir(dbFolder)).filter(
+          (entity) => entity.indexOf('.spec.json') !== -1
+        )
 
-        try {
-          // TODO: handle case where the memory folder contain multiple DB nodes
-          const dbFolder = join(currentSkill.path, 'memory')
-          const dbTestFiles = (await fs.promises.readdir(dbFolder)).filter(
-            (entity) => entity.indexOf('.spec.json') !== -1
-          )
-
-          if (dbTestFiles.length > 0) {
-            LogHelper.info(`Deleting ${dbTestFiles[0]}...`)
-            await fs.promises.unlink(join(dbFolder, dbTestFiles[0]))
-            LogHelper.success(`${dbTestFiles[0]} deleted`)
-          }
-        } catch (e) {
-          LogHelper.error(`Failed to clean: "${skillKeys[j]}" test DB file`)
-          reject(e)
+        if (dbTestFiles.length > 0) {
+          LogHelper.info(`Deleting ${dbTestFiles[0]}...`)
+          await fs.promises.unlink(join(dbFolder, dbTestFiles[0]))
+          LogHelper.success(`${dbTestFiles[0]} deleted`)
         }
+      } catch (e) {
+        LogHelper.error(`Failed to clean: "${skillName}" test DB file`)
+        reject(e)
       }
     }
 

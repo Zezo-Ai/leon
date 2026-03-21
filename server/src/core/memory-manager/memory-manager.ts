@@ -1249,7 +1249,7 @@ No markdown. No explanation.`
     try {
       const { LLM_PROVIDER } = await import('@/core')
       const completion = await LLM_PROVIDER.prompt(prompt, {
-        dutyType: LLMDuties.Custom,
+        dutyType: LLMDuties.Inference,
         systemPrompt:
           'Extract stable long-term user memory candidates. Be strict and concise.',
         data: EXTRACT_PERSISTENT_MEMORY_SCHEMA,

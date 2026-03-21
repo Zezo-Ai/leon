@@ -11,23 +11,27 @@ export default async function () {
   LogHelper.info('Setting up skills...')
 
   try {
-    const skillDomains = await SkillDomainHelper.getSkillDomains()
+    const skillNames = await SkillDomainHelper.listSkillFolders()
 
-    for (const currentDomain of skillDomains.values()) {
-      const skillKeys = Object.keys(currentDomain.skills)
+    for (const skillName of skillNames) {
+      const currentSkill = await SkillDomainHelper.getNewSkillConfig(skillName)
+      const currentSkillPath = SkillDomainHelper.getNewSkillConfigPath(skillName)
 
-      // Browse skills
-      for (let i = 0; i < skillKeys.length; i += 1) {
-        const skillFriendlyName = skillKeys[i]
-        const currentSkill = currentDomain.skills[skillFriendlyName]
-
-        LogHelper.info(`Setting up "${skillFriendlyName}" skill...`)
-
-        await setupSkillsSettings(skillFriendlyName, currentSkill)
-        await installNodejsSkillsPackages(skillFriendlyName, currentSkill)
-
-        LogHelper.success(`"${skillFriendlyName}" skill set up`)
+      if (!currentSkill || !currentSkillPath) {
+        continue
       }
+
+      const skillContext = {
+        path: currentSkillPath.replace(/\/skill\.json$/, ''),
+        bridge: currentSkill.bridge
+      }
+
+      LogHelper.info(`Setting up "${skillName}" skill...`)
+
+      await setupSkillsSettings(skillName, skillContext)
+      await installNodejsSkillsPackages(skillName, skillContext)
+
+      LogHelper.success(`"${skillName}" skill set up`)
     }
 
     LogHelper.success('Skills are set up')

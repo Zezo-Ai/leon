@@ -1,85 +1,39 @@
-import type { ChatHistoryItem, LlamaChatSession } from 'node-llama-cpp'
-
 import {
-  DEFAULT_EXECUTE_PARAMS,
-  DEFAULT_INIT_PARAMS,
   formatParameterDescription,
   LLMDuty,
-  type LLMDutyExecuteParams,
-  type LLMDutyInitParams,
   type LLMDutyParams,
   type LLMDutyResult
 } from '@/core/llm-manager/llm-duty'
+import { LLM_MANAGER, LLM_PROVIDER } from '@/core'
+import { LLMDuties, SlotFillingStatus } from '@/core/llm-manager/types'
 import { LogHelper } from '@/helpers/log-helper'
-import { LLM_MANAGER, LLM_PROVIDER, CONVERSATION_LOGGER } from '@/core'
-import {
-  LLMDuties,
-  LLMProviders,
-  SlotFillingStatus
-} from '@/core/llm-manager/types'
-import { WORKFLOW_LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
 
 interface SlotFillingLLMDutyParams {
   input: {
     slotName: string
     slotDescription: string
     slotType: string
+    latestUtterance: string
+    recentUtterances: string[]
   } | null
   startingUtterance: string
 }
 
-const SYSTEM_PROMPT = `You are a highly specialized linguistic model called 'Slot Filling'. Your sole purpose is to extract specific pieces of information ('slots') from a user's latest response. You will be given the conversation history and a list of the specific slots you need to find.
+const SYSTEM_PROMPT = `You are a highly specialized linguistic model called 'Slot Filling'. Your sole purpose is to extract specific pieces of information ('slots') from a user's latest response.
 
-You must adhere to the following rules:
-
-1. Analyze the LATEST user message in the context of the conversation.
-2. Only look for the slots you are told to find. Ignore any other information or intents.
-3. Do not invent or infer information. If the user says "the big apple," you can extract "the big apple" but not "New York City" unless the tool definition allows it.
-4. Your entire output MUST be a single JSON object with one of two possible statuses:
-
-A. If you successfully find one or more requested slots:
-  \`\`\`json
-  {"filled_slots": { "<slot_name_1>": "<extracted_value_1>", "<slot_name_2>": "<extracted_value_2>" }}
-  \`\`\`
-
-B. If the user's response does NOT contain any of the requested slots:
-  \`\`\`json
-  {"status": "${SlotFillingStatus.NotFound}"}
-  \`\`\`
-
-CRITICAL RULE: Do not output any other text, explanations, or conversational filler. Your response must be pure JSON, adhering strictly to the formats above.`
-const WARM_UP_HISTORY: ChatHistoryItem[] = [
-  {
-    type: 'system',
-    text: SYSTEM_PROMPT
-  },
-  {
-    type: 'user',
-    text: 'Hello there'
-  },
-  {
-    type: 'model',
-    response: ['Hi, great to see you here!']
-  },
-  {
-    type: 'user',
-    text: 'I want to go somewhere'
-  },
-  {
-    type: 'model',
-    response: ['Please provide the location.']
-  },
-  {
-    type: 'user',
-    text: 'I want to go to Shenzhen'
-  }
-]
+Rules:
+1. Analyze the latest user message in the context of the provided workflow history.
+2. Only fill the requested slot.
+3. Do not invent or infer information beyond the latest message and provided context.
+4. Output a single JSON object:
+   - Success: {"filled_slots":{"slot_name":"value"}}
+   - Not found: {"status":"${SlotFillingStatus.NotFound}"}
+5. Never output anything except JSON.`
 
 export class SlotFillingLLMDuty extends LLMDuty {
   private static instance: SlotFillingLLMDuty
-  private static session: LlamaChatSession = null as unknown as LlamaChatSession
   private readonly startingUtterance: string | null = null
-  protected readonly systemPrompt: LLMDutyParams['systemPrompt'] = null
+  protected readonly systemPrompt: LLMDutyParams['systemPrompt'] = SYSTEM_PROMPT
   protected readonly name = 'Slot Filling LLM Duty'
   protected input: SlotFillingLLMDutyParams['input'] = null
 
@@ -95,127 +49,59 @@ export class SlotFillingLLMDuty extends LLMDuty {
 
     this.input = params.input
     this.startingUtterance = params.startingUtterance
-
-    this.systemPrompt = SYSTEM_PROMPT
   }
 
-  public async init(
-    params: LLMDutyInitParams = DEFAULT_INIT_PARAMS
-  ): Promise<void> {
-    if (LLM_PROVIDER_NAME === LLMProviders.Local) {
-      if (!SlotFillingLLMDuty.session || params.force) {
-        LogHelper.title(this.name)
-        LogHelper.info('Initializing...')
-
-        try {
-          /**
-           * Dispose the previous session and sequence
-           * to give space for the new one
-           */
-          if (params.force) {
-            SlotFillingLLMDuty.session.dispose({ disposeSequence: true })
-            LogHelper.info('Session disposed')
-          }
-
-          const { LlamaChatSession } = await Function(
-            'return import("node-llama-cpp")'
-          )()
-
-          SlotFillingLLMDuty.session = new LlamaChatSession({
-            contextSequence: LLM_MANAGER.context.getSequence(),
-            autoDisposeSequence: true,
-            systemPrompt: this.systemPrompt as string
-          })
-
-          LogHelper.success('Initialized')
-        } catch (e) {
-          LogHelper.title(this.name)
-          LogHelper.error(`Failed to initialize: ${e}`)
-        }
-      }
-    }
+  public async init(): Promise<void> {
+    return Promise.resolve()
   }
 
-  public async execute(
-    params: LLMDutyExecuteParams = DEFAULT_EXECUTE_PARAMS
-  ): Promise<LLMDutyResult | null> {
+  public async execute(): Promise<LLMDutyResult | null> {
     LogHelper.title(this.name)
     LogHelper.info('Executing...')
 
     if (this.input?.slotType && this.input?.slotDescription) {
       this.input.slotDescription = formatParameterDescription({
-        type: this.input?.slotType as string,
-        description: this.input?.slotDescription as string
+        type: this.input.slotType,
+        description: this.input.slotDescription
       })
     }
 
     try {
-      const prompt = `INSTRUCTIONS:
-Analyze the last user message to find the following slot:
+      const prompt = `Workflow context (JSON):
+${JSON.stringify(
+  {
+    startingUtterance: this.startingUtterance,
+    recentUtterances: this.input?.recentUtterances || [],
+    latestUtterance: this.input?.latestUtterance || ''
+  },
+  null,
+  2
+)}
+
+Find the following slot:
 - Slot name: "${this.input?.slotName}"
 - Slot description: "${this.input?.slotDescription}"`
       const config = LLM_MANAGER.coreLLMDuties[LLMDuties.SlotFilling]
-      const completionParams = {
+      const completionResult = await LLM_PROVIDER.prompt(prompt, {
         dutyType: LLMDuties.SlotFilling,
         systemPrompt: this.systemPrompt as string,
         temperature: config.temperature,
         maxTokens: config.maxTokens,
-        thoughtTokensBudget: config.thoughtTokensBudget
-      }
-      let completionResult
-
-      if (LLM_PROVIDER_NAME === LLMProviders.Local) {
-        /**
-         * Load the relevant history from the conversation logger.
-         * We only need the messages that are saved after the starting utterance
-         */
-        const history = params.isWarmingUp
-          ? WARM_UP_HISTORY
-          : await LLM_MANAGER.loadHistory(
-              CONVERSATION_LOGGER,
-              SlotFillingLLMDuty.session,
-              { nbOfLogsToLoad: 8 }
-            )
-        const [systemPrompt] = history
-        const startIndex = history.findLastIndex(
-          (message: ChatHistoryItem) =>
-            message.type === 'user' && message.text === this.startingUtterance
-        )
-        let relevantHistory = [systemPrompt, ...history]
-        if (startIndex > 0 && systemPrompt) {
-          relevantHistory = history.slice(startIndex)
-          relevantHistory = [systemPrompt, ...relevantHistory]
-        }
-
-        /**
-         * Setting history can be useful to load messages from the conversation
-         * when starting a new session
-         */
-        SlotFillingLLMDuty.session.setChatHistory(
-          relevantHistory as ChatHistoryItem[]
-        )
-
-        completionResult = await LLM_PROVIDER.prompt(prompt, {
-          ...completionParams,
-          session: SlotFillingLLMDuty.session
-        })
-      } else {
-        completionResult = await LLM_PROVIDER.prompt(prompt, completionParams)
-      }
+        thoughtTokensBudget: config.thoughtTokensBudget,
+        disableThinking: true
+      })
 
       if (completionResult?.output) {
         const parsedResult = JSON.parse(completionResult.output)
         const { filled_slots: filledSlots } = parsedResult
 
         if (filledSlots) {
-          completionResult.output = {
+          ;(completionResult as { output: unknown }).output = {
             status: SlotFillingStatus.Success,
             ...parsedResult
           }
-        } else if (typeof completionResult?.output === 'string') {
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-expect-error
-          completionResult.output = {
+        } else {
+          ;(completionResult as { output: unknown }).output = {
             status: SlotFillingStatus.NotFound
           }
         }

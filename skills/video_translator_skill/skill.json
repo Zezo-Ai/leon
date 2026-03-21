@@ -31,7 +31,7 @@
         },
         "target_language": {
           "type": "string",
-          "description": "The target language for translation (e.g., 'Chinese', 'Spanish', 'French')."
+          "description": "The target language ISO 639-1 code (e.g., 'zh', 'es', 'fr')."
         },
         "quality": {
           "type": "string",

@@ -20,8 +20,6 @@ import {
   TTS,
   NLU,
   BRAIN,
-  MODEL_LOADER,
-  LLM_MANAGER,
   LLM_PROVIDER
 } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
@@ -69,38 +67,13 @@ export default class SocketServer {
       usesLlamaCPP: boolean
     }
   ): void {
-    let llmInterval: NodeJS.Timeout | null = null
     let llamaServerInterval: NodeJS.Timeout | null = null
-    let warmUpInterval: NodeJS.Timeout | null = null
 
     const clearIntervals = (): void => {
-      if (llmInterval) {
-        clearInterval(llmInterval)
-        llmInterval = null
-      }
       if (llamaServerInterval) {
         clearInterval(llamaServerInterval)
         llamaServerInterval = null
       }
-      if (warmUpInterval) {
-        clearInterval(warmUpInterval)
-        warmUpInterval = null
-      }
-    }
-
-    if (!LLM_MANAGER.isLLMEnabled) {
-      llmInterval = setInterval(() => {
-        if (!socket.connected) {
-          clearIntervals()
-          return
-        }
-
-        if (LLM_MANAGER.isLLMEnabled) {
-          socket.emit('init-llm', 'success')
-          clearInterval(llmInterval as NodeJS.Timeout)
-          llmInterval = null
-        }
-      }, 500)
     }
 
     if (options.usesLlamaCPP && !LLM_PROVIDER.isLlamaCPPServerReady) {
@@ -117,23 +90,6 @@ export default class SocketServer {
         }
       }, 500)
     }
-
-    warmUpInterval = setInterval(() => {
-      if (!socket.connected) {
-        clearIntervals()
-        return
-      }
-
-      if (!LLM_MANAGER.shouldWarmUpLLMDuties) {
-        return
-      }
-
-      if (LLM_MANAGER.areLLMDutiesWarmedUp) {
-        socket.emit('warmup-llm-duties', 'success')
-        clearInterval(warmUpInterval as NodeJS.Timeout)
-        warmUpInterval = null
-      }
-    }, 2_000)
 
     socket.once('disconnect', clearIntervals)
   }
@@ -162,12 +118,6 @@ export default class SocketServer {
     LogHelper.title('Initialization')
     LogHelper.success(`STT ${sttState}`)
     LogHelper.success(`TTS ${ttsState}`)
-
-    try {
-      await MODEL_LOADER.loadNLPModels()
-    } catch (e) {
-      LogHelper.error(`Failed to load NLP models: ${e}`)
-    }
 
     io.on('connection', (socket) => {
       LogHelper.title('Client')
@@ -199,10 +149,6 @@ export default class SocketServer {
           })
         }
 
-        if (LLM_MANAGER.isLLMEnabled) {
-          socket.emit('init-llm', 'success')
-        }
-
         const usesLlamaCPP =
           WORKFLOW_LLM_PROVIDER === LLMProviders.LlamaCPP ||
           AGENT_LLM_PROVIDER === LLMProviders.LlamaCPP
@@ -212,10 +158,6 @@ export default class SocketServer {
             'init-llama-server-boot',
             LLM_PROVIDER.isLlamaCPPServerReady ? 'success' : 'loading'
           )
-        }
-
-        if (LLM_MANAGER.shouldWarmUpLLMDuties && LLM_MANAGER.areLLMDutiesWarmedUp) {
-          socket.emit('warmup-llm-duties', 'success')
         }
 
         this.monitorLLMInitialization(socket, {

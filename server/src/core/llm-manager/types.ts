@@ -9,14 +9,11 @@ import type {
 import type { MessageLog } from '@/types'
 
 export enum LLMDuties {
-  ActionRecognition = 'action-recognition',
+  Inference = 'inference',
   SkillRouter = 'skill-router',
   ActionCalling = 'action-calling',
   SlotFilling = 'slot-filling',
-  CustomNER = 'custom-ner',
   Paraphrase = 'paraphrase',
-  Conversation = 'conversation',
-  Custom = 'custom',
   ReAct = 'react'
   // TODO
   /*SentimentAnalysis = 'sentiment-analysis',

@@ -6,7 +6,6 @@ import time
 import re
 import threading
 
-import lib.nlp as nlp
 from .utils import get_settings
 from .wake_word.api import WakeWord
 from .asr.api import ASR
@@ -177,16 +176,6 @@ class TCPServer:
             finally:
                 self.log(f'Client disconnected: {self.addr}')
                 self.conn.close()
-
-    def get_spacy_entities(self, utterance: str) -> dict:
-        entities = nlp.extract_spacy_entities(utterance)
-
-        return {
-            'topic': 'spacy-entities-received',
-            'data': {
-                'spacyEntities': entities
-            }
-        }
 
     def asr_start_recording(self, extra=None) -> dict:
         # If ASR is not initialized yet, then wait for 2 seconds before starting recording

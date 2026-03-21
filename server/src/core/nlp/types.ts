@@ -83,12 +83,6 @@ export interface NLUClassification {
   confidence: number
 }
 
-// TODO: core rewrite delete?
-export interface NLUResolver {
-  name: string
-  value: string
-}
-
 interface NLUProcessSentiment {
   vote?: NLPJSProcessResult['sentiment']['vote']
   score?: NLPJSProcessResult['sentiment']['score']
@@ -131,8 +125,6 @@ export interface NLUProcessResult {
 export interface NLUResult {
   currentEntities: NEREntity[]
   entities: NEREntity[]
-  currentResolvers: NLUResolver[]
-  resolvers: NLUResolver[]
   slots: NLUSlots
   utterance: NLPUtterance
   newUtterance: NLPUtterance
@@ -150,7 +142,7 @@ export interface NLUResult {
 export type NLUSlots = Record<string, NLUSlot>
 
 /**
- * NER types
+ * Built-in entity types still used for schema typing.
  */
 
 export const BUILT_IN_ENTITY_TYPES = [
@@ -189,20 +181,7 @@ export const CUSTOM_ENTITY_TYPES = ['regex', 'trim', 'enum', 'llm'] as const
 
 export type CustomEntityType = (typeof CUSTOM_ENTITY_TYPES)[number]
 
-export const SPACY_ENTITY_TYPES = [
-  'location:country',
-  'location:city',
-  'person',
-  'organization'
-] as const
-
-export type SpacyEntityType = (typeof SPACY_ENTITY_TYPES)[number]
-
-export const ENTITY_TYPES = [
-  ...BUILT_IN_ENTITY_TYPES,
-  ...CUSTOM_ENTITY_TYPES,
-  ...SPACY_ENTITY_TYPES
-] as const
+export const ENTITY_TYPES = [...BUILT_IN_ENTITY_TYPES, ...CUSTOM_ENTITY_TYPES] as const
 
 export type EntityType = (typeof ENTITY_TYPES)[number]
 
@@ -409,12 +388,12 @@ export type BuiltInTemperatureEntity = BuiltInEntity<
  */
 
 type CustomEntity<
-  Type extends CustomEntityType | SpacyEntityType,
+  Type extends CustomEntityType,
   Resolution extends Record<string, unknown> = { value: string }
 > = Entity<Type, Resolution, string>
 
 export interface CustomEnumEntity<
-  Type extends CustomEntityType | SpacyEntityType = 'enum',
+  Type extends CustomEntityType = 'enum',
   Resolution extends Record<string, unknown> = { value: string }
 > extends CustomEntity<Type, Resolution> {
   levenshtein: number
@@ -434,57 +413,6 @@ interface CustomTrimEntity extends CustomEntity<'trim'> {
     | 'beforeFirst'
     | 'beforeLast'
 }
-
-/**
- * spaCy's entity types
- */
-
-interface SpacyEntity<
-  T extends SpacyEntityType,
-  Resolution extends Record<string, unknown> = { value: string }
-> extends CustomEnumEntity<T, Resolution> {
-  entity: T
-}
-
-interface SpacyLocationCountryData {
-  name: string
-  iso: string
-  isonumeric: number
-  continentcode: string
-  capital: string
-  population: number
-  tld: string
-  currencycode: string
-  phone: string
-}
-export type SpacyLocationCountryEntity = SpacyEntity<
-  'location:country',
-  {
-    value: string
-    data: SpacyLocationCountryData
-  }
->
-export type SpacyLocationCityEntity = SpacyEntity<
-  'location:city',
-  {
-    value: string
-    data: {
-      name: string
-      latitude: number
-      longitude: number
-      countrycode: string
-      country: SpacyLocationCountryData
-      population: number
-      timezone: string
-    }
-  }
->
-export type SpacyPersonEntity = SpacyEntity<'person'>
-export type SpacyOrganizationEntity = SpacyEntity<'organization'>
-
-/**
- * Exported entity types
- */
 
 export type NERBuiltInEntity =
   | BuiltInNumberEntity
@@ -513,14 +441,7 @@ export type NERCustomEntity =
 
 export type NERGlobalEntity = GlobalEntity
 
-export type NERSpacyEntity =
-  | SpacyLocationCountryEntity
-  | SpacyLocationCityEntity
-  | SpacyPersonEntity
-  | SpacyOrganizationEntity
-
 export type NEREntity =
   | NERBuiltInEntity
   | NERCustomEntity
   | NERGlobalEntity
-  | NERSpacyEntity

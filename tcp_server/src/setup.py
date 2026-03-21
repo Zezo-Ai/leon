@@ -39,7 +39,7 @@ av_dist = os.path.join("lib", "av")
 
 options = {
     "build_exe": {
-        "packages": ["spacy", "en_core_web_trf", "fr_core_news_md", "pycrfsuite"],
+        "packages": [],
         "excludes": [
             "torch",
             "functorch",

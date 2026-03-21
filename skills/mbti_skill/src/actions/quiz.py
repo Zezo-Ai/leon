@@ -2,9 +2,8 @@
 
 from bridges.python.src.sdk.leon import leon
 from bridges.python.src.sdk.types import ActionParams
-from bridges.python.src.sdk.network import Network
+from bridges.python.src.sdk.tools.inference import InferenceTool
 from ..lib import memory
-import os
 
 groups = [
     {
@@ -39,9 +38,7 @@ def run(params: ActionParams) -> None:
 
     session = memory.get_session()
     current_question = session['current_question']
-    network = Network({
-        'base_url': f"{os.environ.get('LEON_HOST')}:{os.environ.get('LEON_PORT')}/api/v1"
-    })
+    inference = InferenceTool()
 
     # If waiting for user's answer (not starting/continuing quiz)
     if params['utterance'] and current_question <= 20:
@@ -57,21 +54,13 @@ def run(params: ActionParams) -> None:
         )
         prompt = f"User's response: {params['utterance']}\nQuestion: {question_text}"
         thought_tokens_budget = 64
-        response = network.request({
-            'url': '/llm-inference',
-            'method': 'POST',
-            'data': {
-                'dutyType': 'custom',
-                'input': prompt,
-                'data': {
-                    'system_prompt': system_prompt,
-                    'thought_tokens_budget': thought_tokens_budget,
-                    # Thinking budget and enough for actual output
-                    'max_tokens': thought_tokens_budget + 8
-                }
-            }
-        })
-        llm_classification = response['data']['output'].strip().lower()
+        response = inference.completion(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            thought_tokens_budget=thought_tokens_budget,
+            max_tokens=thought_tokens_budget + 8,
+        )
+        llm_classification = str(response.get('output', '')).strip().lower()
         # Determine the corresponding letter and increment it
         answer_letter = None
         for group in groups:

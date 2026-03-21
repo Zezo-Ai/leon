@@ -322,7 +322,7 @@ async function promptForOwnerDocument(
 ): Promise<unknown> {
   const { LLM_PROVIDER } = await import('@/core')
   const completion = await LLM_PROVIDER.prompt(prompt, {
-    dutyType: LLMDuties.Custom,
+    dutyType: LLMDuties.Inference,
     systemPrompt,
     timeout,
     maxRetries: OWNER_DOCUMENT_MAX_RETRIES,

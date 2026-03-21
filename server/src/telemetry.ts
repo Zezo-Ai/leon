@@ -150,10 +150,8 @@ export class Telemetry {
             utterance,
             entities
           } = processedData as NLUResult
-          const skill = await SkillDomainHelper.getSkillInfo(
-            triggeredDomain,
-            triggeredSkill
-          )
+          const skill =
+            await SkillDomainHelper.getNewSkillConfig(triggeredSkill)
 
           await this.axios.post('/on-utterance', {
             instanceID: this.instanceID,
@@ -167,8 +165,8 @@ export class Telemetry {
               executionTime: processedData?.executionTime || 0,
               nluProcessingTime: processedData?.nluProcessingTime || 0,
               value: this.anonymizeEntities(utterance, entities) || utterance,
-              triggeredSkillVersion: skill.version || null,
-              triggeredSkillBridge: skill.bridge || null
+              triggeredSkillVersion: skill?.version || null,
+              triggeredSkillBridge: skill?.bridge || null
             }
           })
         } else if (JSON.stringify(processedData) !== JSON.stringify({})) {

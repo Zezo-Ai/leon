@@ -24,9 +24,8 @@ def run(params: ActionParams) -> None:
             'emoji': '✌'
         }
     }
-    entities = params['entities']
     player = {
-        'handsign': None,
+        'handsign': params.get('action_arguments', {}).get('handsign'),
         'points': 0
     }
     leon_player = {
@@ -34,14 +33,10 @@ def run(params: ActionParams) -> None:
         'points': 0
     }
 
-    # Find entities
-    for entity in entities:
-        if entity['entity'] == 'handsign':
-            player['handsign'] = entity['option']
-
     # Exit the loop if no handsign has been found
     if player['handsign'] is None:
         leon.answer({'core': {'is_in_action_loop': False}})
+        return
 
     leon_emoji = handsigns[leon_player['handsign']]['emoji']
     player_emoji = handsigns[player['handsign']]['emoji']

@@ -23,10 +23,7 @@ import {
   PYTHON_TCP_SERVER_VERSION,
   NODEJS_BRIDGE_VERSION,
   PYTHON_BRIDGE_VERSION,
-  INSTANCE_ID,
-  SKILLS_RESOLVERS_NLP_MODEL_PATH,
-  GLOBAL_RESOLVERS_NLP_MODEL_PATH,
-  MAIN_NLP_MODEL_PATH
+  INSTANCE_ID
 } from '@/constants'
 
 dotenv.config()
@@ -97,11 +94,6 @@ dotenv.config()
         osDetails: null,
         nodeVersion: null,
         npmVersion: null
-      },
-      nlpModels: {
-        globalResolversModelState: null,
-        skillsResolversModelState: null,
-        mainModelState: null
       },
       nodeJSBridge: {
         version: null,
@@ -351,94 +343,6 @@ dotenv.config()
       LogHelper.info(
         `Python TCP server startup time: ${reportDataInput.pythonTCPServer.startTime}\n`
       )
-
-      /**
-       * Global resolvers NLP model checking
-       */
-
-      LogHelper.info('Global resolvers NLP model state')
-
-      if (
-        !fs.existsSync(GLOBAL_RESOLVERS_NLP_MODEL_PATH) ||
-        !Object.keys(
-          await fs.promises.readFile(GLOBAL_RESOLVERS_NLP_MODEL_PATH)
-        ).length
-      ) {
-        const state = 'Global resolvers NLP model not found or broken'
-
-        report.can_text.v = false
-        Object.keys(report).forEach((item) => {
-          if (item.indexOf('stt') !== -1 || item.indexOf('tts') !== -1)
-            report[item].v = false
-        })
-        LogHelper.error(
-          `${state}. Try to generate a new one: "npm run train"\n`
-        )
-        reportDataInput.nlpModels.globalResolversModelState = state
-      } else {
-        const state = 'Found and valid'
-
-        LogHelper.success(`${state}\n`)
-        reportDataInput.nlpModels.globalResolversModelState = state
-      }
-
-      /**
-       * Skills resolvers NLP model checking
-       */
-
-      LogHelper.info('Skills resolvers NLP model state')
-
-      if (
-        !fs.existsSync(SKILLS_RESOLVERS_NLP_MODEL_PATH) ||
-        !Object.keys(
-          await fs.promises.readFile(SKILLS_RESOLVERS_NLP_MODEL_PATH)
-        ).length
-      ) {
-        const state = 'Skills resolvers NLP model not found or broken'
-
-        report.can_text.v = false
-        Object.keys(report).forEach((item) => {
-          if (item.indexOf('stt') !== -1 || item.indexOf('tts') !== -1)
-            report[item].v = false
-        })
-        LogHelper.error(
-          `${state}. Try to generate a new one: "npm run train"\n`
-        )
-        reportDataInput.nlpModels.skillsResolversModelState = state
-      } else {
-        const state = 'Found and valid'
-
-        LogHelper.success(`${state}\n`)
-        reportDataInput.nlpModels.skillsResolversModelState = state
-      }
-
-      /**
-       * Main NLP model checking
-       */
-
-      LogHelper.info('Main NLP model state')
-
-      if (
-        !fs.existsSync(MAIN_NLP_MODEL_PATH) ||
-        !Object.keys(await fs.promises.readFile(MAIN_NLP_MODEL_PATH)).length
-      ) {
-        const state = 'Main NLP model not found or broken'
-
-        report.can_text.v = false
-        Object.keys(report).forEach((item) => {
-          if (item.indexOf('stt') !== -1 || item.indexOf('tts') !== -1)
-            report[item].v = false
-        })
-        LogHelper.error(
-          `${state}. Try to generate a new one: "npm run train"\n`
-        )
-        reportDataInput.nlpModels.mainModelState = state
-      } else {
-        const state = 'Found and valid'
-
-        LogHelper.success(`${state}\n`)
-        reportDataInput.nlpModels.mainModelState = state
-      }
 
       /**
        * TTS/STT checking

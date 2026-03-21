@@ -81,6 +81,26 @@ def format_file_paths(file_paths: List[str]) -> str:
     return ', '.join(format_file_path(path) for path in file_paths)
 
 
+def normalize_language_code(value: str) -> Optional[str]:
+    """Normalize a language input to an ISO 639-1 code.
+
+    Supports direct language codes and locale tags such as ``fr-FR``.
+    Returns ``None`` when the input is not a supported code-like value.
+    """
+    trimmed_value = value.strip()
+
+    if not trimmed_value:
+        return None
+
+    normalized_value = trimmed_value.replace('_', '-').lower()
+    language = normalized_value.split('-', 1)[0].strip()
+
+    if len(language) == 2 and language.isalpha():
+        return language
+
+    return None
+
+
 def get_platform_name() -> str:
     """Get platform name with architecture granularity (matches system-helper.ts)
     

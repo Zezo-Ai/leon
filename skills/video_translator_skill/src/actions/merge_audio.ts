@@ -6,7 +6,22 @@ import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
 import ToolManager, { isMissingToolSettingsError } from '@sdk/tool-manager'
 import FfmpegTool from '@sdk/tools/ffmpeg'
-import { formatBytes, formatFilePath } from '@sdk/utils'
+import {
+  formatBytes,
+  formatFilePath,
+  normalizeLanguageCode
+} from '@sdk/utils'
+
+function getLanguageDisplayName(languageCode: string): string {
+  try {
+    return (
+      new Intl.DisplayNames(['en'], { type: 'language' }).of(languageCode) ||
+      languageCode
+    )
+  } catch {
+    return languageCode
+  }
+}
 
 export const run: ActionFunction = async function (
   _params: ActionParams,
@@ -23,15 +38,12 @@ export const run: ActionFunction = async function (
     (paramsHelper.getActionArgument('instrumental_path') as string) ||
     paramsHelper.getContextData<string>('instrumental_path')
 
-  // Extract target language from entity 'language' and format it
-  const languageEntity = paramsHelper.findLastEntityFromContext('language')
-  const targetLanguageLocale =
-    languageEntity && 'option' in languageEntity
-      ? (languageEntity.option as string)
-      : undefined
-  const targetLanguage = targetLanguageLocale
-    ? targetLanguageLocale.substring(0, 2).toLowerCase()
-    : paramsHelper.getContextData<string>('target_language')
+  const targetLanguage =
+    paramsHelper.getContextData<string>('target_language_code') ||
+    normalizeLanguageCode(paramsHelper.getContextData<string>('target_language') || '')
+  const targetLanguageLabel =
+    paramsHelper.getContextData<string>('target_language') ||
+    (targetLanguage ? getLanguageDisplayName(targetLanguage) : undefined)
 
   try {
     // Validate required inputs
@@ -121,7 +133,7 @@ export const run: ActionFunction = async function (
       audio_size: finalAudioSizeMB
     }
     if (targetLanguage) {
-      mergeStartedData['target_language'] = targetLanguage
+      mergeStartedData['target_language'] = targetLanguageLabel || targetLanguage
     }
 
     leon.answer({
@@ -170,7 +182,8 @@ export const run: ActionFunction = async function (
       dubbed_audio: path.basename(finalAudioPath)
     }
     if (targetLanguage) {
-      mergeCompletedData['target_language'] = targetLanguage
+      mergeCompletedData['target_language'] =
+        targetLanguageLabel || targetLanguage
     }
 
     leon.answer({
@@ -179,7 +192,8 @@ export const run: ActionFunction = async function (
       core: {
         context_data: {
           merged_video_path: outputVideoPath,
-          target_language: targetLanguage
+          target_language: targetLanguageLabel || targetLanguage,
+          target_language_code: targetLanguage
         }
       }
     })

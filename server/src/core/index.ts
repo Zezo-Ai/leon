@@ -12,8 +12,6 @@ import SocketServer from '@/core/socket-server'
 import SpeechToText from '@/core/stt/stt'
 import TextToSpeech from '@/core/tts/tts'
 import AutomaticSpeechRecognition from '@/core/asr/asr'
-import NamedEntityRecognition from '@/core/nlp/nlu/ner'
-import ModelLoader from '@/core/nlp/nlu/model-loader'
 import NaturalLanguageUnderstanding from '@/core/nlp/nlu/nlu'
 import Brain from '@/core/brain/brain'
 import LLMManager from '@/core/llm-manager/llm-manager'
@@ -54,12 +52,6 @@ export const CONVERSATION_LOGGER = new ConversationLogger({
   nbOfLogsToKeep: 512,
   nbOfLogsToLoad: 96
 })
-export const LOOP_CONVERSATION_LOGGER = new ConversationLogger({
-  loggerName: 'Loop Conversation Logger',
-  fileName: 'loop_conversation_log.json',
-  nbOfLogsToKeep: 512,
-  nbOfLogsToLoad: 96
-})
 export const TOOL_CALL_LOGGER = new ToolCallLogger({
   loggerName: 'Tool Call Logger',
   fileName: 'tool-calls.json',
@@ -86,10 +78,6 @@ export const STT = new SpeechToText()
 export const TTS = new TextToSpeech()
 
 export const ASR = new AutomaticSpeechRecognition()
-
-export const NER = new NamedEntityRecognition()
-
-export const MODEL_LOADER = new ModelLoader()
 
 export const NLU = new NaturalLanguageUnderstanding()
 

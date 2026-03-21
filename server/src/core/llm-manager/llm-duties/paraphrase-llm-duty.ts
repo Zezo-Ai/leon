@@ -1,31 +1,18 @@
-import type { LlamaChatSession } from 'node-llama-cpp'
-
 import {
-  type LLMDutyParams,
-  type LLMDutyResult,
-  type LLMDutyInitParams,
-  type LLMDutyExecuteParams,
   LLMDuty,
-  DEFAULT_INIT_PARAMS,
-  DEFAULT_EXECUTE_PARAMS
+  type LLMDutyExecuteParams,
+  type LLMDutyInitParams,
+  type LLMDutyParams,
+  type LLMDutyResult
 } from '@/core/llm-manager/llm-duty'
+import { EVENT_EMITTER, LLM_MANAGER, LLM_PROVIDER, PERSONA } from '@/core'
+import { LLMDuties } from '@/core/llm-manager/types'
 import { LogHelper } from '@/helpers/log-helper'
-import {
-  EVENT_EMITTER,
-  LLM_MANAGER,
-  LLM_PROVIDER,
-  PERSONA,
-  SOCKET_SERVER
-} from '@/core'
-import { LLMProviders, LLMDuties } from '@/core/llm-manager/types'
-import { WORKFLOW_LLM_PROVIDER as LLM_PROVIDER_NAME } from '@/constants'
-import { StringHelper } from '@/helpers/string-helper'
 
 type ParaphraseLLMDutyParams = LLMDutyParams
 
 export class ParaphraseLLMDuty extends LLMDuty {
   private static instance: ParaphraseLLMDuty
-  private static session: LlamaChatSession = null as unknown as LlamaChatSession
   protected static finalSystemPrompt = ''
   protected systemPrompt = `You are an AI system that generates answers (Natural Language Generation).
 You must provide a text alternative according to your current mood and your personality.
@@ -64,98 +51,37 @@ The sun is a star, it is the closest star to Earth.`
     this.input = params.input
   }
 
-  public async init(
-    params: LLMDutyInitParams = DEFAULT_INIT_PARAMS
-  ): Promise<void> {
-    if (LLM_PROVIDER_NAME === LLMProviders.Local) {
-      if (!ParaphraseLLMDuty.session || params.force) {
-        LogHelper.title(this.name)
-        LogHelper.info('Initializing...')
+  public async init(params?: LLMDutyInitParams): Promise<void> {
+    void params
 
-        try {
-          const { LlamaChatSession } = await Function(
-            'return import("node-llama-cpp")'
-          )()
-
-          /**
-           * Dispose the previous session and sequence
-           * to give space for the new one
-           */
-          if (params.force) {
-            ParaphraseLLMDuty.session.dispose({ disposeSequence: true })
-            LogHelper.info('Session disposed')
-          }
-
-          ParaphraseLLMDuty.finalSystemPrompt = PERSONA.getDutySystemPrompt(
-            this.systemPrompt
-          )
-
-          ParaphraseLLMDuty.session = new LlamaChatSession({
-            contextSequence: LLM_MANAGER.context.getSequence(),
-            autoDisposeSequence: true,
-            systemPrompt: ParaphraseLLMDuty.finalSystemPrompt
-          }) as LlamaChatSession
-
-          LogHelper.success('Initialized')
-        } catch (e) {
-          LogHelper.title(this.name)
-          LogHelper.error(`Failed to initialize: ${e}`)
-        }
-      }
-    }
+    ParaphraseLLMDuty.finalSystemPrompt = PERSONA.getDutySystemPrompt(
+      this.systemPrompt
+    )
   }
 
   public async execute(
-    params: LLMDutyExecuteParams = DEFAULT_EXECUTE_PARAMS
+    params?: LLMDutyExecuteParams
   ): Promise<LLMDutyResult | null> {
+    void params
+
     LogHelper.title(this.name)
     LogHelper.info('Executing...')
 
     try {
+      if (!ParaphraseLLMDuty.finalSystemPrompt) {
+        await this.init()
+      }
+
       const prompt = `Modify the following text but do not say you modified it: ${this.input}`
       const config = LLM_MANAGER.coreLLMDuties[LLMDuties.Paraphrase]
-      const completionParams = {
+      let completionResult = await LLM_PROVIDER.prompt(prompt, {
         dutyType: LLMDuties.Paraphrase,
         systemPrompt: ParaphraseLLMDuty.finalSystemPrompt,
+        maxTokens: config?.maxTokens,
         temperature: config?.temperature,
-        thoughtTokensBudget: config?.thoughtTokensBudget
-      }
-      let completionResult
-
-      if (LLM_PROVIDER_NAME === LLMProviders.Local) {
-        /*const history = await LLM_MANAGER.loadHistory(
-          CONVERSATION_LOGGER,
-          session: ParaphraseLLMDuty.session,
-        )*/
-        /**
-         * Only the first (system prompt) messages is used
-         * to provide some context
-         */
-        // ParaphraseLLMDuty.session.setChatHistory([history[0], history[history.length - 1]])
-        // ParaphraseLLMDuty.session.setChatHistory([history[0]])
-
-        const generationId = StringHelper.random(6, { onlyLetters: true })
-        completionResult = await LLM_PROVIDER.prompt(prompt, {
-          ...completionParams,
-          session: ParaphraseLLMDuty.session,
-          onToken: (chunk) => {
-            if (!params.isWarmingUp && !params.shouldEmitOnToken) {
-              const detokenizedChunk = LLM_PROVIDER.cleanUpResult(
-                LLM_MANAGER.model.detokenize(
-                  chunk as Parameters<typeof LLM_MANAGER.model.detokenize>[0]
-                )
-              )
-
-              SOCKET_SERVER.socket?.emit('llm-token', {
-                token: detokenizedChunk,
-                generationId
-              })
-            }
-          }
-        })
-      } else {
-        completionResult = await LLM_PROVIDER.prompt(prompt, completionParams)
-      }
+        thoughtTokensBudget: config?.thoughtTokensBudget,
+        disableThinking: true
+      })
 
       if (!completionResult) {
         const providerError = LLM_PROVIDER.consumeLastProviderErrorMessage()
@@ -164,8 +90,8 @@ The sun is a star, it is the closest star to Earth.`
         }
 
         completionResult = {
-          dutyType: completionParams.dutyType,
-          systemPrompt: completionParams.systemPrompt,
+          dutyType: LLMDuties.Paraphrase,
+          systemPrompt: ParaphraseLLMDuty.finalSystemPrompt,
           input: prompt,
           output: providerError,
           data: null,
@@ -173,7 +99,8 @@ The sun is a star, it is the closest star to Earth.`
           thoughtTokensBudget: 0,
           usedInputTokens: 0,
           usedOutputTokens: 0,
-          temperature: completionParams.temperature
+          generationDurationMs: 0,
+          temperature: config?.temperature ?? 0
         }
       }
 

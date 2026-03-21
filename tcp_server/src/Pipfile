@@ -14,9 +14,6 @@ wheel = "*"
 cx-freeze = "==7.1.1"
 # Common
 python-dotenv = "==0.19.2"
-# TCP server
-spacy = "==3.5.4"
-geonamescache = "==2.0.0"
 # TCP server; TTS; ASR
 # PyTorch is installed via the setup script
 # torch = "*"

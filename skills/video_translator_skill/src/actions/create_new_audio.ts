@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import type { ActionFunction, ActionParams, CustomEnumEntity } from '@sdk/types'
+import type { ActionFunction, ActionParams } from '@sdk/types'
 import type { TranscriptionOutput } from '@sdk/tools/transcription-schema'
 import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
@@ -11,7 +11,7 @@ import ChatterboxONNXTool from '@sdk/tools/chatterbox_onnx'
 import Qwen3TTSTool from '@sdk/tools/qwen3_tts'
 import FfmpegTool from '@sdk/tools/ffmpeg'
 import FfprobeTool from '@sdk/tools/ffprobe'
-import { formatFilePath } from '@sdk/utils'
+import { formatFilePath, normalizeLanguageCode } from '@sdk/utils'
 
 interface SpeakerReference {
   speaker: string
@@ -42,6 +42,17 @@ const BREAK_CHARS = ',.!?'
 const GROUP_TARGET_CHARS = 272
 const LONG_PAUSE_S = 1.5
 const MAX_SPEED_UP_RATIO = 1.3
+
+function getLanguageDisplayName(languageCode: string): string {
+  try {
+    return (
+      new Intl.DisplayNames(['en'], { type: 'language' }).of(languageCode) ||
+      languageCode
+    )
+  } catch {
+    return languageCode
+  }
+}
 
 /**
  * Convert seconds to milliseconds
@@ -244,23 +255,20 @@ export const run: ActionFunction = async function (
       | SpeakerReference[]
       | undefined) ||
     paramsHelper.getContextData<SpeakerReference[]>('speaker_references')
-
-  // Extract target language from entity 'language' and format for Chatterbox ONNX
-  // The entity option contains a locale like "fr-FR", we need just "fr"
-  const languageEntity = paramsHelper.findLastEntityFromContext('language') as
-    | CustomEnumEntity
-    | undefined
-  const languageName =
-    languageEntity?.resolution?.value ||
-    languageEntity?.sourceText ||
-    languageEntity?.utteranceText
-  const targetLanguageLocale =
-    languageEntity && 'option' in languageEntity
-      ? (languageEntity.option as string)
-      : undefined
-  const targetLanguage = targetLanguageLocale
-    ? targetLanguageLocale.substring(0, 2).toLowerCase()
-    : undefined
+  const targetLanguageInput =
+    (paramsHelper.getActionArgument('target_language') as string) ||
+    paramsHelper.getContextData<string>('target_language_code') ||
+    paramsHelper.getContextData<string>('target_language')
+  const targetLanguageCode = paramsHelper.getContextData<string>(
+    'target_language_code'
+  )
+  const targetLanguage =
+    targetLanguageCode || (targetLanguageInput
+      ? normalizeLanguageCode(targetLanguageInput)
+      : null)
+  const targetLanguageLabel =
+    paramsHelper.getContextData<string>('target_language') ||
+    (targetLanguage ? getLanguageDisplayName(targetLanguage) : targetLanguageInput)
 
   try {
     // Load settings
@@ -299,7 +307,8 @@ export const run: ActionFunction = async function (
       leon.answer({
         key: 'target_language_missing',
         data: {
-          note: 'Language entity not found in context. Please specify the target language in the conversation.'
+          note:
+            'The target language is missing or could not be mapped to a supported language code.'
         }
       })
       return
@@ -324,7 +333,7 @@ export const run: ActionFunction = async function (
       data: {
         segment_count: transcription.segments.length.toString(),
         speaker_count: speakerReferences.length.toString(),
-        target_language: targetLanguage,
+        target_language: targetLanguageLabel,
         provider
       }
     })
@@ -456,7 +465,7 @@ export const run: ActionFunction = async function (
           const qwen3TTSTool = await ToolManager.initTool(Qwen3TTSTool)
           const qwenTasks = synthesisTasks.map((task) => ({
             text: task.text,
-            target_language: languageName ?? 'Auto',
+            target_language: targetLanguageLabel ?? 'Auto',
             audio_path: task.audio_path,
             speaker_reference_path: task.speaker_reference_path,
             x_vector_only_mode: true
@@ -690,13 +699,15 @@ export const run: ActionFunction = async function (
         output_path: formatFilePath(finalAudioPath),
         output_folder: formatFilePath(processedSegmentsDir),
         manifest_path: formatFilePath(manifestPath),
-        target_language: targetLanguage
+        target_language: targetLanguageLabel
       },
       core: {
         context_data: {
           processed_segments_dir: processedSegmentsDir,
           segments_manifest_path: manifestPath,
-          dubbed_audio_path: finalAudioPath
+          dubbed_audio_path: finalAudioPath,
+          target_language: targetLanguageLabel,
+          target_language_code: targetLanguage
         }
       }
     })

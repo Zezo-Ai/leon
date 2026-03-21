@@ -1,12 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { command } from 'execa'
-
 import {
   BINARIES_FOLDER_NAME,
   GITHUB_URL,
-  NODEJS_BRIDGE_ROOT_PATH,
   NODEJS_BRIDGE_DIST_PATH,
   PYTHON_BRIDGE_DIST_PATH,
   PYTHON_TCP_SERVER_DIST_PATH,
@@ -82,23 +79,6 @@ const setupBinaries = async (key) => {
       fs.promises.rm(buildPath, { recursive: true, force: true }),
       fs.promises.rm(archivePath, { recursive: true, force: true })
     ])
-
-    if (key === 'nodejs-bridge') {
-      try {
-        LogHelper.info('Installing Node.js bridge npm packages...')
-
-        await command(
-          `npm install --package-lock=false --prefix ${NODEJS_BRIDGE_ROOT_PATH}`,
-          {
-            shell: true
-          }
-        )
-
-        LogHelper.success('Node.js bridge npm packages installed')
-      } catch (e) {
-        throw new Error(`Failed to install Node.js bridge npm packages: ${e}`)
-      }
-    }
 
     try {
       LogHelper.info(`Downloading ${name}...`)

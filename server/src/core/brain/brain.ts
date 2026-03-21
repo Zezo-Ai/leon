@@ -11,7 +11,6 @@ import { SkillActionTypes } from '@/core/brain/types'
 import { HAS_TTS } from '@/constants'
 import {
   CONVERSATION_LOGGER,
-  LLM_MANAGER,
   NLU,
   SELF_MODEL_MANAGER,
   SOCKET_SERVER,
@@ -228,31 +227,19 @@ export default class Brain {
         const { actionConfig: currentActionConfig } = NLU.nluResult
         const hasLoopConfig = !!currentActionConfig?.loop
         const hasSlotsConfig = !!currentActionConfig?.slots
-        const isLLMNLGDisabled = !!currentActionConfig?.disable_llm_nlg
-
         /**
-         * Only use LLM NLG if:
-         * - It is not specifically disabled in the action config
-         * - It is enabled in general
-         * - The current action does not have a loop neither slots configuration
+         * Only use answer paraphrasing if the current action does not have
+         * a loop neither slots configuration
          * (Because sometimes the LLM will not be able to generate a meaningful text,
          * and it will mislead the conversation)
          */
-        if (
-          !isLLMNLGDisabled &&
-          LLM_MANAGER.isLLMNLGEnabled &&
-          !hasLoopConfig &&
-          !hasSlotsConfig
-        ) {
+        if (!hasLoopConfig && !hasSlotsConfig) {
           if (
             speechAnswer === textAnswer ||
             typeof answer === 'string' ||
             answer.speech
           ) {
-            /**
-             * Only use LLM NLG if the answer is not too short
-             * otherwise it will be too hard for the model to generate a meaningful text
-             */
+            // Keep paraphrasing for substantive answers only.
             const textToParaphrase = textAnswer ?? speechAnswer
             const nbOfWords = String(textToParaphrase).split(' ').length
             if (nbOfWords >= MIN_NB_OF_WORDS_TO_USE_LLM_NLG) {

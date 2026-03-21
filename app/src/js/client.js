@@ -46,12 +46,14 @@ export default class Client {
   }
 
   updateMood(mood) {
-    if (window.leonConfigInfo.llm.enabled) {
-      const moodContainer = document.querySelector('#mood')
+    const moodContainer = document.querySelector('#mood')
 
-      moodContainer.textContent = `Leon's mood: ${mood.emoji}`
-      moodContainer.setAttribute('title', mood.type)
+    if (!moodContainer || !mood?.emoji || !mood?.type) {
+      return
     }
+
+    moodContainer.textContent = `Leon's mood: ${mood.emoji}`
+    moodContainer.setAttribute('title', mood.type)
   }
 
   async sendInitMessages() {
@@ -119,14 +121,8 @@ export default class Client {
     this.socket.on('init-tcp-server-boot', (status) => {
       this.setInitStatus('tcpServerBoot', status)
     })
-    this.socket.on('init-llm', (status) => {
-      this.setInitStatus('llm', status)
-    })
     this.socket.on('init-llama-server-boot', (status) => {
       this.setInitStatus('llamaServerBoot', status)
-    })
-    this.socket.on('warmup-llm-duties', (status) => {
-      this.setInitStatus('llmDutiesWarmUp', status)
     })
 
     this.socket.on('ready', () => {
@@ -147,6 +143,13 @@ export default class Client {
 
       // Leon has finished to answer
       this._isLeonGeneratingAnswer = false
+
+      const isPlanWidget =
+        data && typeof data === 'object' && data.widget === 'PlanWidget'
+
+      if (isPlanWidget) {
+        this.chatbot.isTyping('leon', false)
+      }
 
       /**
        * Handle message replacement if replaceMessageId is provided

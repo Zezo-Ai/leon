@@ -4,10 +4,6 @@ import path from 'node:path'
 import { command } from 'execa'
 
 import {
-  EN_SPACY_MODEL_NAME,
-  EN_SPACY_MODEL_VERSION,
-  FR_SPACY_MODEL_NAME,
-  FR_SPACY_MODEL_VERSION,
   IS_GITHUB_ACTIONS,
   PYTHON_BRIDGE_SRC_PATH,
   PYTHON_TCP_SERVER_SRC_PATH
@@ -23,28 +19,9 @@ import { SystemHelper } from '@/helpers/system-helper'
  * 2. Verify if the targeted development environment is up-to-date
  * 3. If up-to-date, exit
  * 4. If not up-to-date, delete the outdated development environment and install the new one
- * 5. Install spaCy models if the targeted development environment is the TCP server
  */
 
-// Define mirror to download models installation file
-function getModelInstallationFileUrl(model, mirror = undefined) {
-  const { name, version } = SPACY_MODELS.get(model)
-  const suffix = 'py3-none-any.whl'
-  let urlPrefix = 'https://github.com/explosion/spacy-models/releases/download'
-
-  if (mirror === 'cn') {
-    LogHelper.info(
-      'Using Chinese mirror to download model installation file...'
-    )
-    urlPrefix =
-      'https://download.fastgit.org/explosion/spacy-models/releases/download'
-  }
-
-  return `${urlPrefix}/${name}-${version}/${name}-${version}-${suffix}`
-}
-
 const SETUP_TARGETS = new Map()
-const SPACY_MODELS = new Map()
 
 SETUP_TARGETS.set('python-bridge', {
   name: 'Python bridge',
@@ -58,23 +35,11 @@ SETUP_TARGETS.set('tcp-server', {
   dotVenvPath: path.join(PYTHON_TCP_SERVER_SRC_PATH, '.venv'),
   dotProjectPath: path.join(PYTHON_TCP_SERVER_SRC_PATH, '.venv', '.project')
 })
-
-SPACY_MODELS.set('en', {
-  name: EN_SPACY_MODEL_NAME,
-  version: EN_SPACY_MODEL_VERSION
-})
-SPACY_MODELS.set('fr', {
-  name: FR_SPACY_MODEL_NAME,
-  version: FR_SPACY_MODEL_VERSION
-})
 ;(async () => {
   LoaderHelper.start()
 
   const { argv } = process
   const givenSetupTarget = argv[2].toLowerCase()
-  // cn
-  const givenMirror = argv[3]?.toLowerCase()
-
   if (!SETUP_TARGETS.has(givenSetupTarget)) {
     LogHelper.error(
       `Invalid setup target: ${givenSetupTarget}. Valid targets are: ${Array.from(
@@ -342,56 +307,6 @@ SPACY_MODELS.set('fr', {
     )
   } finally {
     LoaderHelper.stop()
-  }
-
-  if (givenSetupTarget === 'tcp-server') {
-    const installSpacyModels = async () => {
-      try {
-        LogHelper.info('Installing spaCy models...')
-
-        // Install models one by one to avoid network throttling
-        for (const modelLanguage of SPACY_MODELS.keys()) {
-          const modelInstallationFileUrl = getModelInstallationFileUrl(
-            modelLanguage,
-            givenMirror
-          )
-
-          await command(`pipenv run pip install ${modelInstallationFileUrl}`, {
-            shell: true,
-            stdio: 'inherit'
-          })
-        }
-
-        LogHelper.success('spaCy models installed')
-      } catch (e) {
-        LogHelper.error(`Failed to install spaCy models: ${e}`)
-        process.exit(1)
-      }
-    }
-
-    LogHelper.info('Checking whether all spaCy models are installed...')
-
-    try {
-      for (const { name: modelName } of SPACY_MODELS.values()) {
-        const { stderr } = await command(
-          `pipenv run python -c "import ${modelName}"`,
-          { shell: true }
-        )
-
-        // Check stderr output for Windows as no exception is thrown
-        if (osType === OSTypes.Windows) {
-          if (String(stderr).length > 0) {
-            await installSpacyModels()
-            break
-          }
-        }
-      }
-
-      LogHelper.success('All spaCy models are already installed')
-    } catch (e) {
-      LogHelper.info(`Not all spaCy models are installed. Details: ${e}`)
-      await installSpacyModels()
-    }
   }
 
   LogHelper.success(`${setupTarget} development environment ready`)

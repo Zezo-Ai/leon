@@ -9,6 +9,7 @@ import {
   LEON_PULSE_ENABLED,
   LEON_PULSE_INTERVAL_MS
 } from '@/constants'
+import { runInference } from '@/core/llm-manager/inference'
 import { DateHelper } from '@/helpers/date-helper'
 import { LogHelper } from '@/helpers/log-helper'
 
@@ -863,7 +864,6 @@ export default class PulseManager {
     activeMattersSection: string
     suppressionSection: string
   }): Promise<PulseMatter[]> {
-    const { CustomLLMDuty } = await this.loadCustomLLMDuty()
     const prompt = [
       'Leon Self-Model Snapshot:',
       evidence.selfModelSnapshot || 'none',
@@ -887,49 +887,43 @@ export default class PulseManager {
       evidence.suppressionSection
     ].join('\n')
 
-    const duty = new CustomLLMDuty({
-      input: prompt,
-      data: {
-        system_prompt: [
-          'You maintain Leon\'s autonomous pulse queue.',
-          'Return exactly one JSON object and nothing else.',
-          'Generate only concrete proactive matters Leon can execute autonomously right now without owner clarification.',
-          'Use only the provided memory, context, recent conversation, and self-model signals.',
-          'Do not generate destructive, expensive, or socially sensitive actions.',
-          'If a matter appears suppressed, declined, stale, duplicated, or weakly evidenced, do not include it.',
-          'Each matter must represent one autonomous ReAct turn candidate.',
-          'Return JSON with this exact shape:',
-          '{',
-          '  "items": [',
-          '    {',
-          '      "intent_key": "stable_snake_case_identifier",',
-          '      "target_scope": "stable_scope_identifier",',
-          '      "summary": "short user-facing matter summary",',
-          '      "why": "short evidence-based reason",',
-          '      "turn_prompt": "concise autonomous task instruction",',
-          '      "confidence": 0.0,',
-          '      "sources": ["memory"|"context"|"self_model"],',
-          '      "notify_owner": true',
-          '    }',
-          '  ]',
-          '}',
-          'Rules:',
-          '- Return at most 3 items.',
-          '- "intent_key" and "target_scope" must be stable identifiers for deduplication.',
-          '- "summary", "why", and "turn_prompt" must be concise and concrete.',
-          '- "sources" must only contain memory, context, and/or self_model.',
-          '- Prefer matters supported by multiple signals.',
-          '- If there is nothing useful to do, return {"items":[]}.'
-        ].join('\n'),
-        temperature: 0,
-        thought_tokens_budget: 96,
-        max_tokens: PULSE_PLANNER_MAX_TOKENS,
-        disposeTimeout: 20_000
-      }
+    const result = await runInference({
+      prompt,
+      systemPrompt: [
+        'You maintain Leon\'s autonomous pulse queue.',
+        'Return exactly one JSON object and nothing else.',
+        'Generate only concrete proactive matters Leon can execute autonomously right now without owner clarification.',
+        'Use only the provided memory, context, recent conversation, and self-model signals.',
+        'Do not generate destructive, expensive, or socially sensitive actions.',
+        'If a matter appears suppressed, declined, stale, duplicated, or weakly evidenced, do not include it.',
+        'Each matter must represent one autonomous ReAct turn candidate.',
+        'Return JSON with this exact shape:',
+        '{',
+        '  "items": [',
+        '    {',
+        '      "intent_key": "stable_snake_case_identifier",',
+        '      "target_scope": "stable_scope_identifier",',
+        '      "summary": "short user-facing matter summary",',
+        '      "why": "short evidence-based reason",',
+        '      "turn_prompt": "concise autonomous task instruction",',
+        '      "confidence": 0.0,',
+        '      "sources": ["memory"|"context"|"self_model"],',
+        '      "notify_owner": true',
+        '    }',
+        '  ]',
+        '}',
+        'Rules:',
+        '- Return at most 3 items.',
+        '- "intent_key" and "target_scope" must be stable identifiers for deduplication.',
+        '- "summary", "why", and "turn_prompt" must be concise and concrete.',
+        '- "sources" must only contain memory, context, and/or self_model.',
+        '- Prefer matters supported by multiple signals.',
+        '- If there is nothing useful to do, return {"items":[]}.'
+      ].join('\n'),
+      temperature: 0,
+      maxTokens: PULSE_PLANNER_MAX_TOKENS,
+      trackProviderErrors: false
     })
-
-    await duty.init()
-    const result = await duty.execute()
     const payload = this.parseJsonObject(result?.output) as PulsePlannerOutput | null
     if (!payload?.items || !Array.isArray(payload.items)) {
       return []
@@ -1305,7 +1299,6 @@ export default class PulseManager {
     matter: PulseMatter,
     ownerMessage: string
   ): Promise<PulseOwnerReactionOutput | null> {
-    const { CustomLLMDuty } = await this.loadCustomLLMDuty()
     const prompt = [
       'Recent pulse matter:',
       `- Summary: ${matter.summary}`,
@@ -1317,35 +1310,29 @@ export default class PulseManager {
       ownerMessage
     ].join('\n')
 
-    const duty = new CustomLLMDuty({
-      input: prompt,
-      data: {
-        system_prompt: [
-          'You classify the owner\'s reaction to Leon\'s recent autonomous pulse action.',
-          'Return exactly one JSON object and nothing else.',
-          'Return JSON with this exact shape:',
-          '{',
-          '  "reaction": "decline" | "accept" | "neutral",',
-          '  "durable_preference": boolean,',
-          '  "preference_memory": string|null,',
-          '  "behavioral_principle": string|null',
-          '}',
-          'Rules:',
-          '- "decline" means the owner rejects this proactive behavior or does not want this kind of autonomous action.',
-          '- "accept" means the owner approves or welcomes it.',
-          '- "neutral" means unrelated or too ambiguous.',
-          '- "preference_memory" should be a short durable owner-preference sentence only when clearly expressed.',
-          '- "behavioral_principle" should be a short first-person Leon adaptation only when a decline implies a future adjustment.'
-        ].join('\n'),
-        temperature: 0,
-        thought_tokens_budget: 64,
-        max_tokens: PULSE_OWNER_REACTION_MAX_TOKENS,
-        disposeTimeout: 20_000
-      }
+    const result = await runInference({
+      prompt,
+      systemPrompt: [
+        'You classify the owner\'s reaction to Leon\'s recent autonomous pulse action.',
+        'Return exactly one JSON object and nothing else.',
+        'Return JSON with this exact shape:',
+        '{',
+        '  "reaction": "decline" | "accept" | "neutral",',
+        '  "durable_preference": boolean,',
+        '  "preference_memory": string|null,',
+        '  "behavioral_principle": string|null',
+        '}',
+        'Rules:',
+        '- "decline" means the owner rejects this proactive behavior or does not want this kind of autonomous action.',
+        '- "accept" means the owner approves or welcomes it.',
+        '- "neutral" means unrelated or too ambiguous.',
+        '- "preference_memory" should be a short durable owner-preference sentence only when clearly expressed.',
+        '- "behavioral_principle" should be a short first-person Leon adaptation only when a decline implies a future adjustment.'
+      ].join('\n'),
+      temperature: 0,
+      maxTokens: PULSE_OWNER_REACTION_MAX_TOKENS,
+      trackProviderErrors: false
     })
-
-    await duty.init()
-    const result = await duty.execute()
     return this.parseJsonObject(result?.output) as PulseOwnerReactionOutput | null
   }
 
@@ -1466,26 +1453,6 @@ export default class PulseManager {
     }
   }> {
     return this.loadModule('index')
-  }
-
-  private async loadCustomLLMDuty(): Promise<{
-    CustomLLMDuty: {
-      new (params: {
-        input: string
-        data: {
-          system_prompt?: string | null
-          thought_tokens_budget?: number
-          temperature?: number
-          max_tokens?: number
-          disposeTimeout?: number
-        }
-      }): {
-        init(): Promise<void>
-        execute(): Promise<{ output: unknown } | null>
-      }
-    }
-  }> {
-    return this.loadModule(path.join('llm-manager', 'llm-duties', 'custom-llm-duty'))
   }
 
   private async loadReActLLMDuty(): Promise<{

@@ -91,6 +91,42 @@ export class SkillDomainHelper {
   }
 
   /**
+   * Get skill guidance path (SKILL.md)
+   * @param skillName Skill name to get guidance path from
+   */
+  public static getSkillGuidancePath(
+    skillName: SkillSchema['name']
+  ): string | null {
+    const skillPath = path.join(SKILLS_PATH, skillName)
+    const skillGuidancePath = path.join(skillPath, 'SKILL.md')
+
+    if (!fs.existsSync(skillGuidancePath)) {
+      return null
+    }
+
+    return skillGuidancePath
+  }
+
+  /**
+   * Get skill guidance (SKILL.md)
+   * @param skillName Skill name to get guidance for
+   */
+  public static async getSkillGuidance(
+    skillName: SkillSchema['name']
+  ): Promise<string | null> {
+    const skillGuidancePath = SkillDomainHelper.getSkillGuidancePath(skillName)
+
+    if (!skillGuidancePath) {
+      return null
+    }
+
+    const guidance = await fs.promises.readFile(skillGuidancePath, 'utf8')
+    const trimmedGuidance = guidance.trim()
+
+    return trimmedGuidance === '' ? null : trimmedGuidance
+  }
+
+  /**
    * List all skills friendly prompts
    */
   public static async listSkillFriendlyPrompts(): Promise<string[]> {
@@ -358,7 +394,7 @@ export class SkillDomainHelper {
    * Get localized configuration of a skill action
    * @param lang Language short code
    * @param skillName Skill name to get configuration for
-   * @example getSkillLocaleConfig('en', 'good_bye_skill')['actions'][actionName] // { "answers": ["Goodbye!", "See you later!"] }
+   * @example getSkillLocaleConfig('en', 'color_skill')['actions'][actionName]
    */
   public static async getSkillLocaleConfig(
     lang: ShortLanguageCode,

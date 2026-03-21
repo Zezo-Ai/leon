@@ -9,7 +9,7 @@ import { PYTHON_BRIDGE_SRC_PATH } from '@/constants'
 
 /**
  * Manage Node.js skills npm packages
- * npm run skill-package {command} {domain}:{skill} {npm package}
+ * npm run skill-package {command} {skill} {npm package}
  */
 ;(async () => {
   LoaderHelper.start()
@@ -35,11 +35,10 @@ import { PYTHON_BRIDGE_SRC_PATH } from '@/constants'
   if (
     !givenCommand ||
     !givenSkill ||
-    !givenPackage ||
-    !givenSkill.includes(':')
+    !givenPackage
   ) {
     LogHelper.error(
-      'Missing skill name or package name. The command should be: "npm run skill-package {command} {domain}:{skill} {npm package}"'
+      'Missing skill name or package name. The command should be: "npm run skill-package {command} {skill} {npm package}"'
     )
     process.exit(1)
   }
@@ -53,9 +52,17 @@ import { PYTHON_BRIDGE_SRC_PATH } from '@/constants'
   }
 
   const commandObject = commands[givenCommand]
-  const [domainName, skillName] = givenSkill.split(':')
-  const skillPath = SkillDomainHelper.getSkillPath(domainName, skillName)
-  const skillInfo = await SkillDomainHelper.getSkillInfo(domainName, skillName)
+  const skillName = givenSkill.includes(':')
+    ? givenSkill.split(':')[1]
+    : givenSkill
+  const skillPath = path.join(process.cwd(), 'skills', skillName)
+  const skillInfo = await SkillDomainHelper.getNewSkillConfig(skillName)
+
+  if (!skillInfo) {
+    LogHelper.error(`Unknown skill "${skillName}"`)
+    process.exit(1)
+  }
+
   const skillSRCPath = path.join(skillPath, 'src')
 
   if (skillInfo.bridge === 'python') {

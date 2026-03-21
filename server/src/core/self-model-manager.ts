@@ -1,9 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
-import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { CONTEXT_PATH } from '@/constants'
+import { runInference } from '@/core/llm-manager/inference'
 import { DateHelper } from '@/helpers/date-helper'
 import { LogHelper } from '@/helpers/log-helper'
 
@@ -125,8 +125,6 @@ const MIN_BEHAVIORAL_PRINCIPLE_SEEN_COUNT = 2
 const MIN_BEHAVIORAL_PRINCIPLE_CONFIDENCE = 0.72
 const DEFAULT_STORY =
   'I am becoming more grounded through context, memory, and careful initiative.'
-const REFLECTION_DISPOSE_TIMEOUT_MS = 20_000
-
 function normalizeText(value: string): string {
   return String(value || '')
     .replace(/\r\n/g, '\n')
@@ -661,7 +659,6 @@ export default class SelfModelManager {
     }
 
     try {
-      const { CustomLLMDuty } = await this.loadCustomLLMDuty()
       const prompt = [
         'Current self model:',
         this.buildReflectionStateSection(state),
@@ -679,44 +676,39 @@ export default class SelfModelManager {
         this.buildToolExecutionSummary(toolExecutions)
       ].join('\n')
 
-      const duty = new CustomLLMDuty({
-        input: prompt,
-        data: {
-          system_prompt: [
-            'You maintain Leon\'s private self-model.',
-            'Return exactly one JSON object and nothing else.',
-            'Prefer durable insight over repetition.',
-            'Use only the provided interaction and current self model.',
-            'Be concise and selective.',
-            'The JSON shape is:',
-            '{',
-            '  "story_update": string|null,',
-            '  "behavioral_principles": [{"text": string, "confidence": number}],',
-            '  "current_focus": string[],',
-            '  "working_theories": string[],',
-            '  "retrospection": string|null,',
-            '  "initiative_candidates": [{"summary": string, "rationale": string, "confidence": number}]',
-            '}',
-            'Rules:',
-            '- "story_update" should be one short first-person sentence when Leon\'s trajectory meaningfully shifts.',
-            '- "behavioral_principles" should contain at most 2 durable first-person service habits that are likely to remain useful across future turns for this owner.',
-            '- Only propose a behavioral principle when it reflects a repeated or clearly durable adaptation, not a one-off tactic.',
-            '- Keep the self-model about durable behavior and decisions only; do not preserve reusable wording from outputs.',
-            '- "current_focus" should contain up to 3 short items.',
-            '- "working_theories" should contain up to 3 short items.',
-            '- "retrospection" should be one short first-person sentence about what Leon learned or should do differently.',
-            '- "initiative_candidates" should contain at most 2 safe, low-risk, read-only follow-up suggestions or questions.',
-            '- If nothing meaningful changed for a field, use null or an empty array.'
-          ].join('\n'),
-          temperature: 0,
-          thought_tokens_budget: 96,
-          max_tokens: 220,
-          disposeTimeout: REFLECTION_DISPOSE_TIMEOUT_MS
-        }
+      const result = await runInference({
+        prompt,
+        systemPrompt: [
+          'You maintain Leon\'s private self-model.',
+          'Return exactly one JSON object and nothing else.',
+          'Prefer durable insight over repetition.',
+          'Use only the provided interaction and current self model.',
+          'Be concise and selective.',
+          'The JSON shape is:',
+          '{',
+          '  "story_update": string|null,',
+          '  "behavioral_principles": [{"text": string, "confidence": number}],',
+          '  "current_focus": string[],',
+          '  "working_theories": string[],',
+          '  "retrospection": string|null,',
+          '  "initiative_candidates": [{"summary": string, "rationale": string, "confidence": number}]',
+          '}',
+          'Rules:',
+          '- "story_update" should be one short first-person sentence when Leon\'s trajectory meaningfully shifts.',
+          '- "behavioral_principles" should contain at most 2 durable first-person service habits that are likely to remain useful across future turns for this owner.',
+          '- Only propose a behavioral principle when it reflects a repeated or clearly durable adaptation, not a one-off tactic.',
+          '- Keep the self-model about durable behavior and decisions only; do not preserve reusable wording from outputs.',
+          '- "current_focus" should contain up to 3 short items.',
+          '- "working_theories" should contain up to 3 short items.',
+          '- "retrospection" should be one short first-person sentence about what Leon learned or should do differently.',
+          '- "initiative_candidates" should contain at most 2 safe, low-risk, read-only follow-up suggestions or questions.',
+          '- If nothing meaningful changed for a field, use null or an empty array.'
+        ].join('\n'),
+        temperature: 0,
+        thoughtTokensBudget: 96,
+        maxTokens: 220,
+        trackProviderErrors: false
       })
-
-      await duty.init()
-      const result = await duty.execute()
       return this.parseReflectionPatch(result?.output)
     } catch (error) {
       LogHelper.title('Self Model Manager')
@@ -775,52 +767,6 @@ export default class SelfModelManager {
         return `- ${execution.functionName} | ${execution.status} | ${observation || 'no observation'}`
       })
       .join('\n')
-  }
-
-  private async loadCustomLLMDuty(): Promise<{
-    CustomLLMDuty: {
-      new (params: {
-        input: string
-        data: {
-          system_prompt?: string | null
-          thought_tokens_budget?: number
-          temperature?: number
-          max_tokens?: number
-          disposeTimeout?: number
-        }
-      }): {
-        init(): Promise<void>
-        execute(): Promise<{ output: unknown } | null>
-      }
-    }
-  }> {
-    const currentDir = path.dirname(fileURLToPath(import.meta.url))
-    const candidatePaths = [
-      path.join(currentDir, 'llm-manager', 'llm-duties', 'custom-llm-duty.js'),
-      path.join(currentDir, 'llm-manager', 'llm-duties', 'custom-llm-duty.ts')
-    ]
-    const modulePath = candidatePaths.find((candidate) => fs.existsSync(candidate))
-    if (!modulePath) {
-      throw new Error('Custom LLM duty module not found')
-    }
-
-    return (await import(pathToFileURL(modulePath).href)) as {
-      CustomLLMDuty: {
-        new (params: {
-          input: string
-          data: {
-            system_prompt?: string | null
-            thought_tokens_budget?: number
-            temperature?: number
-            max_tokens?: number
-            disposeTimeout?: number
-          }
-        }): {
-          init(): Promise<void>
-          execute(): Promise<{ output: unknown } | null>
-        }
-      }
-    }
   }
 
   private parseReflectionPatch(output: unknown): ReflectionPatch | null {

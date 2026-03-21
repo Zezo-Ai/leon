@@ -1,14 +1,12 @@
 /**
  * Duties:
  *
- * [OK] Custom NER
  * [OK] Summarization
  * [OK] Translation
  * [OK] Paraphraser
  * Knowledge base / RAG
  * Question answering
  * Sentiment analysis
- * [OK] Conversation
  * Intent fallback
  * Custom prompting (for specific use cases in skills)
  */

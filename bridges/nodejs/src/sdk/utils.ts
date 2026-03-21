@@ -29,6 +29,35 @@ export function formatFilePaths(filePaths: string[]): string {
 }
 
 /**
+ * Normalize a language input to an ISO 639-1 code.
+ * Supports direct language codes and locale tags such as `fr-FR`.
+ */
+export function normalizeLanguageCode(value: string): string | null {
+  const trimmedValue = value.trim()
+
+  if (trimmedValue === '') {
+    return null
+  }
+
+  try {
+    const locale = new Intl.Locale(trimmedValue)
+
+    return locale.language ? locale.language.toLowerCase() : null
+  } catch {
+    const normalizedValue = trimmedValue.toLowerCase()
+
+    if (
+      normalizedValue.length === 2 &&
+      [...normalizedValue].every((char) => char >= 'a' && char <= 'z')
+    ) {
+      return normalizedValue
+    }
+
+    return null
+  }
+}
+
+/**
  * Platform utilities for consistent platform and architecture detection
  * Matches the naming convention from system-helper.ts BinaryFolderNames enum
  */

@@ -7,9 +7,20 @@ import { leon } from '@sdk/leon'
 import { ParamsHelper } from '@sdk/params-helper'
 import ToolManager, { isMissingToolSettingsError } from '@sdk/tool-manager'
 import YtdlpTool from '@sdk/tools/ytdlp'
-import { formatFilePath } from '@sdk/utils'
+import { formatFilePath, normalizeLanguageCode } from '@sdk/utils'
 
 import { DownloadProgressWidget } from '../widgets/download-progress-widget'
+
+function getLanguageDisplayName(languageCode: string): string {
+  try {
+    return (
+      new Intl.DisplayNames(['en'], { type: 'language' }).of(languageCode) ||
+      languageCode
+    )
+  } catch {
+    return languageCode
+  }
+}
 
 export const run: ActionFunction = async function (
   _params: ActionParams,
@@ -28,13 +39,31 @@ export const run: ActionFunction = async function (
   })*/
 
   const videoUrl = paramsHelper.getActionArgument('video_url') as string
-  const targetLanguage = paramsHelper.getActionArgument(
+  const targetLanguageInput = paramsHelper.getActionArgument(
     'target_language'
   ) as string
   const quality =
     (paramsHelper.getActionArgument('quality') as string) || 'best'
+  const targetLanguageCode = normalizeLanguageCode(targetLanguageInput)
+  const targetLanguageLabel = targetLanguageCode
+    ? getLanguageDisplayName(targetLanguageCode)
+    : targetLanguageInput
 
   try {
+    if (!targetLanguageCode) {
+      leon.answer({
+        key: 'download_error',
+        data: {
+          video_url: videoUrl,
+          error: 'Target language must be a valid ISO 639-1 code.'
+        },
+        core: {
+          should_stop_skill: true
+        }
+      })
+      return
+    }
+
     // Initialize yt-dlp tool
     const ytdlpTool = await ToolManager.initTool(YtdlpTool)
 
@@ -50,7 +79,7 @@ export const run: ActionFunction = async function (
       key: 'download_started',
       data: {
         video_url: videoUrl,
-        target_language: targetLanguage,
+        target_language: targetLanguageLabel,
         quality: quality
       }
     })
@@ -59,7 +88,7 @@ export const run: ActionFunction = async function (
     const progressWidget = new DownloadProgressWidget({
       params: {
         videoUrl,
-        targetLanguage,
+        targetLanguage: targetLanguageLabel,
         quality,
         percentage: 0,
         status: 'initializing',
@@ -96,7 +125,7 @@ export const run: ActionFunction = async function (
           const updatedProgressWidget = new DownloadProgressWidget({
             params: {
               videoUrl,
-              targetLanguage,
+              targetLanguage: targetLanguageLabel,
               quality,
               percentage: currentPercentage,
               status: progress.status || 'downloading',
@@ -125,7 +154,7 @@ export const run: ActionFunction = async function (
     const completedProgressWidget = new DownloadProgressWidget({
       params: {
         videoUrl,
-        targetLanguage,
+        targetLanguage: targetLanguageLabel,
         quality,
         percentage: 100,
         status: 'completed',
@@ -166,13 +195,14 @@ export const run: ActionFunction = async function (
         video_url: videoUrl,
         file_path: formatFilePath(targetFolder),
         file_size: `${fileSizeMB} MB`,
-        target_language: targetLanguage,
+        target_language: targetLanguageLabel,
         quality: quality
       },
       core: {
         context_data: {
           video_path: downloadedVideoPath,
-          target_language: targetLanguage,
+          target_language: targetLanguageLabel,
+          target_language_code: targetLanguageCode,
           quality: quality
         }
       }

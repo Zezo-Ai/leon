@@ -159,12 +159,12 @@ import { SystemHelper } from '@/helpers/system-helper'
 
   if (isLLMProviderReady) {
     try {
-      await LLM_MANAGER.loadLLM()
+      await LLM_MANAGER.init()
     } catch (e) {
-      LogHelper.error(`LLM Manager failed to load: ${e}`)
+      LogHelper.error(`LLM Manager failed to init: ${e}`)
     }
   } else {
-    LogHelper.warning('Skipping LLM Manager load because LLM Provider is not ready')
+    LogHelper.warning('Skipping LLM Manager init because LLM Provider is not ready')
   }
 
   try {

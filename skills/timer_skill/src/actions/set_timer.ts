@@ -1,30 +1,38 @@
-import type { ActionFunction, BuiltInDurationEntity } from '@sdk/types'
+import type { ActionFunction } from '@sdk/types'
 import { leon } from '@sdk/leon'
 
 import { TimerWidget } from '../widgets/timer-widget'
 import { createTimerMemory } from '../lib/memory'
 
-export const run: ActionFunction = async function (_params, paramsHelper) {
-  const supportedUnits = ['hours', 'minutes', 'seconds']
-  const durationEntity = paramsHelper.findLastEntity('duration')
-  const [duration] =
-    (
-      durationEntity?.resolution as
-        | BuiltInDurationEntity['resolution']
-        | undefined
-    )?.values ?? []
+interface TimerDuration {
+  value?: number
+  unit?: string
+}
 
-  if (!duration) {
+export const run: ActionFunction = async function (params) {
+  const supportedUnits = ['hours', 'minutes', 'seconds']
+  const duration = (params.action_arguments['duration'] as TimerDuration) || null
+
+  if (
+    !duration ||
+    typeof duration.value !== 'number' ||
+    typeof duration.unit !== 'string'
+  ) {
     return leon.answer({ key: 'cannot_get_duration' })
   }
 
-  const { unit } = duration
-  if (!supportedUnits.includes(unit)) {
+  const normalizedUnit = duration.unit.toLowerCase()
+  if (!supportedUnits.includes(normalizedUnit)) {
     return leon.answer({ key: 'unit_not_supported' })
   }
 
   const { value: durationValue } = duration
-  const seconds = Number(durationValue)
+  const seconds =
+    normalizedUnit === 'hours'
+      ? Number(durationValue) * 3_600
+      : normalizedUnit === 'minutes'
+        ? Number(durationValue) * 60
+        : Number(durationValue)
   const interval = 1_000
   const timerWidget = new TimerWidget({
     params: {

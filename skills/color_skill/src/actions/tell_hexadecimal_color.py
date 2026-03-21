@@ -8,15 +8,13 @@ def run(params: ActionParams, params_helper: ParamsHelper) -> None:
     """Leon tells a hexadecimal color code"""
 
     try:
-        color_entity = params_helper.find_entity('color')
-        entities = params['entities']
+        color_name = params_helper.get_action_argument('color_name')
 
-        if not color_entity:
+        if not color_name:
             return leon.answer({
                 'key': 'unknown'
             })
-
-        color_name = color_entity['resolution']['value']
+        color_name = str(color_name).lower()
 
         return leon.answer({
             'key': 'hexa_code_found',

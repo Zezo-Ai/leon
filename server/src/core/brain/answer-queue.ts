@@ -4,7 +4,7 @@ import { LogHelper } from '@/helpers/log-helper'
  * The answer queue is used to handle multiple answers in a row.
  * It helps to save the answers and process them one by one.
  * This queue became necessary because answers have more logic now and may need
- * more time to be processed. For instance, the LLM NLG model can take a few seconds to generate a text.
+ * more time to be processed. For instance, answer paraphrasing can take a few seconds to generate text.
  * So, we need to wait for the previous answer to be processed before sending the next one.
  */
 export class AnswerQueue<T> {

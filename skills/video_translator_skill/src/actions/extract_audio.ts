@@ -17,8 +17,8 @@ export const run: ActionFunction = async function (
     (paramsHelper.getActionArgument('video_path') as string) ||
     paramsHelper.getContextData<string>('video_path')
   const targetLanguage =
-    (paramsHelper.getActionArgument('target_language') as string) ||
-    paramsHelper.getContextData<string>('target_language')
+    paramsHelper.getContextData<string>('target_language') ||
+    (paramsHelper.getActionArgument('target_language') as string)
   const audioFormat =
     (paramsHelper.getActionArgument('audio_format') as string) || 'mp3'
 
