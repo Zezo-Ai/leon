@@ -7,8 +7,11 @@ import { LLM_MANAGER, LLM_PROVIDER } from '@/core'
 import { LLMDuties } from '@/core/llm-manager/types'
 import { LogHelper } from '@/helpers/log-helper'
 import { StringHelper } from '@/helpers/string-helper'
+import type { MessageLog } from '@/types'
 
-type SkillRouterLLMDutyParams = LLMDutyParams
+interface SkillRouterLLMDutyParams extends LLMDutyParams {
+  history?: MessageLog[]
+}
 
 export const SYSTEM_PROMPT = `You are a skill routing AI. Your task is to analyze the User Query and select the single most appropriate skill from the list below based on the user's intent.
 
@@ -46,6 +49,7 @@ export class SkillRouterLLMDuty extends LLMDuty {
   protected readonly systemPrompt: LLMDutyParams['systemPrompt'] = null
   protected readonly name = 'Skill Router LLM Duty'
   protected input: LLMDutyParams['input'] = null
+  private readonly history: MessageLog[]
 
   constructor(params: SkillRouterLLMDutyParams) {
     super()
@@ -58,6 +62,7 @@ export class SkillRouterLLMDuty extends LLMDuty {
     }
 
     this.input = params.input
+    this.history = params.history || []
     this.systemPrompt = StringHelper.findAndMap(SYSTEM_PROMPT, {
       '{{ SKILL_LIST }}': LLM_MANAGER.skillListContent || ''
     })
@@ -77,6 +82,7 @@ export class SkillRouterLLMDuty extends LLMDuty {
       const completionResult = await LLM_PROVIDER.prompt(prompt, {
         dutyType: LLMDuties.SkillRouter,
         systemPrompt: this.systemPrompt as string,
+        history: this.history,
         temperature: config.temperature,
         maxTokens: config.maxTokens,
         thoughtTokensBudget: config.thoughtTokensBudget,

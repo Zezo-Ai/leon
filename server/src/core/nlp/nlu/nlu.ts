@@ -171,8 +171,12 @@ export default class NLU {
     LogHelper.info('Choosing skill...')
 
     try {
+      const skillRouterHistory = await CONVERSATION_LOGGER.load({
+        nbOfLogsToLoad: 6
+      })
       const skillRouterDuty = new SkillRouterLLMDuty({
-        input: utterance
+        input: utterance,
+        history: skillRouterHistory
       })
 
       await skillRouterDuty.init()
