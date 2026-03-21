@@ -76,10 +76,7 @@ export class WorkflowProgressWidget {
 
   public completeAll(): void {
     this.currentBaseStep = null
-
-    if (this.currentActionIndex === null && this.actionLabels.length > 0) {
-      this.currentActionIndex = this.actionLabels.length - 1
-    }
+    this.currentActionIndex = null
 
     this.emit()
   }

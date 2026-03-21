@@ -14,6 +14,7 @@ import {
 } from '@/core/llm-manager/types'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
 import { LogHelper } from '@/helpers/log-helper'
+import type { MessageLog } from '@/types'
 
 interface ActionCallingWorkflowContext {
   recentUtterances: string[]
@@ -26,6 +27,7 @@ interface ActionCallingLLMDutyParams {
   input: LLMDutyParams['input']
   skillName: string
   workflowContext?: ActionCallingWorkflowContext
+  history?: MessageLog[]
 }
 
 interface ActionCallingToolCall {
@@ -67,6 +69,7 @@ Rules:
   protected readonly name = 'Action Calling LLM Duty'
   private readonly skillName: string
   private readonly workflowContext: ActionCallingWorkflowContext | null
+  private readonly history: MessageLog[]
   protected input: LLMDutyParams['input'] = null
 
   constructor(params: ActionCallingLLMDutyParams) {
@@ -82,6 +85,7 @@ Rules:
     this.input = params.input
     this.skillName = params.skillName
     this.workflowContext = params.workflowContext || null
+    this.history = params.history || []
   }
 
   private parseOptionalParameters(
@@ -404,6 +408,7 @@ Rules:
       const completionResult = await LLM_PROVIDER.prompt(prompt, {
         dutyType: LLMDuties.ActionCalling,
         systemPrompt: this.systemPrompt as string,
+        history: this.history,
         temperature: config.temperature,
         maxTokens: config.maxTokens,
         thoughtTokensBudget: config.thoughtTokensBudget,

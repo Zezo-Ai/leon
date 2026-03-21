@@ -222,10 +222,14 @@ export default class NLU {
             resolution: entity.resolution
           }))
       }
+      const actionCallingHistory = await CONVERSATION_LOGGER.load({
+        nbOfLogsToLoad: 6
+      })
       const actionCallingDuty = new ActionCallingLLMDuty({
         input: utterance,
         skillName,
-        workflowContext
+        workflowContext,
+        history: actionCallingHistory
       })
 
       await actionCallingDuty.init()
