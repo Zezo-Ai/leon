@@ -13,6 +13,13 @@ interface DownloadFileOptions {
 
 export class FileHelper {
   /**
+   * Check whether a path exists on disk.
+   */
+  public static isExistingPath(filePath: string): boolean {
+    return fs.existsSync(filePath)
+  }
+
+  /**
    * Download file
    * @param fileURL The file URL to download
    * @param destinationPath The destination path to save the file

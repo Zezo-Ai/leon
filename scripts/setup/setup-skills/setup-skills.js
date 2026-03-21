@@ -1,8 +1,10 @@
+import path from 'node:path'
+
 import { LogHelper } from '@/helpers/log-helper'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
 
 import setupSkillsSettings from './setup-skills-settings'
-import installNodejsSkillsPackages from './install-nodejs-skills-packages'
+import syncSkillDependencies from './sync-skill-dependencies'
 
 /**
  * Browse skills and set them up
@@ -22,14 +24,14 @@ export default async function () {
       }
 
       const skillContext = {
-        path: currentSkillPath.replace(/\/skill\.json$/, ''),
+        path: currentSkillPath ? path.dirname(currentSkillPath) : '',
         bridge: currentSkill.bridge
       }
 
       LogHelper.info(`Setting up "${skillName}" skill...`)
 
       await setupSkillsSettings(skillName, skillContext)
-      await installNodejsSkillsPackages(skillName, skillContext)
+      await syncSkillDependencies(skillName, skillContext)
 
       LogHelper.success(`"${skillName}" skill set up`)
     }

@@ -21,6 +21,14 @@ core/context/private/
 core/memory/*
 !core/memory/.gitkeep
 core/config/**/*.json
+bin/node/*
+!bin/node/versions.json
+bin/pnpm/*
+!bin/pnpm/versions.json
+bin/python/*
+!bin/python/versions.json
+bin/uv/*
+!bin/uv/versions.json
 bin/coqui/*
 bin/flite/*
 bin/nvidia/*
@@ -37,7 +45,9 @@ package-lock.json
 npm-debug.log
 debug.log
 .env
-.last-skill-npm-install
+.last-skill-deps-sync
+.last-nodejs-bridge-deps-sync
+skills/**/.runtime/
 leon.json
 bridges/python/src/Pipfile.lock
 bridges/toolkits/**/bins

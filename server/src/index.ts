@@ -18,7 +18,8 @@ import {
   NVIDIA_NVSHMEM_PATH,
   NVIDIA_LIBS_PATH,
   PYTORCH_TORCH_PATH,
-  PYTHON_TCP_SERVER_BIN_PATH,
+  PYTHON_TCP_SERVER_ENTRY_PATH,
+  PYTHON_TCP_SERVER_RUNTIME_BIN_PATH,
   SHOULD_START_PYTHON_TCP_SERVER
 } from '@/constants'
 import {
@@ -41,6 +42,7 @@ import { Telemetry } from '@/telemetry'
 // import { ActionRecognitionLLMDuty } from '@/core/llm-manager/llm-duties/action-recognition-llm-duty'
 import { LangHelper } from '@/helpers/lang-helper'
 import { LogHelper } from '@/helpers/log-helper'
+import { buildShellCommand } from '@/helpers/runtime-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 ;(async (): Promise<void> => {
   process.title = 'leon'
@@ -52,7 +54,7 @@ import { SystemHelper } from '@/helpers/system-helper'
     .filter(
       (p) =>
         (shouldStartPythonTCPServer &&
-          (p.cmd?.includes(PYTHON_TCP_SERVER_BIN_PATH) ||
+          (p.cmd?.includes(PYTHON_TCP_SERVER_ENTRY_PATH) ||
             // PyTorch thread from the TCP server (from binary, not from npm start:tcp-server command)
             (p.name?.includes('pt_main_thread') && !p.cmd?.includes('main.py')))) ||
         (p.cmd === process.title && p.pid !== process.pid)
@@ -78,9 +80,10 @@ import { SystemHelper } from '@/helpers/system-helper'
       '--nvidia-path',
       NVIDIA_LIBS_PATH
     ]
-    const tcpServerCmd = [PYTHON_TCP_SERVER_BIN_PATH, ...tcpServerArgs]
-      .map((arg) => `"${arg}"`)
-      .join(' ')
+    const tcpServerCmd = buildShellCommand(PYTHON_TCP_SERVER_RUNTIME_BIN_PATH, [
+      PYTHON_TCP_SERVER_ENTRY_PATH,
+      ...tcpServerArgs
+    ])
 
     const tcpServerEnv = { ...process.env }
 

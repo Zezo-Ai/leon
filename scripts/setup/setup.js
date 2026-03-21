@@ -8,6 +8,11 @@ import generateJSONSchemas from '../generate/generate-json-schemas'
 
 import setupDotenv from './setup-dotenv'
 import setupCore from './setup-core'
+import setupNode from './setup-node'
+import setupPNPM from './setup-pnpm'
+import setupPython from './setup-python'
+import setupUV from './setup-uv'
+import setupNodejsBridgeEnv from './setup-nodejs-bridge-env'
 import setupSkills from './setup-skills/setup-skills'
 import setupCMake from './setup-cmake'
 import setupNinja from './setup-ninja'
@@ -16,7 +21,6 @@ import setupLocalLLM from './setup-local-llm'
 import setupQMDLLM from './setup-qmd-llm'
 import setupNVIDIALibs from './setup-nvidia-libs.js'
 import setupPyTorch from './setup-pytorch.js'
-import setupBinaries from './setup-binaries'
 import setupTCPServerModels from './setup-tcp-server-models'
 import createInstanceID from './create-instance-id'
 import setFfprobePermissions from './set-ffprobe-permissions'
@@ -31,6 +35,17 @@ import setFfprobePermissions from './set-ffprobe-permissions'
     await setupDotenv()
     LoaderHelper.start()
     await setupCore()
+    if (!IS_GITHUB_ACTIONS) {
+      await setupNode()
+      await setupPNPM()
+      await setupPython()
+      await setupUV()
+    } else {
+      LogHelper.info(
+        'Skipping portable Node.js, pnpm, Python and uv setup because it is running in CI'
+      )
+    }
+    await setupNodejsBridgeEnv()
     await setupSkills()
     LoaderHelper.stop()
     if (!IS_GITHUB_ACTIONS) {
@@ -46,8 +61,6 @@ import setFfprobePermissions from './set-ffprobe-permissions'
         'Skipping CMake, Ninja, llama.cpp, local LLM, QMD models, NVIDIA, and PyTorch setups because it is running in CI'
       )
     }
-
-    await setupBinaries()
     await setupTCPServerModels()
     await generateHTTPAPIKey()
     await generateJSONSchemas()

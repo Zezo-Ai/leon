@@ -9,6 +9,7 @@ import type { Json as NodeJQJson } from 'node-jq/lib/options'
 
 import { LogHelper } from '@/helpers/log-helper'
 import {
+  NODE_RUNTIME_BIN_PATH,
   NODEJS_BRIDGE_TOOL_RUNTIME_DIST_PATH,
   NODEJS_BRIDGE_TOOL_RUNTIME_SRC_PATH,
   NODEJS_BRIDGE_ROOT_PATH,
@@ -630,7 +631,7 @@ export default class ToolExecutor {
 
     try {
       const { stdout, stderr } = await execFileAsync(
-        process.execPath,
+        NODE_RUNTIME_BIN_PATH,
         cliArgs,
         {
           cwd: NODEJS_BRIDGE_ROOT_PATH,

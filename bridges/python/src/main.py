@@ -1,4 +1,5 @@
 import sys
+import os
 import inspect
 from traceback import print_exc
 from importlib import import_module
@@ -7,6 +8,8 @@ from constants import INTENT_OBJECT
 from sdk.params_helper import ParamsHelper
 
 
+# Mirror the Node bridge loader so Python actions can expose `run`,
+# `default.run`, or a callable `default`.
 def resolve_action_function(skill_action_module):
     run_function = getattr(skill_action_module, 'run', None)
     if callable(run_function):
@@ -24,6 +27,22 @@ def resolve_action_function(skill_action_module):
 
 
 def main():
+    skill_src_path = os.path.join(
+        'skills', INTENT_OBJECT['skill_name'], 'src'
+    )
+    skill_vendor_path = os.path.abspath(
+        os.path.join(
+            'skills',
+            INTENT_OBJECT['skill_name'],
+            '.runtime',
+            'vendor'
+        )
+    )
+
+    if os.path.isdir(skill_vendor_path):
+        # Skill-specific Python dependencies are vendored at install time.
+        sys.path.insert(0, skill_vendor_path)
+
     params = {
         'lang': INTENT_OBJECT['lang'],
         'utterance': INTENT_OBJECT['utterance'],
