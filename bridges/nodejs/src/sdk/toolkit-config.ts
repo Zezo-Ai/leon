@@ -13,7 +13,7 @@ interface ToolConfig {
   resources?: Record<string, string[]>
   functions: Record<
     string,
-    { description: string; input_schema: Record<string, string> }
+    { description: string, input_schema: Record<string, string> }
   >
 }
 
@@ -45,18 +45,21 @@ export class ToolkitConfig {
     }
 
     const toolkitConfig = this.configCache.get(cacheKey)!
-    if (!toolkitConfig.tools.includes(toolName)) {
-      throw new Error(
-        `Tool '${toolName}' not found in toolkit '${toolkitConfig.name}'`
-      )
-    }
-
     const toolConfigPath = join(
       TOOLKITS_PATH,
       toolkitName,
       'tools',
       `${toolName}.tool.json`
     )
+
+    // toolkit.json remains the discovery surface for agent/runtime registry flows,
+    // but direct skill-side tool usage should still work when the tool manifest exists.
+    if (!toolkitConfig.tools.includes(toolName) && !existsSync(toolConfigPath)) {
+      throw new Error(
+        `Tool '${toolName}' not found in toolkit '${toolkitConfig.name}'`
+      )
+    }
+
     const toolConfigContent = readFileSync(toolConfigPath, 'utf-8')
     const toolConfig = JSON.parse(toolConfigContent) as ToolConfig
 

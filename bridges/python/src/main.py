@@ -7,18 +7,7 @@ from constants import INTENT_OBJECT
 from sdk.params_helper import ParamsHelper
 
 
-"""
-Python skill bridges are also one-shot processes. We flush stdio and exit
-explicitly after each action so lingering handles do not stall the core
-waiting for the bridge to terminate naturally.
-"""
-def exit_bridge(code: int) -> None:
-    sys.stdout.flush()
-    sys.stderr.flush()
-    raise SystemExit(code)
-
-
-def main() -> int:
+def main():
     params = {
         'lang': INTENT_OBJECT['lang'],
         'utterance': INTENT_OBJECT['utterance'],
@@ -57,22 +46,15 @@ def main() -> int:
             run_function(params)
         else:
             run_function()
-        # End the bridge deterministically once the action completed.
-        return 0
     except Exception as e:
         print(f"Error while running {INTENT_OBJECT['skill_name']} skill {INTENT_OBJECT['action_name']} action: {e}")
         print_exc()
-        # Let the core read the error output, then exit with a failure code.
-        return 1
 
 
 if __name__ == '__main__':
     try:
-        exit_bridge(main())
-    except SystemExit:
-        raise
+        raise main()
     except Exception as e:
         # Print full traceback error report if skills triggers an error from the call stack
         if 'exceptions must derive from BaseException' not in str(e):
             print_exc()
-        exit_bridge(1)

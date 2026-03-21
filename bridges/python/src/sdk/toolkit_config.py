@@ -40,15 +40,18 @@ class ToolkitConfig:
         toolkit_config = cls._config_cache[cache_key]
         tools_list = toolkit_config.get("tools", [])
 
-        if tool_name not in tools_list:
+        tool_config_path = os.path.join(
+            TOOLKITS_PATH, toolkit_name, "tools", f"{tool_name}.tool.json"
+        )
+
+        # toolkit.json remains the discovery surface for agent/runtime registry
+        # flows, but direct skill-side tool usage should still work when the
+        # tool manifest exists.
+        if tool_name not in tools_list and not os.path.exists(tool_config_path):
             toolkit_name_display = toolkit_config.get("name", "unknown")
             raise Exception(
                 f"Tool '{tool_name}' not found in toolkit '{toolkit_name_display}'"
             )
-
-        tool_config_path = os.path.join(
-            TOOLKITS_PATH, toolkit_name, "tools", f"{tool_name}.tool.json"
-        )
 
         try:
             with open(tool_config_path, "r", encoding="utf-8") as f:
