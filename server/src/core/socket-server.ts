@@ -20,7 +20,6 @@ import {
   TTS,
   NLU,
   BRAIN,
-  LLM_MANAGER,
   LLM_PROVIDER
 } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
@@ -68,33 +67,13 @@ export default class SocketServer {
       usesLlamaCPP: boolean
     }
   ): void {
-    let llmInterval: NodeJS.Timeout | null = null
     let llamaServerInterval: NodeJS.Timeout | null = null
 
     const clearIntervals = (): void => {
-      if (llmInterval) {
-        clearInterval(llmInterval)
-        llmInterval = null
-      }
       if (llamaServerInterval) {
         clearInterval(llamaServerInterval)
         llamaServerInterval = null
       }
-    }
-
-    if (!LLM_MANAGER.isLLMEnabled) {
-      llmInterval = setInterval(() => {
-        if (!socket.connected) {
-          clearIntervals()
-          return
-        }
-
-        if (LLM_MANAGER.isLLMEnabled) {
-          socket.emit('init-llm', 'success')
-          clearInterval(llmInterval as NodeJS.Timeout)
-          llmInterval = null
-        }
-      }, 500)
     }
 
     if (options.usesLlamaCPP && !LLM_PROVIDER.isLlamaCPPServerReady) {
@@ -168,10 +147,6 @@ export default class SocketServer {
             this.socket?.emit('ready')
             this.socket?.emit('init-tcp-server-boot', 'success')
           })
-        }
-
-        if (LLM_MANAGER.isLLMEnabled) {
-          socket.emit('init-llm', 'success')
         }
 
         const usesLlamaCPP =

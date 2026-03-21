@@ -14,6 +14,7 @@ import {
 } from '@/core/llm-manager/types'
 import {
   AGENT_LLM_PROVIDER,
+  DEFAULT_INSTALLED_LLM_PATH,
   SERVER_CORE_PATH,
   WORKFLOW_LLM_PROVIDER
 } from '@/constants'
@@ -75,7 +76,6 @@ const LOCAL_SERVER_PROVIDERS = new Set<LLMProviders>([
 ])
 
 const LLM_PROVIDERS_MAP = {
-  [LLMProviders.Local]: 'local-llm-provider',
   [LLMProviders.LlamaCPP]: 'llamacpp-llm-provider',
   [LLMProviders.SGLang]: 'sglang-llm-provider',
   [LLMProviders.Groq]: 'groq-llm-provider',
@@ -96,6 +96,19 @@ const EMPTY_COMPLETION_RETRY_DELAY_MS = 750
 const MAX_LOG_SERIALIZED_LENGTH = 4_000
 const DEFAULT_TEMPERATURE = 0 // Disabled
 const DEFAULT_MAX_TOKENS = 8_192
+const LOCAL_PROVIDER_MODEL_CONFIG = {
+  [LLMProviders.LlamaCPP]: {
+    workflowEnv: 'LEON_LLAMACPP_MODEL_PATH',
+    agentEnv: 'LEON_LLAMACPP_MODEL_PATH',
+    defaultModel: DEFAULT_INSTALLED_LLM_PATH
+  },
+  [LLMProviders.SGLang]: {
+    workflowEnv: 'LEON_SGLANG_MODEL_PATH',
+    agentEnv: 'LEON_SGLANG_MODEL_PATH',
+    defaultModel: DEFAULT_INSTALLED_LLM_PATH
+  }
+} as const
+
 export default class LLMProvider {
   private static instance: LLMProvider
 
@@ -205,17 +218,22 @@ export default class LLMProvider {
       }
     }
 
-    this.disposeCurrentProviders()
-    this.workflowLLMProvider = await this.createProvider(
-      WORKFLOW_LLM_PROVIDER as LLMProviders,
-      'workflow'
-    )
-    this.agentLLMProvider = await this.createProvider(
-      AGENT_LLM_PROVIDER as LLMProviders,
-      'agent'
+    const workflowProviderName = WORKFLOW_LLM_PROVIDER as LLMProviders
+    const agentProviderName = AGENT_LLM_PROVIDER as LLMProviders
+    const shouldShareLocalProvider = this.shouldShareLocalProviderInstance(
+      workflowProviderName,
+      agentProviderName
     )
 
-    this.assertLocalProviderCompatibility()
+    this.disposeCurrentProviders()
+    this.workflowLLMProvider = await this.createProvider(
+      workflowProviderName,
+      'workflow'
+    )
+    this.agentLLMProvider = shouldShareLocalProvider
+      ? this.workflowLLMProvider
+      : await this.createProvider(agentProviderName, 'agent')
+
     await this.bootLocalServerProviders()
 
     LogHelper.title('LLM Provider')
@@ -236,12 +254,21 @@ export default class LLMProvider {
     providerName: LLMProviders,
     role: ProviderRole
   ): Promise<Provider> {
+    const providerFileName =
+      LLM_PROVIDERS_MAP[providerName as keyof typeof LLM_PROVIDERS_MAP]
+
+    if (!providerFileName) {
+      throw new Error(
+        `The LLM provider "${providerName}" is not supported.`
+      )
+    }
+
     const { default: provider } = await FileHelper.dynamicImportFromFile(
       path.join(
         SERVER_CORE_PATH,
         'llm-manager',
         'llm-providers',
-        `${LLM_PROVIDERS_MAP[providerName]}.js`
+        `${providerFileName}.js`
       )
     )
 
@@ -286,14 +313,38 @@ export default class LLMProvider {
     return providerName === LLMProviders.Local ? 32_000 : 120_000
   }
 
-  private assertLocalProviderCompatibility(): void {
-    const workflowProviderName = WORKFLOW_LLM_PROVIDER as LLMProviders
-    const agentProviderName = AGENT_LLM_PROVIDER as LLMProviders
+  private getConfiguredLocalModel(
+    providerName: LLMProviders,
+    role: ProviderRole
+  ): string {
+    const providerConfig =
+      LOCAL_PROVIDER_MODEL_CONFIG[
+        providerName as keyof typeof LOCAL_PROVIDER_MODEL_CONFIG
+      ]
+
+    if (!providerConfig) {
+      return ''
+    }
+
+    const workflowModel = process.env[providerConfig.workflowEnv] || ''
+    const agentModel = process.env[providerConfig.agentEnv] || ''
+
+    if (role === 'agent') {
+      return agentModel || workflowModel || providerConfig.defaultModel
+    }
+
+    return workflowModel || providerConfig.defaultModel
+  }
+
+  private shouldShareLocalProviderInstance(
+    workflowProviderName: LLMProviders,
+    agentProviderName: LLMProviders
+  ): boolean {
     const workflowIsLocal = LOCAL_SERVER_PROVIDERS.has(workflowProviderName)
     const agentIsLocal = LOCAL_SERVER_PROVIDERS.has(agentProviderName)
 
     if (!workflowIsLocal || !agentIsLocal) {
-      return
+      return false
     }
 
     if (workflowProviderName !== agentProviderName) {
@@ -302,13 +353,22 @@ export default class LLMProvider {
       )
     }
 
-    const workflowModel = this.workflowLLMProvider?.modelName || ''
-    const agentModel = this.agentLLMProvider?.modelName || ''
+    const workflowModel = this.getConfiguredLocalModel(
+      workflowProviderName,
+      'workflow'
+    )
+    const agentModel = this.getConfiguredLocalModel(
+      agentProviderName,
+      'agent'
+    )
+
     if (workflowModel !== agentModel) {
       throw new Error(
         `Workflow and agent local models must match for provider "${workflowProviderName}". Received workflow="${workflowModel}" and agent="${agentModel}".`
       )
     }
+
+    return true
   }
 
   private normalizeCompletionResultForLocalProvider(

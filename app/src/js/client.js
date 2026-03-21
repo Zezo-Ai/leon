@@ -121,9 +121,6 @@ export default class Client {
     this.socket.on('init-tcp-server-boot', (status) => {
       this.setInitStatus('tcpServerBoot', status)
     })
-    this.socket.on('init-llm', (status) => {
-      this.setInitStatus('llm', status)
-    })
     this.socket.on('init-llama-server-boot', (status) => {
       this.setInitStatus('llamaServerBoot', status)
     })

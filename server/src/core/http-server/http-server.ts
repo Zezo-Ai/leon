@@ -23,7 +23,7 @@ import { fetchWidgetPlugin } from '@/core/http-server/api/fetch-widget'
 import { keyMidd } from '@/core/http-server/plugins/key'
 import { utterancePlugin } from '@/core/http-server/api/utterance'
 import { openPathPlugin } from '@/core/http-server/api/open-path'
-import { LLM_MANAGER, PERSONA } from '@/core'
+import { PERSONA } from '@/core'
 import { SystemHelper } from '@/helpers/system-helper'
 
 export interface APIOptions {
@@ -67,14 +67,13 @@ export default class HTTPServer {
       `LLM providers: workflow=${WORKFLOW_LLM_PROVIDER}, agent=${AGENT_LLM_PROVIDER}`
     )
     LogHelper.info(`Mood: ${PERSONA.mood.type}`)
-    LogHelper.info(`GPU: ${(await SystemHelper.getGPUDeviceNames())[0]}`)
+    LogHelper.info(
+      `GPU: ${(await SystemHelper.getGPUDeviceNames())[0] || 'unknown'}`
+    )
     LogHelper.info(
       `Graphics compute API: ${await SystemHelper.getGraphicsComputeAPI()}`
     )
     LogHelper.info(`Total VRAM: ${await SystemHelper.getTotalVRAM()} GB`)
-
-    const isLLMEnabled = LLM_MANAGER.isLLMEnabled ? 'enabled' : 'disabled'
-    LogHelper.info(`LLM: ${isLLMEnabled}`)
 
     const isTelemetryEnabled = IS_TELEMETRY_ENABLED ? 'enabled' : 'disabled'
     LogHelper.info(`Telemetry: ${isTelemetryEnabled}`)

@@ -40,6 +40,42 @@ type PartialInformation = {
 }
 
 export class SystemHelper {
+  private static hardwareInspectionLlamaPromise: Promise<Llama | null> | null =
+    null
+
+  private static async getHardwareInspectionLlama(): Promise<Llama | null> {
+    if (!this.hardwareInspectionLlamaPromise) {
+      this.hardwareInspectionLlamaPromise = (async (): Promise<Llama | null> => {
+        try {
+          const { getLlama, LlamaLogLevel } = await Function(
+            'return import("node-llama-cpp")'
+          )()
+
+          return await getLlama({
+            logLevel: LlamaLogLevel.disabled
+          })
+        } catch {
+          return null
+        }
+      })()
+    }
+
+    return this.hardwareInspectionLlamaPromise
+  }
+
+  private static async resolveLlamaAPI(llama?: Llama): Promise<Llama | null> {
+    if (llama) {
+      return llama
+    }
+
+    const coreLlama = (await import('@/core')).LLM_MANAGER.llama as Llama | null
+    if (coreLlama) {
+      return coreLlama
+    }
+
+    return this.getHardwareInspectionLlama()
+  }
+
   /**
    * Get information about your OS
    * N.B. Node.js returns info based on the compiled binary we are running on. Not based our machine hardware
@@ -199,9 +235,7 @@ export class SystemHelper {
    * @example getGPUDeviceNames() // ['Apple M1 Pro']
    */
   public static async getGPUDeviceNames(llama?: Llama): Promise<string[]> {
-    const llamaAPI = (
-      llama ? llama : (await import('@/core')).LLM_MANAGER.llama
-    ) as Llama | null
+    const llamaAPI = await this.resolveLlamaAPI(llama)
 
     if (llamaAPI) {
       return llamaAPI.getGpuDeviceNames()
@@ -215,9 +249,7 @@ export class SystemHelper {
    * @example hasGPU() // true
    */
   public static async hasGPU(llama?: Llama): Promise<boolean> {
-    const llamaAPI = (
-      llama ? llama : (await import('@/core')).LLM_MANAGER.llama
-    ) as Llama | null
+    const llamaAPI = await this.resolveLlamaAPI(llama)
 
     if (llamaAPI) {
       return !!llamaAPI.gpu
@@ -233,9 +265,7 @@ export class SystemHelper {
   public static async getGraphicsComputeAPI(
     llama?: Llama
   ): Promise<GraphicsComputeAPIs> {
-    const llamaAPI = (
-      llama ? llama : (await import('@/core')).LLM_MANAGER.llama
-    ) as Llama | null
+    const llamaAPI = await this.resolveLlamaAPI(llama)
 
     if (llamaAPI && llamaAPI.gpu) {
       return llamaAPI.gpu as GraphicsComputeAPIs
@@ -249,9 +279,7 @@ export class SystemHelper {
    * @example getUsedVRAM() // 6.04
    */
   public static async getUsedVRAM(llama?: Llama): Promise<number> {
-    const llamaAPI = (
-      llama ? llama : (await import('@/core')).LLM_MANAGER.llama
-    ) as Llama | null
+    const llamaAPI = await this.resolveLlamaAPI(llama)
 
     if (llamaAPI) {
       const vramState = await llamaAPI.getVramState()
@@ -267,9 +295,7 @@ export class SystemHelper {
    * @example getTotalVRAM() // 12
    */
   public static async getTotalVRAM(llama?: Llama): Promise<number> {
-    const llamaAPI = (
-      llama ? llama : (await import('@/core')).LLM_MANAGER.llama
-    ) as Llama | null
+    const llamaAPI = await this.resolveLlamaAPI(llama)
 
     if (llamaAPI) {
       const vramState = await llamaAPI.getVramState()
@@ -293,9 +319,7 @@ export class SystemHelper {
    * @example getFreeVRAM() // 6
    */
   public static async getFreeVRAM(llama?: Llama): Promise<number> {
-    const llamaAPI = (
-      llama ? llama : (await import('@/core')).LLM_MANAGER.llama
-    ) as Llama | null
+    const llamaAPI = await this.resolveLlamaAPI(llama)
 
     if (llamaAPI) {
       const vramState = await llamaAPI.getVramState()

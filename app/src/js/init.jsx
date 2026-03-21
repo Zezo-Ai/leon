@@ -96,6 +96,11 @@ function SuccessListItem({ children }) {
 function Init() {
   const parentRef = useRef(null)
   const [config, setConfig] = useState(() => ({ ...window.leonConfigInfo }))
+  const usesLocalLLM =
+    config.llm?.workflowProvider === 'llamacpp' ||
+    config.llm?.agentProvider === 'llamacpp' ||
+    config.llm?.workflowProvider === 'sglang' ||
+    config.llm?.agentProvider === 'sglang'
   const usesLlamaCPP =
     config.llm?.workflowProvider === 'llamacpp' ||
     config.llm?.agentProvider === 'llamacpp'
@@ -103,7 +108,6 @@ function Init() {
     clientCoreServerHandshake: 'loading',
     tcpServerBoot:
       window.leonConfigInfo?.tcpServer?.enabled === false ? 'success' : 'loading',
-    llm: 'loading',
     llamaServerBoot:
       window.leonConfigInfo?.llm?.workflowProvider === 'llamacpp' ||
       window.leonConfigInfo?.llm?.agentProvider === 'llamacpp'
@@ -141,7 +145,7 @@ function Init() {
       statuses.push('success')
     } else if (key === 'llamaServerBoot' && !usesLlamaCPP) {
       statuses.push('success')
-    } else if (!config[key] || config[key].enabled) {
+    } else {
       statuses.push(statusMap[key])
     }
   }
@@ -182,9 +186,6 @@ function Init() {
             </Item>
             {config.tcpServer?.enabled !== false && (
               <Item status={statusMap.tcpServerBoot}>TCP server booted</Item>
-            )}
-            {config.llm && config.llm.enabled && (
-              <Item status={statusMap.llm}>LLM loaded</Item>
             )}
             {usesLlamaCPP && (
               <Item status={statusMap.llamaServerBoot}>llama-server booted</Item>

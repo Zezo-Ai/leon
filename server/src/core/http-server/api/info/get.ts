@@ -14,7 +14,7 @@ import {
   SHOULD_START_PYTHON_TCP_SERVER,
   WORKFLOW_LLM_PROVIDER
 } from '@/constants'
-import { LLM_MANAGER, LLM_PROVIDER, PERSONA } from '@/core'
+import { LLM_PROVIDER, PERSONA } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { DateHelper } from '@/helpers/date-helper'
 import { SystemHelper } from '@/helpers/system-helper'
@@ -59,7 +59,6 @@ export const getInfo: FastifyPluginAsync<APIOptions> = async (
         freeVRAM,
         usedVRAM,
         llm: {
-          enabled: LLM_MANAGER.isLLMEnabled,
           provider:
             AGENT_LLM_PROVIDER === WORKFLOW_LLM_PROVIDER
               ? AGENT_LLM_PROVIDER
