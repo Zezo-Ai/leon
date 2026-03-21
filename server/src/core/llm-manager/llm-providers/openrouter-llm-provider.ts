@@ -1,18 +1,15 @@
-import AISDKRemoteLLMProvider, {
-  type AISDKProviderRole
-} from '@/core/llm-manager/llm-providers/ai-sdk-remote-llm-provider'
+import AISDKRemoteLLMProvider from '@/core/llm-manager/llm-providers/ai-sdk-remote-llm-provider'
+import type { ResolvedLLMTarget } from '@/core/llm-manager/llm-routing'
 
 export default class OpenRouterLLMProvider extends AISDKRemoteLLMProvider {
-  constructor(role: AISDKProviderRole = 'agent') {
+  constructor(target: ResolvedLLMTarget) {
     super({
       name: 'OpenRouter LLM Provider',
       providerName: 'openrouter',
       apiKeyEnv: 'LEON_OPENROUTER_API_KEY',
-      workflowModelEnv: 'LEON_OPENROUTER_MODEL',
-      agentModelEnv: 'LEON_OPENROUTER_AGENT_LLM',
-      defaultModel: 'openrouter/auto',
+      model: target.model,
       baseURL: 'https://openrouter.ai/api/v1',
       flavor: 'openrouter'
-    }, role)
+    })
   }
 }

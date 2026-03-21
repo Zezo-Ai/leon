@@ -1,16 +1,17 @@
 import fs from 'node:fs'
 
 import {
-  AGENT_LLM_PROVIDER,
-  LLM_NAME_WITH_VERSION,
+  AGENT_LLM_TARGET,
+  LEON_ROUTING_MODE,
   LLM_SKILL_ROUTER_DUTY_SKILL_LIST_PATH,
-  WORKFLOW_LLM_PROVIDER
+  WORKFLOW_LLM_TARGET
 } from '@/constants'
 import { ConversationLogger } from '@/conversation-logger'
 import { SYSTEM_PROMPT as SKILL_ROUTER_SYSTEM_PROMPT } from '@/core/llm-manager/llm-duties/skill-router-llm-duty'
-import { LLMDuties, LLMProviders } from '@/core/llm-manager/types'
+import { LLMDuties } from '@/core/llm-manager/types'
 import { LogHelper } from '@/helpers/log-helper'
 import { StringHelper } from '@/helpers/string-helper'
+import { getRoutingModeLLMDisplay } from '@/core/llm-manager/llm-routing'
 
 interface CoreLLMDutyConfig {
   contextSize: number
@@ -162,34 +163,8 @@ export default class LLMManager {
     )
   }
 
-  public async loadLLM(): Promise<void> {
-    LogHelper.time('LLM Manager load LLM')
-
-    const usesDeprecatedLocalProvider =
-      WORKFLOW_LLM_PROVIDER === LLMProviders.Local ||
-      AGENT_LLM_PROVIDER === LLMProviders.Local
-
-    if (usesDeprecatedLocalProvider) {
-      LogHelper.title('LLM Manager')
-      LogHelper.error(
-        'The "local" node-llama-cpp provider is no longer supported. Use "llamacpp" or "sglang" instead.'
-      )
-
-      return
-    }
-
-    if (
-      !Object.values(LLMProviders).includes(
-        WORKFLOW_LLM_PROVIDER as LLMProviders
-      )
-    ) {
-      LogHelper.warning(
-        `The workflow LLM provider "${WORKFLOW_LLM_PROVIDER}" does not exist or is not yet supported`
-      )
-
-      return
-    }
-
+  public async init(): Promise<void> {
+    LogHelper.time('LLM Manager init')
     this._isLLMEnabled = true
 
     try {
@@ -202,8 +177,13 @@ export default class LLMManager {
     }
 
     LogHelper.title('LLM Manager')
-    LogHelper.success(`${LLM_NAME_WITH_VERSION} LLM has been loaded`)
-    LogHelper.timeEnd('LLM Manager load LLM')
+    const llmDisplay = getRoutingModeLLMDisplay(
+      LEON_ROUTING_MODE,
+      WORKFLOW_LLM_TARGET,
+      AGENT_LLM_TARGET
+    )
+    LogHelper.success(`LLM manager initialized with ${llmDisplay.value}`)
+    LogHelper.timeEnd('LLM Manager init')
   }
 
   public async loadHistory(

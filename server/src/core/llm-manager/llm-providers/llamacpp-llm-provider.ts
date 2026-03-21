@@ -6,15 +6,13 @@ import type { Readable } from 'node:stream'
 import axios, { type AxiosResponse } from 'axios'
 import kill from 'tree-kill'
 
-import AISDKRemoteLLMProvider, {
-  type AISDKProviderRole
-} from '@/core/llm-manager/llm-providers/ai-sdk-remote-llm-provider'
+import AISDKRemoteLLMProvider from '@/core/llm-manager/llm-providers/ai-sdk-remote-llm-provider'
+import type { ResolvedLLMTarget } from '@/core/llm-manager/llm-routing'
 import type {
   CompletionParams,
   PromptOrChatHistory
 } from '@/core/llm-manager/types'
 import {
-  DEFAULT_INSTALLED_LLM_PATH,
   LLAMACPP_BUILD_PATH,
   LLAMACPP_BUILD_MANIFEST_PATH,
   LLAMACPP_PATH,
@@ -27,7 +25,8 @@ import {
 import { LogHelper } from '@/helpers/log-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 
-const LLAMACPP_BASE_URL = 'http://0.0.0.0:8080/v1'
+const LLAMACPP_BASE_URL =
+  process.env['LEON_LLAMACPP_BASE_URL'] || 'http://0.0.0.0:8080/v1'
 const LLAMACPP_READY_TIMEOUT_MS = 120_000
 const LLAMACPP_READY_POLL_INTERVAL_MS = 250
 const LLAMA_SERVER_LOG_RESET_INTERVAL_MS = 12 * 60 * 60 * 1_000
@@ -142,25 +141,22 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
 
   private readonly modelPath: string
 
-  constructor(role: AISDKProviderRole = 'agent') {
+  constructor(target: ResolvedLLMTarget) {
     super(
       {
         name: 'llama.cpp LLM Provider',
         providerName: 'llamacpp',
         apiKeyEnv: 'LEON_LLAMACPP_API_KEY',
-        workflowModelEnv: 'LEON_LLAMACPP_MODEL_PATH',
-        agentModelEnv: 'LEON_LLAMACPP_MODEL_PATH',
-        defaultModel: DEFAULT_INSTALLED_LLM_PATH,
+        model: target.model,
         baseURL: LLAMACPP_BASE_URL,
         flavor: 'openai-compatible',
         requiresApiKey: false
-      },
-      role
+      }
     )
 
     if (!this.model.trim()) {
       throw new Error(
-        'llama.cpp model path is not defined. Please define LEON_LLAMACPP_MODEL_PATH in the .env file or install a default local LLM.'
+        'llama.cpp model path is not defined. Please configure LEON_LLM or install a default local LLM.'
       )
     }
 
@@ -298,7 +294,7 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
     return {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: 'Bearer no-key'
+        Authorization: `Bearer ${process.env['LEON_LLAMACPP_API_KEY'] || 'Bearer no-key'}`
       },
       ...(typeof completionParams.timeout === 'number'
         ? { timeout: completionParams.timeout }

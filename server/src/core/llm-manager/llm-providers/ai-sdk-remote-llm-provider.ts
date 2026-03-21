@@ -34,16 +34,13 @@ interface AISDKRemoteProviderConfig {
   name: string
   providerName: string
   apiKeyEnv: string
-  workflowModelEnv: string
-  agentModelEnv: string
-  defaultModel: string
+  model: string
   baseURL: string
   flavor: AISDKFlavor
   requiresApiKey?: boolean
   sendApiKeyAsBearer?: boolean
   headers?: (apiKey: string) => Record<string, string>
 }
-export type AISDKProviderRole = 'workflow' | 'agent'
 
 interface CallState {
   text: string
@@ -73,17 +70,12 @@ export default class AISDKRemoteLLMProvider {
     | undefined
 
   constructor(
-    config: AISDKRemoteProviderConfig,
-    role: AISDKProviderRole = 'agent'
+    config: AISDKRemoteProviderConfig
   ) {
     this.config = config
     this.name = config.name
     this.apiKey = process.env[config.apiKeyEnv]
-    this.model =
-      (role === 'agent'
-        ? process.env[config.agentModelEnv]
-        : process.env[config.workflowModelEnv]) ||
-      config.defaultModel
+    this.model = config.model
 
     LogHelper.title(this.name)
     LogHelper.success('New instance')

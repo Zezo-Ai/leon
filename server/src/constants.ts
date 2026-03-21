@@ -5,6 +5,10 @@ import dotenv from 'dotenv'
 
 import type { LongLanguageCode } from '@/types'
 import { SystemHelper } from '@/helpers/system-helper'
+import {
+  getInstalledLLMMetadata,
+  resolveConfiguredLLMTarget
+} from '@/core/llm-manager/llm-routing'
 
 dotenv.config()
 
@@ -376,77 +380,41 @@ export const LEON_PULSE_INTERVAL_MS = 30 * 60 * 1_000
 export const SHOULD_START_PYTHON_TCP_SERVER = HAS_STT || HAS_TTS
 export const LEON_DISABLED_CONTEXT_FILES =
   process.env['LEON_DISABLED_CONTEXT_FILES'] || ''
-export const LLM_PROVIDER = process.env['LEON_LLM_PROVIDER'] || 'llamacpp'
-export const WORKFLOW_LLM_PROVIDER =
-  process.env['LEON_WORKFLOW_LLM_PROVIDER'] || LLM_PROVIDER
-export const AGENT_LLM_PROVIDER =
-  process.env['LEON_AGENT_LLM_PROVIDER'] || LLM_PROVIDER
-// export const LLM_VERSION = 'v0.2.Q4_K_S'
-// export const LLM_VERSION = '8B-Instruct.Q5_K_S'
-// export const LLM_VERSION = '2.9-llama3-8b.Q5_K_S'
-// export const LLM_VERSION = '3.1-8B-Lexi-Uncensored_V2_Q5'
-// export const LLM_VERSION = '3-8B-Uncensored-Q5_K_S'
-// export const LLM_VERSION = 'Q4_K_M'
-// export const LLM_VERSION = '4b-it-Q5_K_M'
-// export const LLM_VERSION = '3b-instruct-q5_k_m'
-// export const LLM_VERSION = '8B-Lexi-Uncensored.i1-Q5_K_S'
-// export const LLM_VERSION = '4B-Q4_K_M'
-// export const LLM_VERSION = '8B-Abliterated.i1-Q5_K_S'
-// export const LLM_VERSION = '3-mini-128k-instruct.Q5_K_S'
-// export const LLM_VERSION = '3-mini-4k-instruct-q4'
-// export const LLM_VERSION = '1.1-7b-it-Q4_K_M'
-// export const LLM_VERSION = '8B-Instruct-Q4_K_S'
-// export const LLM_NAME = 'Mistral 7B Instruct'
-// export const LLM_NAME = 'Meta-Llama-3-8B-Instruct'
-// export const LLM_NAME = 'Dolphin 2.9 Llama-3-8B'
-// export const LLM_NAME = 'Llama-3.1-8B-Lexi-Uncensored-V2'
-// export const LLM_NAME = 'Llama-3.1-SuperNova-Lite (8B)'
-// export const LLM_NAME = 'Gemma 3 12B IT Abliterated'
-// export const LLM_NAME = 'Gemma-3-4B-IT'
-// export const LLM_NAME = 'Qwen2.5-3B-Instruct'
-// export const LLM_NAME = 'Qwen3-4B'
-// export const LLM_NAME = 'Lexi-Llama-3-8B-Uncensored'
-// export const LLM_NAME = 'Llama-3-8B-Lexi-Uncensored'
-// export const LLM_NAME = 'DeepSeek-R1-Distill-Llama'
-// export const LLM_NAME = 'Phi-3-Mini-128K-Instruct'
-// export const LLM_NAME = 'Phi-3-mini'
-// export const LLM_NAME = 'Gemma 1.1 7B (IT)'
-// export const LLM_NAME = 'Meta Llama 3 8B Instruct'
-// export const LLM_FILE_NAME = `mistral-7b-instruct-${LLM_VERSION}.gguf`
-// export const LLM_FILE_NAME = `Meta-Llama-3-${LLM_VERSION}.gguf`
-// export const LLM_FILE_NAME = `dolphin-${LLM_VERSION}.gguf`
-// export const LLM_FILE_NAME = `Llama-${LLM_VERSION}.gguf`
-// export const LLM_FILE_NAME = `Lexi-Llama-${LLM_VERSION}.gguf`
-// export const LLM_FILE_NAME = `supernova-lite-v1-${LLM_VERSION}.gguf`
-// export const LLM_FILE_NAME = `gemma-3-${LLM_VERSION}.gguf`
-// export const LLM_FILE_NAME = `qwen2.5-${LLM_VERSION}.gguf`
-// export const LLM_FILE_NAME = `Qwen3-${LLM_VERSION}.gguf`
-// export const LLM_FILE_NAME = `Llama-3-${LLM_VERSION}.gguf`
-// export const LLM_FILE_NAME = `DeepSeek-R1-Distill-Llama-${LLM_VERSION}.gguf`
-// export const LLM_FILE_NAME = `Phi-${LLM_VERSION}.gguf`
-// export const LLM_FILE_NAME = `gemma-${LLM_VERSION}.gguf`
-// export const LLM_FILE_NAME = `Meta-Llama-3-${LLM_VERSION}.gguf`
 export const LLM_DIR_PATH = path.join(MODELS_PATH, 'llm')
 export const LLM_MANIFEST_PATH = path.join(LLM_DIR_PATH, 'manifest.json')
-const LLM_MANIFEST = fs.existsSync(LLM_MANIFEST_PATH)
-  ? JSON.parse(fs.readFileSync(LLM_MANIFEST_PATH, 'utf8'))
-  : null
-// Keep LEON_LLAMACPP_MODEL_PATH as the first-class override, and fall back to
-// the default model installed by setup when the env var is empty.
-export const DEFAULT_INSTALLED_LLM_PATH =
-  typeof LLM_MANIFEST?.defaultInstalledLLMPath === 'string'
-    ? LLM_MANIFEST.defaultInstalledLLMPath
-    : ''
-const CONFIGURED_LLAMACPP_MODEL_PATH =
-  process.env['LEON_LLAMACPP_MODEL_PATH'] || DEFAULT_INSTALLED_LLM_PATH || ''
-export const LLM_NAME = LLM_MANIFEST?.name || 'Local LLM'
-export const LLM_VERSION = LLM_MANIFEST?.version || 'unknown'
-export const LLM_FILE_NAME = CONFIGURED_LLAMACPP_MODEL_PATH
-  ? path.basename(CONFIGURED_LLAMACPP_MODEL_PATH)
+const {
+  defaultInstalledLLMPath,
+  installedLLMName,
+  installedLLMVersion
+} = getInstalledLLMMetadata(LLM_MANIFEST_PATH)
+export const DEFAULT_INSTALLED_LLM_PATH = defaultInstalledLLMPath
+export const LEON_LLM = process.env['LEON_LLM'] || ''
+export const LEON_WORKFLOW_LLM = process.env['LEON_WORKFLOW_LLM'] || ''
+export const LEON_AGENT_LLM = process.env['LEON_AGENT_LLM'] || ''
+export const WORKFLOW_LLM_TARGET = resolveConfiguredLLMTarget(
+  LEON_WORKFLOW_LLM.trim() || LEON_LLM.trim(),
+  {
+    defaultInstalledLLMPath: DEFAULT_INSTALLED_LLM_PATH,
+    llmDirPath: LLM_DIR_PATH
+  }
+)
+export const AGENT_LLM_TARGET = resolveConfiguredLLMTarget(
+  LEON_AGENT_LLM.trim() || LEON_LLM.trim(),
+  {
+    defaultInstalledLLMPath: DEFAULT_INSTALLED_LLM_PATH,
+    llmDirPath: LLM_DIR_PATH
+  }
+)
+export const WORKFLOW_LLM_PROVIDER = WORKFLOW_LLM_TARGET.provider
+export const AGENT_LLM_PROVIDER = AGENT_LLM_TARGET.provider
+export const LLM_NAME = installedLLMName
+export const LLM_VERSION = installedLLMVersion
+export const LLM_FILE_NAME = DEFAULT_INSTALLED_LLM_PATH
+  ? path.basename(DEFAULT_INSTALLED_LLM_PATH)
   : ''
 export const LLM_NAME_WITH_VERSION = `${LLM_NAME} (${LLM_VERSION})`
-export const LLM_PATH = CONFIGURED_LLAMACPP_MODEL_PATH
-  ? path.resolve(process.cwd(), CONFIGURED_LLAMACPP_MODEL_PATH)
+export const LLM_PATH = DEFAULT_INSTALLED_LLM_PATH
+  ? path.resolve(process.cwd(), DEFAULT_INSTALLED_LLM_PATH)
   : ''
 export const LLM_MINIMUM_TOTAL_VRAM = 6
 export const LLM_HIGH_TIER_MINIMUM_TOTAL_VRAM = 18

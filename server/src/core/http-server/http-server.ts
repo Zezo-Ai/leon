@@ -5,12 +5,13 @@ import fastifyStatic from '@fastify/static'
 
 import {
   API_VERSION,
-  AGENT_LLM_PROVIDER,
+  AGENT_LLM_TARGET,
   LEON_VERSION,
   LEON_NODE_ENV,
   HAS_OVER_HTTP,
   IS_TELEMETRY_ENABLED,
-  WORKFLOW_LLM_PROVIDER
+  LEON_ROUTING_MODE,
+  WORKFLOW_LLM_TARGET
 } from '@/constants'
 import { LogHelper } from '@/helpers/log-helper'
 import { DateHelper } from '@/helpers/date-helper'
@@ -25,6 +26,7 @@ import { utterancePlugin } from '@/core/http-server/api/utterance'
 import { openPathPlugin } from '@/core/http-server/api/open-path'
 import { PERSONA } from '@/core'
 import { SystemHelper } from '@/helpers/system-helper'
+import { getRoutingModeLLMDisplay } from '@/core/llm-manager/llm-routing'
 
 export interface APIOptions {
   apiVersion: string
@@ -63,9 +65,13 @@ export default class HTTPServer {
     LogHelper.info(`Environment: ${LEON_NODE_ENV}`)
     LogHelper.info(`Version: ${LEON_VERSION}`)
     LogHelper.info(`Time zone: ${DateHelper.getTimeZone()}`)
-    LogHelper.info(
-      `LLM providers: workflow=${WORKFLOW_LLM_PROVIDER}, agent=${AGENT_LLM_PROVIDER}`
+    const llmDisplay = getRoutingModeLLMDisplay(
+      LEON_ROUTING_MODE,
+      WORKFLOW_LLM_TARGET,
+      AGENT_LLM_TARGET
     )
+    LogHelper.info(`Routing mode: ${LEON_ROUTING_MODE}`)
+    LogHelper.info(`${llmDisplay.heading}: ${llmDisplay.value}`)
     LogHelper.info(`Mood: ${PERSONA.mood.type}`)
     LogHelper.info(
       `GPU: ${(await SystemHelper.getGPUDeviceNames())[0] || 'unknown'}`
