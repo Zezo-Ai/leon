@@ -7,8 +7,11 @@ def run(_params: ActionParams, params_helper: ParamsHelper) -> None:
     """Take decision whether to do a rematch"""
 
     confirmation = params_helper.get_action_argument('confirmation')
+    wants_rematch = confirmation is True or (
+        isinstance(confirmation, str) and confirmation.lower() == 'true'
+    )
 
-    if confirmation is not None and confirmation.lower() == 'true':
+    if wants_rematch:
         leon.answer({
             'key': 'confirm_rematch',
             'core': {

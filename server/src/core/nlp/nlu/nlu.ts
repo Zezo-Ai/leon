@@ -441,6 +441,10 @@ export default class NLU {
               arguments: {}
             })
           } else {
+            // The current action is finished. Clear the workflow widget before
+            // waiting for the owner's input for the next action in the flow.
+            this.workflowProgress.completeAll()
+            this.workflowProgress.reset()
             await this.sendSuggestions()
           }
 
