@@ -12,14 +12,19 @@ import osName from 'os-name'
 import getos from 'getos'
 
 import { LogHelper } from '@/helpers/log-helper'
+import { RuntimeHelper } from '@/helpers/runtime-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 import { shouldIgnoreTCPServerError } from '@/utilities'
 import {
   MINIMUM_REQUIRED_RAM,
   LEON_VERSION,
-  NODEJS_BRIDGE_BIN_PATH,
-  PYTHON_BRIDGE_BIN_PATH,
-  PYTHON_TCP_SERVER_BIN_PATH,
+  NODEJS_BRIDGE_ENTRY_PATH,
+  NODE_RUNTIME_BIN_PATH,
+  PYTHON_BRIDGE_ENTRY_PATH,
+  PYTHON_BRIDGE_RUNTIME_BIN_PATH,
+  PYTHON_TCP_SERVER_ENTRY_PATH,
+  PYTHON_TCP_SERVER_RUNTIME_BIN_PATH,
+  TSX_CLI_PATH,
   PYTHON_TCP_SERVER_VERSION,
   NODEJS_BRIDGE_VERSION,
   PYTHON_BRIDGE_VERSION,
@@ -219,12 +224,16 @@ dotenv.config()
     try {
       const executionStart = Date.now()
       const p = await command(
-        `${NODEJS_BRIDGE_BIN_PATH} "${path.join(
-          process.cwd(),
-          'scripts',
-          'assets',
-          'nodejs-bridge-intent-object.json'
-        )}"`,
+        RuntimeHelper.buildShellCommand(NODE_RUNTIME_BIN_PATH, [
+          TSX_CLI_PATH,
+          NODEJS_BRIDGE_ENTRY_PATH,
+          path.join(
+            process.cwd(),
+            'scripts',
+            'assets',
+            'nodejs-bridge-intent-object.json'
+          )
+        ]),
         { shell: true }
       )
       const executionEnd = Date.now()
@@ -253,12 +262,15 @@ dotenv.config()
     try {
       const executionStart = Date.now()
       const p = await command(
-        `${PYTHON_BRIDGE_BIN_PATH} "${path.join(
-          process.cwd(),
-          'scripts',
-          'assets',
-          'python-bridge-intent-object.json'
-        )}"`,
+        RuntimeHelper.buildShellCommand(PYTHON_BRIDGE_RUNTIME_BIN_PATH, [
+          PYTHON_BRIDGE_ENTRY_PATH,
+          path.join(
+            process.cwd(),
+            'scripts',
+            'assets',
+            'python-bridge-intent-object.json'
+          )
+        ]),
         { shell: true }
       )
       const executionEnd = Date.now()
@@ -285,7 +297,10 @@ dotenv.config()
 
     LogHelper.info('Starting the Python TCP server...')
 
-    const pythonTCPServerCommand = `${PYTHON_TCP_SERVER_BIN_PATH} en`
+    const pythonTCPServerCommand = RuntimeHelper.buildShellCommand(
+      PYTHON_TCP_SERVER_RUNTIME_BIN_PATH,
+      [PYTHON_TCP_SERVER_ENTRY_PATH, 'en']
+    )
     const pythonTCPServerStart = Date.now()
     const p = spawn(pythonTCPServerCommand, { shell: true })
 

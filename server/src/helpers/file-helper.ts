@@ -9,9 +9,28 @@ interface DownloadFileOptions {
   cliProgress?: boolean
   parallelStreams?: number
   skipExisting?: boolean
+  retry?: {
+    retries?: number
+    factor?: number
+    minTimeout?: number
+    maxTimeout?: number
+  }
+  retryFetchDownloadInfo?: {
+    retries?: number
+    factor?: number
+    minTimeout?: number
+    maxTimeout?: number
+  }
 }
 
 export class FileHelper {
+  /**
+   * Check whether a path exists on disk.
+   */
+  public static isExistingPath(filePath: string): boolean {
+    return fs.existsSync(filePath)
+  }
+
   /**
    * Download file
    * @param fileURL The file URL to download
@@ -28,6 +47,21 @@ export class FileHelper {
       cliProgress: true,
       parallelStreams: 3,
       skipExisting: false,
+      // Keep retries short and bounded. This still recovers from transient
+      // network hiccups, but avoids long "stuck" periods caused by ipull's
+      // very large default retry budget.
+      retry: {
+        retries: 2,
+        factor: 1.5,
+        minTimeout: 300,
+        maxTimeout: 2_000
+      },
+      retryFetchDownloadInfo: {
+        retries: 1,
+        factor: 1.5,
+        minTimeout: 300,
+        maxTimeout: 1_000
+      },
       ...options
     }
 
@@ -40,11 +74,7 @@ export class FileHelper {
       ...options
     })
 
-    try {
-      await downloader.download()
-    } finally {
-      await downloader.close()
-    }
+    await downloader.download()
   }
 
   /**

@@ -1,4 +1,3 @@
-import pyaudio
 import audioop
 import time
 import torch
@@ -7,6 +6,7 @@ from faster_whisper import WhisperModel
 
 from ..constants import ASR_MODEL_PATH
 from ..utils import ThrottledCallback, is_macos, get_settings
+from ..audio_input import AudioInputStream
 
 
 class ASR:
@@ -60,7 +60,6 @@ class ASR:
         self.is_active_listening_enabled = False
         self.complete_text = ''
 
-        self.audio_format = pyaudio.paInt16
         self.buffer = bytearray()
         self.silence_frames_count = 0
         self.channels = 1
@@ -76,7 +75,6 @@ class ASR:
         self.base_active_listening_duration = get_settings('asr')['active_listening_duration']
         self.active_listening_duration = self.base_active_listening_duration
 
-        self.audio = pyaudio.PyAudio()
         self.mic_stream = None
         self.model = None
 
@@ -100,12 +98,12 @@ class ASR:
 
     def open_mic_stream(self):
         try:
-            self.mic_stream = self.audio.open(format=self.audio_format,
-                                              channels=self.channels,
-                                              rate=self.rate,
-                                              frames_per_buffer=self.frames_per_buffer,
-                                              input=True,
-                                              input_device_index=self.audio.get_default_input_device_info()['index'])  # Use the default input device
+            self.mic_stream = AudioInputStream(
+                channels=self.channels,
+                rate=self.rate,
+                frames_per_buffer=self.frames_per_buffer
+            )
+            self.mic_stream.open()
         except Exception as e:
             self.log('Error to open mic stream:', e)
 
@@ -125,7 +123,7 @@ class ASR:
 
             while self.is_recording:
                 data = self.mic_stream.read(self.frames_per_buffer, exception_on_overflow=False)
-                rms = audioop.rms(data, 2)  # width=2 for format=paInt16
+                rms = audioop.rms(data, 2)  # width=2 for signed 16-bit PCM
 
                 if rms >= self.rms_threshold:
                     if not self.is_voice_activity_detected:

@@ -1,4 +1,6 @@
 import path from 'node:path'
+import url from 'node:url'
+import { createRequire, registerHooks } from 'node:module'
 
 import { FileHelper } from '@/helpers/file-helper'
 
@@ -34,6 +36,59 @@ const resolveActionFunction = (actionModule: unknown): ActionFunction | null => 
 
   return null
 }
+
+const isBarePackageImport = (specifier: string): boolean => {
+  return !specifier.startsWith('.') &&
+    !specifier.startsWith('/') &&
+    !specifier.startsWith('node:') &&
+    !specifier.startsWith('file:')
+}
+
+const isLeonAliasImport = (specifier: string): boolean => {
+  return specifier.startsWith('@/') ||
+    specifier.startsWith('@bridge/') ||
+    specifier.startsWith('@sdk/') ||
+    specifier.startsWith('@@/')
+}
+
+const registerSkillRuntimeNodeModules = (skillName: string): void => {
+  const skillPath = path.join(process.cwd(), 'skills', skillName)
+  const runtimeNodeModulesPath = path.join(
+    skillPath,
+    '.runtime',
+    'node_modules'
+  )
+
+  if (!FileHelper.isExistingPath(runtimeNodeModulesPath)) {
+    return
+  }
+
+  const runtimeRequire = createRequire(
+    path.join(runtimeNodeModulesPath, '__resolver__.cjs')
+  )
+
+  // Keep Leon aliases and relative imports on the default path, and only
+  // redirect bare package imports to the skill-local runtime dependencies.
+  registerHooks({
+    resolve(specifier, context, nextResolve) {
+      if (!isBarePackageImport(specifier) || isLeonAliasImport(specifier)) {
+        return nextResolve(specifier, context)
+      }
+
+      try {
+        const resolvedPath = runtimeRequire.resolve(specifier)
+
+        return {
+          shortCircuit: true,
+          url: url.pathToFileURL(resolvedPath).href
+        }
+      } catch {
+        return nextResolve(specifier, context)
+      }
+    }
+  })
+}
+
 ;(async (): Promise<void> => {
   setToolReporter(async (input) => {
     await leon.answer(input)
@@ -48,6 +103,8 @@ const resolveActionFunction = (actionModule: unknown): ActionFunction | null => 
     skill_config_path,
     extra_context
   } = INTENT_OBJECT
+
+  registerSkillRuntimeNodeModules(skill_name)
 
   const params: ActionParams = {
     lang,

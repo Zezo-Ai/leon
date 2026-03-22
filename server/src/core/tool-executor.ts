@@ -9,7 +9,7 @@ import type { Json as NodeJQJson } from 'node-jq/lib/options'
 
 import { LogHelper } from '@/helpers/log-helper'
 import {
-  NODEJS_BRIDGE_TOOL_RUNTIME_DIST_PATH,
+  NODE_RUNTIME_BIN_PATH,
   NODEJS_BRIDGE_TOOL_RUNTIME_SRC_PATH,
   NODEJS_BRIDGE_ROOT_PATH,
   TSX_CLI_PATH
@@ -601,18 +601,12 @@ export default class ToolExecutor {
     message: string
     output: Record<string, unknown>
   }> {
-    const toolRuntimePath = fs.existsSync(NODEJS_BRIDGE_TOOL_RUNTIME_DIST_PATH)
-      ? NODEJS_BRIDGE_TOOL_RUNTIME_DIST_PATH
-      : NODEJS_BRIDGE_TOOL_RUNTIME_SRC_PATH
-
-    const nodeArgs = fs.existsSync(NODEJS_BRIDGE_TOOL_RUNTIME_DIST_PATH)
-      ? [toolRuntimePath]
-      : [
-          TSX_CLI_PATH,
-          '--tsconfig',
-          path.join(NODEJS_BRIDGE_ROOT_PATH, 'tsconfig.json'),
-          toolRuntimePath
-        ]
+    const nodeArgs = [
+      TSX_CLI_PATH,
+      '--tsconfig',
+      path.join(NODEJS_BRIDGE_ROOT_PATH, 'tsconfig.json'),
+      NODEJS_BRIDGE_TOOL_RUNTIME_SRC_PATH
+    ]
 
     const cliArgs = [
       ...nodeArgs,
@@ -630,7 +624,7 @@ export default class ToolExecutor {
 
     try {
       const { stdout, stderr } = await execFileAsync(
-        process.execPath,
+        NODE_RUNTIME_BIN_PATH,
         cliArgs,
         {
           cwd: NODEJS_BRIDGE_ROOT_PATH,

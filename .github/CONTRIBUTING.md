@@ -180,35 +180,16 @@ Once Pyenv installed, run:
 # Install Python
 pyenv install 3.11.9 --force
 pyenv global 3.11.9
-
-# Install Pipenv
-pip install pipenv==2024.0.1
 ```
 
-Your Python environment should be ready now. So now you can set up the respective environments according to what you are going to contribute to and build them:
+Your Python environment should be ready now. Leon uses `uv` as the Python dependency standard, and `postinstall` provisions the Python bridge and TCP server environments automatically from `pyproject.toml`:
 
 ```bash
-# Set up the Python bridge environment
-npm run setup:python-bridge
-
-# Set up the TCP server environment
-npm run setup:tcp-server
-# If you are in China, you can run this to download models faster:
-npm run setup:tcp-server cn
-
-# Once your code changes are done, you can build via:
-
-# Build the Python bridge
-npm run build:python-bridge
-
-# Build the TCP server
-npm run build:tcp-server
-
 # Run the Python bridge
-./bridges/python/dist/{OS-CPU_ARCH}/leon-python-bridge server/src/intent-object.sample.json
+npm run python-bridge
 
 # Run the TCP server
-./tcp_server/dist/{OS-CPU_ARCH}/leon-tcp-server en
+npm run start:tcp-server
 ```
 
 ## Spread the Word

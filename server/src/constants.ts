@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import dotenv from 'dotenv'
 
 import type { LongLanguageCode } from '@/types'
+import { RuntimeHelper } from '@/helpers/runtime-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 import {
   getInstalledLLMMetadata,
@@ -35,6 +36,10 @@ export const IS_TESTING_ENV = LEON_NODE_ENV === TESTING_ENV
  * Paths
  */
 export const BIN_PATH = path.join(process.cwd(), 'bin')
+export const NODE_INSTALL_PATH = path.join(BIN_PATH, 'node')
+export const PNPM_INSTALL_PATH = path.join(BIN_PATH, 'pnpm')
+export const PYTHON_INSTALL_PATH = path.join(BIN_PATH, 'python')
+export const UV_INSTALL_PATH = path.join(BIN_PATH, 'uv')
 export const LOGS_PATH = path.join(process.cwd(), 'logs')
 export const SKILLS_PATH = path.join(process.cwd(), 'skills')
 export const GLOBAL_CORE_PATH = path.join(process.cwd(), 'core')
@@ -162,6 +167,38 @@ export const NINJA_VERSION = NINJA_VERSIONS.ninja
 export const NINJA_BIN_PATH = path.join(NINJA_INSTALL_PATH, 'ninja')
 
 /**
+ * Portable runtime paths and versions.
+ * Used as a common layer across skills, bridges and setup scripts.
+ */
+export const NODE_VERSIONS_PATH = path.join(NODE_INSTALL_PATH, 'versions.json')
+export const NODE_MANIFEST_PATH = path.join(NODE_INSTALL_PATH, 'manifest.json')
+const NODE_VERSIONS = JSON.parse(fs.readFileSync(NODE_VERSIONS_PATH, 'utf8'))
+export const NODE_VERSION = NODE_VERSIONS.node
+
+export const PNPM_VERSIONS_PATH = path.join(PNPM_INSTALL_PATH, 'versions.json')
+export const PNPM_MANIFEST_PATH = path.join(PNPM_INSTALL_PATH, 'manifest.json')
+const PNPM_VERSIONS = JSON.parse(fs.readFileSync(PNPM_VERSIONS_PATH, 'utf8'))
+export const PNPM_VERSION = PNPM_VERSIONS.pnpm
+
+export const PYTHON_VERSIONS_PATH = path.join(
+  PYTHON_INSTALL_PATH,
+  'versions.json'
+)
+export const PYTHON_MANIFEST_PATH = path.join(
+  PYTHON_INSTALL_PATH,
+  'manifest.json'
+)
+const PYTHON_VERSIONS = JSON.parse(
+  fs.readFileSync(PYTHON_VERSIONS_PATH, 'utf8')
+)
+export const PYTHON_VERSION = PYTHON_VERSIONS.python
+
+export const UV_VERSIONS_PATH = path.join(UV_INSTALL_PATH, 'versions.json')
+export const UV_MANIFEST_PATH = path.join(UV_INSTALL_PATH, 'manifest.json')
+const UV_VERSIONS = JSON.parse(fs.readFileSync(UV_VERSIONS_PATH, 'utf8'))
+export const UV_VERSION = UV_VERSIONS.uv
+
+/**
  * llama.cpp paths and versions.
  * Used as a common layer across tools.
  */
@@ -218,27 +255,15 @@ export const PYTHON_TCP_SERVER_ROOT_PATH = path.join(
   'tcp_server'
 )
 
-export const NODEJS_BRIDGE_DIST_PATH = path.join(
-  NODEJS_BRIDGE_ROOT_PATH,
-  'dist'
-)
-export const PYTHON_BRIDGE_DIST_PATH = path.join(
-  PYTHON_BRIDGE_ROOT_PATH,
-  'dist'
-)
-export const PYTHON_TCP_SERVER_DIST_PATH = path.join(
-  PYTHON_TCP_SERVER_ROOT_PATH,
-  'dist'
-)
+/**
+ * Leon now prefers source entrypoints plus managed runtimes so the same setup
+ * can work in development, source installs, and future desktop packaging.
+ */
 
 export const NODEJS_BRIDGE_SRC_PATH = path.join(NODEJS_BRIDGE_ROOT_PATH, 'src')
 export const NODEJS_BRIDGE_TOOL_RUNTIME_SRC_PATH = path.join(
   NODEJS_BRIDGE_SRC_PATH,
   'tool-runtime.ts'
-)
-export const NODEJS_BRIDGE_TOOL_RUNTIME_DIST_PATH = path.join(
-  NODEJS_BRIDGE_DIST_PATH,
-  'tool-runtime.js'
 )
 export const PYTHON_BRIDGE_SRC_PATH = path.join(PYTHON_BRIDGE_ROOT_PATH, 'src')
 export const PYTHON_TCP_SERVER_SRC_PATH = path.join(
@@ -304,27 +329,19 @@ export const [, PYTHON_TCP_SERVER_VERSION] = fs
   .readFileSync(PYTHON_TCP_SERVER_VERSION_FILE_PATH, 'utf8')
   .split('\'')
 
-export const NODEJS_BRIDGE_BIN_NAME = 'leon-nodejs-bridge.cjs'
-export const PYTHON_BRIDGE_BIN_NAME = 'leon-python-bridge'
-export const PYTHON_TCP_SERVER_BIN_NAME = 'leon-tcp-server'
-
-export const PYTHON_TCP_SERVER_BIN_PATH = path.join(
-  PYTHON_TCP_SERVER_DIST_PATH,
-  BINARIES_FOLDER_NAME,
-  PYTHON_TCP_SERVER_BIN_NAME
+export const NODEJS_BRIDGE_ENTRY_PATH = path.join(
+  NODEJS_BRIDGE_ROOT_PATH,
+  'src',
+  'main.ts'
 )
-export const PYTHON_BRIDGE_BIN_PATH = path.join(
-  PYTHON_BRIDGE_DIST_PATH,
-  BINARIES_FOLDER_NAME,
-  PYTHON_BRIDGE_BIN_NAME
+export const PYTHON_BRIDGE_ENTRY_PATH = path.join(
+  PYTHON_BRIDGE_SRC_PATH,
+  'main.py'
 )
-export const NODEJS_BRIDGE_BIN_PATH = `${path.join(
-  process.cwd(),
-  'node_modules',
-  'tsx',
-  'dist',
-  'cli.mjs'
-)} ${path.join(NODEJS_BRIDGE_DIST_PATH, 'bin', NODEJS_BRIDGE_BIN_NAME)}`
+export const PYTHON_TCP_SERVER_ENTRY_PATH = path.join(
+  PYTHON_TCP_SERVER_SRC_PATH,
+  'main.py'
+)
 export const TSX_CLI_PATH = path.join(
   process.cwd(),
   'node_modules',
@@ -332,6 +349,14 @@ export const TSX_CLI_PATH = path.join(
   'dist',
   'cli.mjs'
 )
+export const NODE_RUNTIME_BIN_PATH = RuntimeHelper.getNodeBinPath()
+export const PNPM_RUNTIME_BIN_PATH = RuntimeHelper.getPNPMBinPath()
+export const PYTHON_RUNTIME_BIN_PATH = RuntimeHelper.getPythonBinPath()
+export const UV_RUNTIME_BIN_PATH = RuntimeHelper.getUVBinPath()
+export const PYTHON_BRIDGE_RUNTIME_BIN_PATH =
+  RuntimeHelper.resolveProjectPythonBinPath(PYTHON_BRIDGE_SRC_PATH)
+export const PYTHON_TCP_SERVER_RUNTIME_BIN_PATH =
+  RuntimeHelper.resolveProjectPythonBinPath(PYTHON_TCP_SERVER_SRC_PATH)
 
 export const LEON_VERSION = process.env['npm_package_version']
 

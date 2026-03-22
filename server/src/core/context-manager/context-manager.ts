@@ -8,6 +8,7 @@ import { promisify } from 'node:util'
 import {
   CONTEXT_PATH,
   LEON_DISABLED_CONTEXT_FILES,
+  NODE_RUNTIME_BIN_PATH,
   TSX_CLI_PATH
 } from '@/constants'
 import { TOOLKIT_REGISTRY, LLM_PROVIDER } from '@/core'
@@ -449,7 +450,7 @@ export default class ContextManager {
     ]
 
     try {
-      const { stdout } = await execFileAsync(process.execPath, workerArgs, {
+      const { stdout } = await execFileAsync(NODE_RUNTIME_BIN_PATH, workerArgs, {
         cwd: process.cwd(),
         maxBuffer: CONTEXT_REFRESH_WORKER_MAX_BUFFER
       })

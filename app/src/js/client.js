@@ -386,6 +386,10 @@ export default class Client {
 
     this.socket.on('tts-end-of-speech', async () => {
       this.voiceEnergy.status = 'listening'
+
+      if (window.leonConfigInfo?.stt?.enabled) {
+        this.socket.emit('asr-start-record')
+      }
     })
 
     this.socket.on('audio-forwarded', (data, cb) => {

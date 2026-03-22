@@ -11,12 +11,16 @@ import type {
 import { SkillBridges } from '@/core/brain/types'
 import {
   TMP_PATH,
-  PYTHON_BRIDGE_BIN_PATH,
-  NODEJS_BRIDGE_BIN_PATH
+  NODEJS_BRIDGE_ENTRY_PATH,
+  NODE_RUNTIME_BIN_PATH,
+  PYTHON_BRIDGE_ENTRY_PATH,
+  PYTHON_BRIDGE_RUNTIME_BIN_PATH,
+  TSX_CLI_PATH
 } from '@/constants'
 import { BRAIN, SOCKET_SERVER, NLU } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { DateHelper } from '@/helpers/date-helper'
+import { RuntimeHelper } from '@/helpers/runtime-helper'
 
 export class LogicActionSkillHandler {
   public static async handle(
@@ -285,13 +289,38 @@ export class LogicActionSkillHandler {
         const { bridge: skillBridge } = nluProcessResult.skillConfig
 
         if (skillBridge === SkillBridges.Python) {
+          const pythonBridgeCommand = RuntimeHelper.buildShellCommand(
+            PYTHON_BRIDGE_RUNTIME_BIN_PATH,
+            [
+              PYTHON_BRIDGE_ENTRY_PATH,
+              '--runtime',
+              'skill',
+              intentObjectPath
+            ]
+          )
+
+          LogHelper.title('Brain')
+          LogHelper.info(`Running command: ${pythonBridgeCommand}`)
           BRAIN.skillProcess = spawn(
-            `${PYTHON_BRIDGE_BIN_PATH} --runtime skill "${intentObjectPath}"`,
+            pythonBridgeCommand,
             { shell: true }
           )
         } else if (skillBridge === SkillBridges.NodeJS) {
+          const nodejsBridgeCommand = RuntimeHelper.buildShellCommand(
+            NODE_RUNTIME_BIN_PATH,
+            [
+              TSX_CLI_PATH,
+              NODEJS_BRIDGE_ENTRY_PATH,
+              '--runtime',
+              'skill',
+              intentObjectPath
+            ]
+          )
+
+          LogHelper.title('Brain')
+          LogHelper.info(`Running command: ${nodejsBridgeCommand}`)
           BRAIN.skillProcess = spawn(
-            `${NODEJS_BRIDGE_BIN_PATH} --runtime skill "${intentObjectPath}"`,
+            nodejsBridgeCommand,
             { shell: true }
           )
         } else {
