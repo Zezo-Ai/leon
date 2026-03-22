@@ -9,13 +9,8 @@ import {
   PYTHON_RUNTIME_BIN_PATH,
   UV_RUNTIME_BIN_PATH
 } from '@/constants'
-import {
-  buildShellCommand,
-  getNodejsSkillRuntimeNodeModulesPath,
-  getPythonSkillRuntimeVendorPath,
-  getSkillRuntimePath
-} from '@/helpers/runtime-helper'
 import { LogHelper } from '@/helpers/log-helper'
+import { RuntimeHelper } from '@/helpers/runtime-helper'
 
 const SYNC_STAMP_FILE_NAME = '.last-skill-deps-sync'
 const PYTHON_DEPENDENCY_MANIFESTS = [
@@ -29,7 +24,10 @@ const PYTHON_DEPENDENCY_MANIFESTS = [
  * soon as a skill dependency manifest changes.
  */
 const getSyncStampPath = (skillPath) => {
-  return path.join(getSkillRuntimePath(skillPath), SYNC_STAMP_FILE_NAME)
+  return path.join(
+    RuntimeHelper.getSkillRuntimePath(skillPath),
+    SYNC_STAMP_FILE_NAME
+  )
 }
 
 const isFileEmpty = async (filePath) => {
@@ -56,7 +54,9 @@ const isSyncCurrent = async (skillPath, manifestPath) => {
  * Mark the skill as synced after a successful dependency install/update.
  */
 const markSkillDependenciesAsSynced = async (skillPath) => {
-  await fs.promises.mkdir(getSkillRuntimePath(skillPath), { recursive: true })
+  await fs.promises.mkdir(RuntimeHelper.getSkillRuntimePath(skillPath), {
+    recursive: true
+  })
   await fs.promises.writeFile(getSyncStampPath(skillPath), `${Date.now()}`)
 }
 
@@ -83,8 +83,10 @@ const getPythonManifestPath = (skillSRCPath) => {
 const syncNodejsSkillDependencies = async (skillFriendlyName, skillPath) => {
   const skillSRCPath = path.join(skillPath, 'src')
   const packageJSONPath = path.join(skillSRCPath, 'package.json')
-  const runtimePath = getSkillRuntimePath(skillPath)
-  const nodeModulesPath = getNodejsSkillRuntimeNodeModulesPath(skillPath)
+  const runtimePath = RuntimeHelper.getSkillRuntimePath(skillPath)
+  const nodeModulesPath =
+    RuntimeHelper.getNodejsSkillRuntimeNodeModulesPath(skillPath)
+  const runtimePackageJSONPath = path.join(runtimePath, 'package.json')
 
   if (!fs.existsSync(packageJSONPath) || (await isFileEmpty(packageJSONPath))) {
     return
@@ -104,17 +106,17 @@ const syncNodejsSkillDependencies = async (skillFriendlyName, skillPath) => {
 
   await fs.promises.mkdir(runtimePath, { recursive: true })
   await fs.promises.rm(nodeModulesPath, { recursive: true, force: true })
+  await fs.promises.copyFile(packageJSONPath, runtimePackageJSONPath)
 
+  // Install from the runtime directory itself so pnpm does not create importer
+  // metadata under the skill source tree.
   await command(
-    buildShellCommand(PNPM_RUNTIME_BIN_PATH, [
+    RuntimeHelper.buildShellCommand(PNPM_RUNTIME_BIN_PATH, [
       'install',
-      '--dir',
-      skillSRCPath,
-      '--modules-dir',
-      nodeModulesPath,
+      '--ignore-workspace',
       '--lockfile=false'
     ]),
-    { shell: true }
+    { shell: true, cwd: runtimePath }
   )
 
   await markSkillDependenciesAsSynced(skillPath)
@@ -128,7 +130,7 @@ const syncNodejsSkillDependencies = async (skillFriendlyName, skillPath) => {
  */
 const installPythonRequirements = async (manifestPath, vendorPath) => {
   await command(
-    buildShellCommand(UV_RUNTIME_BIN_PATH, [
+    RuntimeHelper.buildShellCommand(UV_RUNTIME_BIN_PATH, [
       'pip',
       'install',
       '--python',
@@ -148,7 +150,7 @@ const installPythonRequirements = async (manifestPath, vendorPath) => {
  */
 const installPythonProject = async (skillSRCPath, vendorPath) => {
   await command(
-    buildShellCommand(UV_RUNTIME_BIN_PATH, [
+    RuntimeHelper.buildShellCommand(UV_RUNTIME_BIN_PATH, [
       'pip',
       'install',
       '--python',
@@ -185,8 +187,8 @@ const syncPythonSkillDependencies = async (skillFriendlyName, skillPath) => {
     `Syncing dependencies for the "${skillFriendlyName}" skill...`
   )
 
-  const runtimePath = getSkillRuntimePath(skillPath)
-  const vendorPath = getPythonSkillRuntimeVendorPath(skillPath)
+  const runtimePath = RuntimeHelper.getSkillRuntimePath(skillPath)
+  const vendorPath = RuntimeHelper.getPythonSkillRuntimeVendorPath(skillPath)
   const manifestName = path.basename(manifestPath)
 
   await fs.promises.mkdir(runtimePath, { recursive: true })

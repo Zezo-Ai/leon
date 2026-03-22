@@ -12,7 +12,7 @@ import osName from 'os-name'
 import getos from 'getos'
 
 import { LogHelper } from '@/helpers/log-helper'
-import { buildShellCommand } from '@/helpers/runtime-helper'
+import { RuntimeHelper } from '@/helpers/runtime-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 import { shouldIgnoreTCPServerError } from '@/utilities'
 import {
@@ -224,7 +224,7 @@ dotenv.config()
     try {
       const executionStart = Date.now()
       const p = await command(
-        buildShellCommand(NODE_RUNTIME_BIN_PATH, [
+        RuntimeHelper.buildShellCommand(NODE_RUNTIME_BIN_PATH, [
           TSX_CLI_PATH,
           NODEJS_BRIDGE_ENTRY_PATH,
           path.join(
@@ -262,7 +262,7 @@ dotenv.config()
     try {
       const executionStart = Date.now()
       const p = await command(
-        buildShellCommand(PYTHON_BRIDGE_RUNTIME_BIN_PATH, [
+        RuntimeHelper.buildShellCommand(PYTHON_BRIDGE_RUNTIME_BIN_PATH, [
           PYTHON_BRIDGE_ENTRY_PATH,
           path.join(
             process.cwd(),
@@ -297,7 +297,7 @@ dotenv.config()
 
     LogHelper.info('Starting the Python TCP server...')
 
-    const pythonTCPServerCommand = buildShellCommand(
+    const pythonTCPServerCommand = RuntimeHelper.buildShellCommand(
       PYTHON_TCP_SERVER_RUNTIME_BIN_PATH,
       [PYTHON_TCP_SERVER_ENTRY_PATH, 'en']
     )

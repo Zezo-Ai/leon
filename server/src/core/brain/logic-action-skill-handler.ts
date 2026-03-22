@@ -20,7 +20,7 @@ import {
 import { BRAIN, SOCKET_SERVER, NLU } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { DateHelper } from '@/helpers/date-helper'
-import { buildShellCommand } from '@/helpers/runtime-helper'
+import { RuntimeHelper } from '@/helpers/runtime-helper'
 
 export class LogicActionSkillHandler {
   public static async handle(
@@ -289,24 +289,38 @@ export class LogicActionSkillHandler {
         const { bridge: skillBridge } = nluProcessResult.skillConfig
 
         if (skillBridge === SkillBridges.Python) {
-          BRAIN.skillProcess = spawn(
-            buildShellCommand(PYTHON_BRIDGE_RUNTIME_BIN_PATH, [
+          const pythonBridgeCommand = RuntimeHelper.buildShellCommand(
+            PYTHON_BRIDGE_RUNTIME_BIN_PATH,
+            [
               PYTHON_BRIDGE_ENTRY_PATH,
               '--runtime',
               'skill',
               intentObjectPath
-            ]),
+            ]
+          )
+
+          LogHelper.title('Brain')
+          LogHelper.info(`Running command: ${pythonBridgeCommand}`)
+          BRAIN.skillProcess = spawn(
+            pythonBridgeCommand,
             { shell: true }
           )
         } else if (skillBridge === SkillBridges.NodeJS) {
-          BRAIN.skillProcess = spawn(
-            buildShellCommand(NODE_RUNTIME_BIN_PATH, [
+          const nodejsBridgeCommand = RuntimeHelper.buildShellCommand(
+            NODE_RUNTIME_BIN_PATH,
+            [
               TSX_CLI_PATH,
               NODEJS_BRIDGE_ENTRY_PATH,
               '--runtime',
               'skill',
               intentObjectPath
-            ]),
+            ]
+          )
+
+          LogHelper.title('Brain')
+          LogHelper.info(`Running command: ${nodejsBridgeCommand}`)
+          BRAIN.skillProcess = spawn(
+            nodejsBridgeCommand,
             { shell: true }
           )
         } else {

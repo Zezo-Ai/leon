@@ -7,8 +7,8 @@ import {
   NODEJS_BRIDGE_ROOT_PATH,
   PNPM_RUNTIME_BIN_PATH
 } from '@/constants'
-import { buildShellCommand } from '@/helpers/runtime-helper'
 import { LogHelper } from '@/helpers/log-helper'
+import { RuntimeHelper } from '@/helpers/runtime-helper'
 
 const STAMP_FILE_PATH = path.join(
   NODEJS_BRIDGE_ROOT_PATH,
@@ -50,7 +50,7 @@ export default async function setupNodejsBridgeEnv() {
   LogHelper.info('Syncing Node.js bridge dependencies...')
 
   await command(
-    buildShellCommand(PNPM_RUNTIME_BIN_PATH, [
+    RuntimeHelper.buildShellCommand(PNPM_RUNTIME_BIN_PATH, [
       'install',
       '--dir',
       NODEJS_BRIDGE_ROOT_PATH,

@@ -1,7 +1,8 @@
+import path from 'node:path'
+
 import {
   PNPM_INSTALL_PATH,
   PNPM_MANIFEST_PATH,
-  PNPM_BIN_PATH,
   PNPM_VERSION
 } from '@/constants'
 import { CPUArchitectures } from '@/types'
@@ -12,24 +13,30 @@ import { setupRuntimeBinary } from './setup-runtime-binary'
 
 const { cpuArchitecture: CPU_ARCH } = SystemHelper.getInformation()
 
+function getBinaryPath() {
+  return SystemHelper.isWindows()
+    ? path.join(PNPM_INSTALL_PATH, 'pnpm.exe')
+    : path.join(PNPM_INSTALL_PATH, 'pnpm')
+}
+
 function getAssetFileName() {
   if (SystemHelper.isLinux()) {
     if (CPU_ARCH === CPUArchitectures.X64) {
-      return 'pnpm-linux-x64.tar.gz'
+      return 'pnpm-linux-x64'
     }
 
     if (CPU_ARCH === CPUArchitectures.ARM64) {
-      return 'pnpm-linux-arm64.tar.gz'
+      return 'pnpm-linux-arm64'
     }
   }
 
   if (SystemHelper.isMacOS()) {
     if (CPU_ARCH === CPUArchitectures.X64) {
-      return 'pnpm-macos-x64.tar.gz'
+      return 'pnpm-macos-x64'
     }
 
     if (CPU_ARCH === CPUArchitectures.ARM64) {
-      return 'pnpm-macos-arm64.tar.gz'
+      return 'pnpm-macos-arm64'
     }
   }
 
@@ -55,8 +62,7 @@ export default async function setupPNPM() {
     basePath: PNPM_INSTALL_PATH,
     installPath: PNPM_INSTALL_PATH,
     manifestPath: PNPM_MANIFEST_PATH,
-    binaryPath: PNPM_BIN_PATH,
-    downloadURL: `https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/${assetFileName}`,
-    archiveFileName: assetFileName.endsWith('.tar.gz') ? assetFileName : null
+    binaryPath: getBinaryPath(),
+    downloadURL: `https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/${assetFileName}`
   })
 }

@@ -1,7 +1,8 @@
+import path from 'node:path'
+
 import {
   PYTHON_INSTALL_PATH,
   PYTHON_MANIFEST_PATH,
-  PYTHON_BIN_PATH,
   PYTHON_VERSION
 } from '@/constants'
 import { CPUArchitectures } from '@/types'
@@ -11,6 +12,12 @@ import { SystemHelper } from '@/helpers/system-helper'
 import { setupRuntimeBinary } from './setup-runtime-binary'
 
 const { cpuArchitecture: CPU_ARCH } = SystemHelper.getInformation()
+
+function getBinaryPath() {
+  return SystemHelper.isWindows()
+    ? path.join(PYTHON_INSTALL_PATH, 'python.exe')
+    : path.join(PYTHON_INSTALL_PATH, 'bin', 'python')
+}
 
 function getAssetFileName() {
   if (SystemHelper.isLinux()) {
@@ -55,7 +62,7 @@ export default async function setupPython() {
     basePath: PYTHON_INSTALL_PATH,
     installPath: PYTHON_INSTALL_PATH,
     manifestPath: PYTHON_MANIFEST_PATH,
-    binaryPath: PYTHON_BIN_PATH,
+    binaryPath: getBinaryPath(),
     downloadURL: `https://github.com/astral-sh/python-build-standalone/releases/download/20240415/${assetFileName}`,
     archiveFileName: assetFileName
   })

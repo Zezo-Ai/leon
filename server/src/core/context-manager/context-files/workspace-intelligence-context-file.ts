@@ -400,7 +400,7 @@ export class WorkspaceIntelligenceContextFile extends ContextFile {
       { name: 'node', args: ['--version'] },
       { name: 'npm', args: ['--version'] },
       { name: 'pnpm', args: ['--version'] },
-      { name: 'python3', args: ['--version'] },
+      { name: 'python', args: ['--version'] },
       { name: 'go', args: ['version'] },
       { name: 'rustc', args: ['--version'] },
       { name: 'cargo', args: ['--version'] },

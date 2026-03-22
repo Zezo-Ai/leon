@@ -1,7 +1,8 @@
+import path from 'node:path'
+
 import {
   UV_INSTALL_PATH,
   UV_MANIFEST_PATH,
-  UV_BIN_PATH,
   UV_VERSION
 } from '@/constants'
 import { CPUArchitectures } from '@/types'
@@ -11,6 +12,12 @@ import { SystemHelper } from '@/helpers/system-helper'
 import { setupRuntimeBinary } from './setup-runtime-binary'
 
 const { cpuArchitecture: CPU_ARCH } = SystemHelper.getInformation()
+
+function getBinaryPath() {
+  return SystemHelper.isWindows()
+    ? path.join(UV_INSTALL_PATH, 'uv.exe')
+    : path.join(UV_INSTALL_PATH, 'uv')
+}
 
 function getAssetFileName() {
   if (SystemHelper.isLinux()) {
@@ -55,7 +62,7 @@ export default async function setupUV() {
     basePath: UV_INSTALL_PATH,
     installPath: UV_INSTALL_PATH,
     manifestPath: UV_MANIFEST_PATH,
-    binaryPath: UV_BIN_PATH,
+    binaryPath: getBinaryPath(),
     downloadURL: `https://releases.astral.sh/github/uv/releases/download/${UV_VERSION}/${assetFileName}`,
     archiveFileName: assetFileName
   })

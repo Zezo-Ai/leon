@@ -1,7 +1,8 @@
+import path from 'node:path'
+
 import {
   NODE_INSTALL_PATH,
   NODE_MANIFEST_PATH,
-  NODE_BIN_PATH,
   NODE_VERSION
 } from '@/constants'
 import { CPUArchitectures } from '@/types'
@@ -11,6 +12,12 @@ import { SystemHelper } from '@/helpers/system-helper'
 import { setupRuntimeBinary } from './setup-runtime-binary'
 
 const { cpuArchitecture: CPU_ARCH } = SystemHelper.getInformation()
+
+function getBinaryPath() {
+  return SystemHelper.isWindows()
+    ? path.join(NODE_INSTALL_PATH, 'node.exe')
+    : path.join(NODE_INSTALL_PATH, 'bin', 'node')
+}
 
 function getAssetFileName() {
   if (SystemHelper.isLinux()) {
@@ -55,7 +62,7 @@ export default async function setupNode() {
     basePath: NODE_INSTALL_PATH,
     installPath: NODE_INSTALL_PATH,
     manifestPath: NODE_MANIFEST_PATH,
-    binaryPath: NODE_BIN_PATH,
+    binaryPath: getBinaryPath(),
     downloadURL: `https://nodejs.org/dist/v${NODE_VERSION}/${assetFileName}`,
     archiveFileName: assetFileName
   })
