@@ -362,6 +362,14 @@ function validateLocalLLMTarget(target, label, result) {
     return
   }
 
+  if (!target.isResolved) {
+    addFailure(
+      result,
+      `${label}: ${target.resolutionError || 'local model is not configured or installed yet'}`
+    )
+    return
+  }
+
   if (!fs.existsSync(target.model)) {
     addFailure(
       result,

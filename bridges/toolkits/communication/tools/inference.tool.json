@@ -4,7 +4,6 @@
   "toolkit_id": "communication",
   "name": "Inference",
   "description": "A generic Leon workflow inference tool backed by the active workflow LLM provider.",
-  "icon_name": "psychology",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",

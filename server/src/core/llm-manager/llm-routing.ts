@@ -8,6 +8,8 @@ export interface ResolvedLLMTarget {
   model: string
   label: string
   isLocal: boolean
+  isResolved: boolean
+  resolutionError?: string
 }
 
 export interface RoutingModeLLMDisplay {
@@ -68,6 +70,38 @@ function getLocalModelLabel(modelPath: string): string {
   return path.basename(modelPath) || modelPath
 }
 
+function createResolvedLLMTarget(
+  provider: LLMProviders,
+  model: string,
+  isLocal: boolean
+): ResolvedLLMTarget {
+  const label = isLocal
+    ? `${provider}/${getLocalModelLabel(model)}`
+    : `${provider}/${model}`
+
+  return {
+    provider,
+    model,
+    label,
+    isLocal,
+    isResolved: true
+  }
+}
+
+function createUnresolvedLocalLLMTarget(
+  provider: LLMProviders,
+  resolutionError: string
+): ResolvedLLMTarget {
+  return {
+    provider,
+    model: '',
+    label: `${provider}/not-installed`,
+    isLocal: true,
+    isResolved: false,
+    resolutionError
+  }
+}
+
 export function resolveConfiguredLLMTarget(
   rawValue: string,
   options: {
@@ -79,26 +113,25 @@ export function resolveConfiguredLLMTarget(
 
   if (!normalizedValue) {
     if (!options.defaultInstalledLLMPath) {
-      throw new Error(
+      return createUnresolvedLocalLLMTarget(
+        LLMProviders.LlamaCPP,
         'No LLM is configured and no default installed local LLM was found.'
       )
     }
 
-    return {
-      provider: LLMProviders.LlamaCPP,
-      model: options.defaultInstalledLLMPath,
-      label: `${LLMProviders.LlamaCPP}/${getLocalModelLabel(options.defaultInstalledLLMPath)}`,
-      isLocal: true
-    }
+    return createResolvedLLMTarget(
+      LLMProviders.LlamaCPP,
+      options.defaultInstalledLLMPath,
+      true
+    )
   }
 
   if (path.isAbsolute(normalizedValue)) {
-    return {
-      provider: LLMProviders.LlamaCPP,
-      model: normalizedValue,
-      label: `${LLMProviders.LlamaCPP}/${getLocalModelLabel(normalizedValue)}`,
-      isLocal: true
-    }
+    return createResolvedLLMTarget(
+      LLMProviders.LlamaCPP,
+      normalizedValue,
+      true
+    )
   }
 
   const separatorIndex = normalizedValue.indexOf('/')
@@ -113,17 +146,17 @@ export function resolveConfiguredLLMTarget(
     }
 
     if (!options.defaultInstalledLLMPath) {
-      throw new Error(
+      return createUnresolvedLocalLLMTarget(
+        provider,
         `No default installed local LLM was found for provider "${provider}".`
       )
     }
 
-    return {
+    return createResolvedLLMTarget(
       provider,
-      model: options.defaultInstalledLLMPath,
-      label: `${provider}/${getLocalModelLabel(options.defaultInstalledLLMPath)}`,
-      isLocal: true
-    }
+      options.defaultInstalledLLMPath,
+      true
+    )
   }
 
   const provider = normalizeProvider(normalizedValue.slice(0, separatorIndex))
@@ -138,20 +171,10 @@ export function resolveConfiguredLLMTarget(
   if (LOCAL_PROVIDERS.has(provider)) {
     const localModelPath = resolveLocalModelPath(options.llmDirPath, model)
 
-    return {
-      provider,
-      model: localModelPath,
-      label: `${provider}/${getLocalModelLabel(localModelPath)}`,
-      isLocal: true
-    }
+    return createResolvedLLMTarget(provider, localModelPath, true)
   }
 
-  return {
-    provider,
-    model,
-    label: `${provider}/${model}`,
-    isLocal: false
-  }
+  return createResolvedLLMTarget(provider, model, false)
 }
 
 export function getInstalledLLMMetadata(

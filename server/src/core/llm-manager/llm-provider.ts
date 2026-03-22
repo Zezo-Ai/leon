@@ -186,6 +186,18 @@ export default class LLMProvider {
 
     const workflowTarget = WORKFLOW_LLM_TARGET
     const agentTarget = AGENT_LLM_TARGET
+
+    for (const target of [workflowTarget, agentTarget]) {
+      if (!target.isResolved) {
+        LogHelper.error(
+          target.resolutionError ||
+            `The LLM target "${target.label}" is not resolved.`
+        )
+
+        return false
+      }
+    }
+
     const configuredProviders = new Set<LLMProviders>([
       workflowTarget.provider,
       agentTarget.provider
