@@ -3,78 +3,34 @@ import path from 'node:path'
 import url from 'node:url'
 import { execSync } from 'node:child_process'
 
-import { downloadFile as ipullDownloadFile } from 'ipull'
-
-interface DownloadFileOptions {
-  cliProgress?: boolean
-  parallelStreams?: number
-  skipExisting?: boolean
-  retry?: {
-    retries?: number
-    factor?: number
-    minTimeout?: number
-    maxTimeout?: number
-  }
-  retryFetchDownloadInfo?: {
-    retries?: number
-    factor?: number
-    minTimeout?: number
-    maxTimeout?: number
-  }
-}
+import {
+  NetworkHelper,
+  type DownloadFileOptions
+} from '@/helpers/network-helper'
 
 export class FileHelper {
   /**
    * Check whether a path exists on disk.
+   * @param filePath The path to inspect
+   * @returns Whether the path currently exists
    */
   public static isExistingPath(filePath: string): boolean {
     return fs.existsSync(filePath)
   }
 
   /**
-   * Download file
-   * @param fileURL The file URL to download
-   * @param destinationPath The destination path to save the file
-   * @param options The download options
-   * @example downloadFile('https://example.com/file.zip', 'output/dir/file.zip', { cliProgress: true, parallelStreams: 3 })
+   * Compatibility wrapper around the network helper so current callers do not
+   * need to change while download logic stays centralized.
+   * @param fileURL The remote URL or local file path to download from
+   * @param destinationPath The destination file path
+   * @param options Download behavior options
    */
   public static async downloadFile(
     fileURL: string,
     destinationPath: string,
     options?: DownloadFileOptions
   ): Promise<void> {
-    options = {
-      cliProgress: true,
-      parallelStreams: 3,
-      skipExisting: false,
-      // Keep retries short and bounded. This still recovers from transient
-      // network hiccups, but avoids long "stuck" periods caused by ipull's
-      // very large default retry budget.
-      retry: {
-        retries: 2,
-        factor: 1.5,
-        minTimeout: 300,
-        maxTimeout: 2_000
-      },
-      retryFetchDownloadInfo: {
-        retries: 1,
-        factor: 1.5,
-        minTimeout: 300,
-        maxTimeout: 1_000
-      },
-      ...options
-    }
-
-    const directory = path.dirname(destinationPath)
-    const fileName = path.basename(destinationPath)
-    const downloader = await ipullDownloadFile({
-      url: fileURL,
-      directory,
-      fileName,
-      ...options
-    })
-
-    await downloader.download()
+    await NetworkHelper.downloadFile(fileURL, destinationPath, options)
   }
 
   /**
@@ -118,7 +74,6 @@ export class FileHelper {
   ): Promise<void> {
     const stripComponents = options?.stripComponents ?? 0
 
-    // Ensure target directory exists
     await fs.promises.mkdir(targetPath, { recursive: true })
 
     const ext = path.extname(archivePath).toLowerCase()
@@ -126,7 +81,6 @@ export class FileHelper {
 
     try {
       if (ext === '.zip' || ext === '.whl') {
-        // Use unzip for .zip files (available on all platforms)
         execSync(`unzip -o -q "${archivePath}" -d "${targetPath}"`, {
           stdio: 'inherit'
         })
@@ -136,7 +90,6 @@ export class FileHelper {
         basename.endsWith('.tgz') ||
         ext === '.tar'
       ) {
-        // Use tar for .tar.* files (available on all platforms)
         const stripFlag =
           stripComponents > 0 ? `--strip-components=${stripComponents}` : ''
         execSync(`tar -xf "${archivePath}" -C "${targetPath}" ${stripFlag}`, {
@@ -169,10 +122,6 @@ export class FileHelper {
     const absolutePath = path.resolve(filePath)
     const fileURL = url.pathToFileURL(absolutePath).href
 
-    /**
-     * This creates a function at runtime that performs the import.
-     * Esbuild won't try to analyze it, resolving the warning when building the Node.js bridge
-     */
     const importer = new Function(
       'url',
       'options',

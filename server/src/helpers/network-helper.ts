@@ -1,9 +1,725 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import readline from 'node:readline'
+
 import axios from 'axios'
 
 const HUGGING_FACE_URL = 'https://huggingface.co'
 const HUGGING_FACE_MIRROR_URL = 'https://hf-mirror.com'
+const PARALLEL_DOWNLOAD_MIN_BYTES = 128 * 1_024 * 1_024
+const PARALLEL_DOWNLOAD_MIN_RANGE_BYTES = 16 * 1_024 * 1_024
+
+export interface DownloadFileOptions {
+  cliProgress?: boolean
+  onProgress?: (progress: DownloadFileProgress) => void
+  parallelStreams?: number
+  skipExisting?: boolean
+  retry?: {
+    retries?: number
+    factor?: number
+    minTimeout?: number
+    maxTimeout?: number
+  }
+  retryFetchDownloadInfo?: {
+    retries?: number
+    factor?: number
+    minTimeout?: number
+    maxTimeout?: number
+  }
+}
+
+export interface DownloadFileProgress {
+  downloadedBytes: number
+  totalBytes: number | null
+  percentage: number | null
+  bytesPerSecond: number
+  etaMs: number | null
+}
+
+interface DownloadProbe {
+  totalBytes: number | null
+  acceptRanges: boolean
+}
+
+interface ProgressReporter {
+  update: (downloadedBytes: number) => void
+  finish: (downloadedBytes: number) => void
+  fail: () => void
+}
+
+type RetryOptions = Required<NonNullable<DownloadFileOptions['retry']>>
+type DownloadInfoRetryOptions = Required<
+  NonNullable<DownloadFileOptions['retryFetchDownloadInfo']>
+>
+type ResolvedDownloadFileOptions = Omit<
+  Required<DownloadFileOptions>,
+  'retry' | 'retryFetchDownloadInfo' | 'onProgress'
+> & {
+  onProgress?: DownloadFileOptions['onProgress']
+  retry: RetryOptions
+  retryFetchDownloadInfo: DownloadInfoRetryOptions
+}
 
 export class NetworkHelper {
+  private static readonly DEFAULT_DOWNLOAD_OPTIONS: ResolvedDownloadFileOptions =
+    {
+      cliProgress: true,
+      parallelStreams: 3,
+      skipExisting: false,
+      retry: {
+        retries: 2,
+        factor: 1.5,
+        minTimeout: 300,
+        maxTimeout: 2_000
+      },
+      retryFetchDownloadInfo: {
+        retries: 1,
+        factor: 1.5,
+        minTimeout: 300,
+        maxTimeout: 1_000
+      }
+    }
+
+  private static formatBytes(bytes: number): string {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB']
+    let value = bytes
+    let unitIndex = 0
+
+    while (value >= 1_024 && unitIndex < units.length - 1) {
+      value /= 1_024
+      unitIndex += 1
+    }
+
+    return `${value.toFixed(unitIndex === 0 ? 0 : 2)}${units[unitIndex]}`
+  }
+
+  private static formatDuration(durationMs: number): string {
+    const totalSeconds = Math.max(0, Math.round(durationMs / 1_000))
+    const hours = Math.floor(totalSeconds / 3_600)
+    const minutes = Math.floor((totalSeconds % 3_600) / 60)
+    const seconds = totalSeconds % 60
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${seconds}s`
+    }
+
+    if (minutes > 0) {
+      return `${minutes}m ${seconds}s`
+    }
+
+    return `${seconds}s`
+  }
+
+  private static sleep(delayMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, delayMs)
+    })
+  }
+
+  private static isRemoteURL(fileURL: string): boolean {
+    try {
+      const parsedURL = new URL(fileURL)
+
+      return parsedURL.protocol === 'http:' || parsedURL.protocol === 'https:'
+    } catch {
+      return false
+    }
+  }
+
+  private static parseContentLength(value: string | null): number | null {
+    if (!value) {
+      return null
+    }
+
+    const parsedValue = Number(value)
+
+    return Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : null
+  }
+
+  private static parseContentRangeTotalBytes(value: string | null): number | null {
+    if (!value) {
+      return null
+    }
+
+    const match = value.match(/bytes\s+\d+-\d+\/(\d+|\*)/i)
+
+    const totalBytesValue = match?.[1]
+
+    if (!totalBytesValue || totalBytesValue === '*') {
+      return null
+    }
+
+    return this.parseContentLength(totalBytesValue)
+  }
+
+  private static async movePath(
+    sourcePath: string,
+    destinationPath: string
+  ): Promise<void> {
+    try {
+      await fs.promises.rename(sourcePath, destinationPath)
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !('code' in error) ||
+        error.code !== 'EXDEV'
+      ) {
+        throw error
+      }
+
+      await fs.promises.cp(sourcePath, destinationPath, {
+        force: true
+      })
+      await fs.promises.rm(sourcePath, { force: true })
+    }
+  }
+
+  private static async ensureDownloadedFilePath(
+    destinationPath: string
+  ): Promise<void> {
+    const finalPath = path.resolve(destinationPath)
+
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      try {
+        const stat = await fs.promises.stat(finalPath)
+
+        if (stat.isFile()) {
+          return
+        }
+      } catch {
+        // Retry briefly while the final file path becomes visible on disk.
+      }
+
+      await this.sleep(100)
+    }
+
+    throw new Error(
+      `Downloaded file is not available at "${finalPath}" after completion.`
+    )
+  }
+
+  private static createProgressReporter(
+    destinationPath: string,
+    options: ResolvedDownloadFileOptions,
+    totalBytes?: number
+  ): ProgressReporter {
+    if (!options.cliProgress && !options.onProgress) {
+      return {
+        update: (): void => {},
+        finish: (): void => {},
+        fail: (): void => {}
+      }
+    }
+
+    const fileName = path.basename(destinationPath)
+    const startedAt = Date.now()
+    const isTTY = process.stdout.isTTY
+    const renderIntervalMs = isTTY ? 200 : 5_000
+    let lastRenderAt = 0
+
+    if (options.cliProgress) {
+      console.log('')
+      console.log(fileName)
+    }
+
+    const createProgressSnapshot = (
+      downloadedBytes: number
+    ): DownloadFileProgress => {
+      const elapsedMs = Math.max(1, Date.now() - startedAt)
+      const bytesPerSecond = downloadedBytes / (elapsedMs / 1_000)
+      const etaMs =
+        typeof totalBytes === 'number' &&
+        totalBytes > downloadedBytes &&
+        bytesPerSecond > 0
+          ? ((totalBytes - downloadedBytes) / bytesPerSecond) * 1_000
+          : null
+
+      return {
+        downloadedBytes,
+        totalBytes: totalBytes ?? null,
+        percentage:
+          typeof totalBytes === 'number' && totalBytes > 0
+            ? (downloadedBytes / totalBytes) * 100
+            : null,
+        bytesPerSecond,
+        etaMs
+      }
+    }
+
+    const render = (downloadedBytes: number, force = false): void => {
+      const progress = createProgressSnapshot(downloadedBytes)
+      const now = Date.now()
+
+      if (options.onProgress) {
+        options.onProgress(progress)
+      }
+
+      if (!options.cliProgress) {
+        return
+      }
+
+      if (!force && now - lastRenderAt < renderIntervalMs) {
+        return
+      }
+
+      lastRenderAt = now
+      const progressPrefix =
+        typeof totalBytes === 'number' && totalBytes > 0
+          ? `${((downloadedBytes / totalBytes) * 100).toFixed(1)}% (${this.formatBytes(downloadedBytes)}/${this.formatBytes(totalBytes)})`
+          : this.formatBytes(downloadedBytes)
+      const eta =
+        progress.etaMs !== null
+          ? ` | ${this.formatDuration(progress.etaMs)} left`
+          : ''
+      const line = `${progressPrefix} ${this.formatBytes(
+        progress.bytesPerSecond
+      )}/s${eta}`
+
+      if (isTTY) {
+        readline.clearLine(process.stdout, 0)
+        readline.cursorTo(process.stdout, 0)
+        process.stdout.write(line)
+      } else {
+        console.log(line)
+      }
+    }
+
+    return {
+      update: (downloadedBytes: number): void => {
+        render(downloadedBytes)
+      },
+      finish: (downloadedBytes: number): void => {
+        render(downloadedBytes, true)
+
+        if (options.cliProgress && isTTY) {
+          process.stdout.write('\n')
+        }
+
+        if (options.cliProgress) {
+          console.log(
+            `${fileName} downloaded ${this.formatBytes(downloadedBytes)} in ${this.formatDuration(
+              Date.now() - startedAt
+            )}`
+          )
+        }
+      },
+      fail: (): void => {
+        if (options.cliProgress && isTTY) {
+          readline.clearLine(process.stdout, 0)
+          readline.cursorTo(process.stdout, 0)
+        }
+      }
+    }
+  }
+
+  private static getRetryDelay(
+    attemptIndex: number,
+    retryOptions: RetryOptions
+  ): number {
+    const baseDelay =
+      retryOptions.minTimeout *
+      retryOptions.factor ** Math.max(0, attemptIndex - 1)
+
+    return Math.min(retryOptions.maxTimeout, Math.round(baseDelay))
+  }
+
+  private static getParallelPartCount(
+    totalBytes: number,
+    parallelStreams: number
+  ): number {
+    const sizeLimitedPartCount = Math.max(
+      1,
+      Math.floor(totalBytes / PARALLEL_DOWNLOAD_MIN_RANGE_BYTES)
+    )
+
+    return Math.max(1, Math.min(parallelStreams, sizeLimitedPartCount))
+  }
+
+  private static splitByteRanges(
+    totalBytes: number,
+    partCount: number
+  ): Array<{ start: number, end: number }> {
+    const ranges: Array<{ start: number, end: number }> = []
+    const basePartSize = Math.floor(totalBytes / partCount)
+    let start = 0
+
+    for (let index = 0; index < partCount; index += 1) {
+      const isLastPart = index === partCount - 1
+      const end = isLastPart ? totalBytes - 1 : start + basePartSize - 1
+
+      ranges.push({
+        start,
+        end
+      })
+
+      start = end + 1
+    }
+
+    return ranges
+  }
+
+  private static async probeRemoteFile(
+    fileURL: string,
+    retryOptions: DownloadInfoRetryOptions
+  ): Promise<DownloadProbe> {
+    for (
+      let attempt = 0;
+      attempt <= retryOptions.retries;
+      attempt += 1
+    ) {
+      let fallbackProbe: DownloadProbe | null = null
+
+      try {
+        const headResponse = await fetch(fileURL, {
+          method: 'HEAD'
+        })
+
+        if (headResponse.ok) {
+          const acceptRanges =
+            headResponse.headers.get('accept-ranges')?.toLowerCase() === 'bytes'
+          const totalBytes = this.parseContentLength(
+            headResponse.headers.get('content-length')
+          )
+
+          if (acceptRanges) {
+            return {
+              totalBytes,
+              acceptRanges
+            }
+          }
+
+          fallbackProbe = {
+            totalBytes,
+            acceptRanges: false
+          }
+        }
+      } catch {
+        // Fall back to a ranged probe when HEAD is unsupported or incomplete.
+      }
+
+      try {
+        const rangeResponse = await fetch(fileURL, {
+          headers: {
+            range: 'bytes=0-0'
+          }
+        })
+
+        if (!rangeResponse.ok) {
+          throw new Error(
+            `Failed to fetch download info for "${fileURL}" (HTTP ${rangeResponse.status} ${rangeResponse.statusText})`
+          )
+        }
+
+        const acceptRanges =
+          rangeResponse.status === 206 ||
+          rangeResponse.headers.get('accept-ranges')?.toLowerCase() === 'bytes' ||
+          !!rangeResponse.headers.get('content-range')
+        const totalBytes =
+          this.parseContentRangeTotalBytes(
+            rangeResponse.headers.get('content-range')
+          ) ||
+          this.parseContentLength(rangeResponse.headers.get('content-length'))
+
+        await rangeResponse.body?.cancel().catch(() => {})
+
+        return {
+          totalBytes,
+          acceptRanges
+        }
+      } catch (error) {
+        if (fallbackProbe) {
+          return fallbackProbe
+        }
+
+        if (attempt === retryOptions.retries) {
+          throw error
+        }
+      }
+
+      await this.sleep(this.getRetryDelay(attempt + 1, retryOptions))
+    }
+
+    return {
+      totalBytes: null,
+      acceptRanges: false
+    }
+  }
+
+  private static async downloadSequential(
+    fileURL: string,
+    temporaryPath: string,
+    probe: DownloadProbe,
+    reporter: ProgressReporter
+  ): Promise<number> {
+    let startOffset = 0
+
+    if (probe.acceptRanges && probe.totalBytes !== null && fs.existsSync(temporaryPath)) {
+      const temporaryStat = await fs.promises.stat(temporaryPath)
+
+      if (temporaryStat.isFile()) {
+        if (temporaryStat.size > 0 && temporaryStat.size < probe.totalBytes) {
+          startOffset = temporaryStat.size
+        } else if (temporaryStat.size >= probe.totalBytes) {
+          await fs.promises.rm(temporaryPath, { force: true })
+        }
+      }
+    }
+
+    reporter.update(startOffset)
+
+    while (true) {
+      const headers =
+        startOffset > 0
+          ? {
+              range: `bytes=${startOffset}-`
+            }
+          : undefined
+      const response = await fetch(fileURL, headers ? { headers } : undefined)
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to download "${fileURL}" (HTTP ${response.status} ${response.statusText})`
+        )
+      }
+
+      if (!response.body) {
+        throw new Error(`Failed to download "${fileURL}": empty response body`)
+      }
+
+      if (startOffset > 0 && response.status !== 206) {
+        await Promise.all([
+          fs.promises.rm(temporaryPath, { force: true })
+        ])
+        startOffset = 0
+        reporter.update(0)
+        await response.body.cancel().catch(() => {})
+        continue
+      }
+
+      const fileHandle = await fs.promises.open(
+        temporaryPath,
+        startOffset > 0 ? 'r+' : 'w'
+      )
+      const reader = response.body.getReader()
+      let downloadedBytes = startOffset
+      let writePosition = startOffset
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+
+          if (done) {
+            break
+          }
+
+          if (!value || value.byteLength === 0) {
+            continue
+          }
+
+          const chunk = Buffer.from(value)
+          await fileHandle.write(chunk, 0, chunk.length, writePosition)
+          writePosition += chunk.length
+          downloadedBytes += chunk.length
+          reporter.update(downloadedBytes)
+        }
+
+        const expectedBytes =
+          probe.totalBytes ??
+          (startOffset +
+            (this.parseContentLength(response.headers.get('content-length')) || 0))
+
+        if (expectedBytes > 0 && downloadedBytes !== expectedBytes) {
+          throw new Error(
+            `Downloaded size mismatch for "${fileURL}". Expected ${expectedBytes} bytes but received ${downloadedBytes}.`
+          )
+        }
+
+        await fileHandle.sync()
+
+        return downloadedBytes
+      } finally {
+        await reader.cancel().catch(() => {})
+        await fileHandle.close()
+      }
+    }
+  }
+
+  private static async downloadParallel(
+    fileURL: string,
+    temporaryPath: string,
+    totalBytes: number,
+    parallelStreams: number,
+    reporter: ProgressReporter
+  ): Promise<number> {
+    const partCount = this.getParallelPartCount(totalBytes, parallelStreams)
+    const ranges = this.splitByteRanges(totalBytes, partCount)
+    const fileHandle = await fs.promises.open(temporaryPath, 'w')
+    let downloadedBytes = 0
+
+    reporter.update(0)
+
+    try {
+      await Promise.all(
+        ranges.map(async (range) => {
+          const response = await fetch(fileURL, {
+            headers: {
+              range: `bytes=${range.start}-${range.end}`
+            }
+          })
+
+          if (response.status !== 206) {
+            throw new Error(
+              `Server does not support ranged download for "${fileURL}".`
+            )
+          }
+
+          if (!response.body) {
+            throw new Error(`Failed to download "${fileURL}": empty response body`)
+          }
+
+          const reader = response.body.getReader()
+          let writePosition = range.start
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read()
+
+              if (done) {
+                break
+              }
+
+              if (!value || value.byteLength === 0) {
+                continue
+              }
+
+              const chunk = Buffer.from(value)
+              await fileHandle.write(chunk, 0, chunk.length, writePosition)
+              writePosition += chunk.length
+              downloadedBytes += chunk.length
+              reporter.update(downloadedBytes)
+            }
+          } finally {
+            await reader.cancel().catch(() => {})
+          }
+
+          if (writePosition !== range.end + 1) {
+            throw new Error(
+              `Incomplete ranged download for "${fileURL}" on bytes ${range.start}-${range.end}.`
+            )
+          }
+        })
+      )
+
+      if (downloadedBytes !== totalBytes) {
+        throw new Error(
+          `Downloaded size mismatch for "${fileURL}". Expected ${totalBytes} bytes but received ${downloadedBytes}.`
+        )
+      }
+
+      await fileHandle.sync()
+
+      return downloadedBytes
+    } finally {
+      await fileHandle.close()
+    }
+  }
+
+  private static async downloadRemoteFile(
+    fileURL: string,
+    destinationPath: string,
+    options: ResolvedDownloadFileOptions
+  ): Promise<void> {
+    const retryOptions = options.retry
+    const temporaryPath = `${destinationPath}.download`
+    const legacyTemporaryPath = `${destinationPath}.ipull`
+
+    for (
+      let attempt = 0;
+      attempt <= retryOptions.retries;
+      attempt += 1
+    ) {
+      let reporter: ProgressReporter = {
+        update: () => {},
+        finish: () => {},
+        fail: () => {}
+      }
+      let shouldCleanupTemporaryFile = false
+
+      try {
+        const probe = await this.probeRemoteFile(
+          fileURL,
+          options.retryFetchDownloadInfo
+        )
+        const useParallelDownload =
+          probe.acceptRanges &&
+          probe.totalBytes !== null &&
+          probe.totalBytes >= PARALLEL_DOWNLOAD_MIN_BYTES &&
+          options.parallelStreams > 1
+
+        shouldCleanupTemporaryFile = useParallelDownload
+
+        await Promise.all([
+          fs.promises.mkdir(path.dirname(destinationPath), { recursive: true }),
+          fs.promises.rm(destinationPath, { force: true }),
+          fs.promises.rm(legacyTemporaryPath, { force: true }),
+          ...(useParallelDownload
+            ? [fs.promises.rm(temporaryPath, { force: true })]
+            : [])
+        ])
+
+        reporter = this.createProgressReporter(
+          destinationPath,
+          options,
+          probe.totalBytes || undefined
+        )
+
+        const downloadedBytes = useParallelDownload
+          ? await this.downloadParallel(
+              fileURL,
+              temporaryPath,
+              probe.totalBytes as number,
+              options.parallelStreams,
+              reporter
+            )
+          : await this.downloadSequential(
+              fileURL,
+              temporaryPath,
+              probe,
+              reporter
+            )
+
+        await this.movePath(temporaryPath, destinationPath)
+        await this.ensureDownloadedFilePath(destinationPath)
+        reporter.finish(downloadedBytes)
+
+        return
+      } catch (error) {
+        reporter.fail()
+
+        await fs.promises.rm(destinationPath, { force: true })
+
+        if (shouldCleanupTemporaryFile) {
+          await fs.promises.rm(temporaryPath, { force: true })
+        }
+
+        if (attempt === retryOptions.retries) {
+          throw error
+        }
+
+        await this.sleep(this.getRetryDelay(attempt + 1, retryOptions))
+      }
+    }
+  }
+
+  private static async copyLocalFile(
+    filePath: string,
+    destinationPath: string
+  ): Promise<void> {
+    await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true })
+    await fs.promises.copyFile(filePath, destinationPath)
+    await this.ensureDownloadedFilePath(destinationPath)
+  }
+
   /**
    * Check if the current network can access Hugging Face
    * @example canAccessHuggingFace() // true
@@ -36,5 +752,43 @@ export class NetworkHelper {
     }
 
     return url
+  }
+
+  /**
+   * Download a file from either a remote URL or a local source path.
+   */
+  public static async downloadFile(
+    fileURL: string,
+    destinationPath: string,
+    options?: DownloadFileOptions
+  ): Promise<void> {
+    const resolvedOptions: ResolvedDownloadFileOptions = {
+      ...this.DEFAULT_DOWNLOAD_OPTIONS,
+      ...options,
+      retry: {
+        ...this.DEFAULT_DOWNLOAD_OPTIONS.retry,
+        ...options?.retry
+      },
+      retryFetchDownloadInfo: {
+        ...this.DEFAULT_DOWNLOAD_OPTIONS.retryFetchDownloadInfo,
+        ...options?.retryFetchDownloadInfo
+      }
+    }
+
+    if (
+      resolvedOptions.skipExisting &&
+      fs.existsSync(destinationPath) &&
+      (await fs.promises.stat(destinationPath)).isFile()
+    ) {
+      return
+    }
+
+    if (this.isRemoteURL(fileURL)) {
+      await this.downloadRemoteFile(fileURL, destinationPath, resolvedOptions)
+
+      return
+    }
+
+    await this.copyLocalFile(fileURL, destinationPath)
   }
 }

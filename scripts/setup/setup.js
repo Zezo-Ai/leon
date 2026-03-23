@@ -33,51 +33,81 @@ import setFfprobePermissions from './set-ffprobe-permissions'
  * Main entry to set up Leon
  */
 ;(async () => {
+  let currentStep = 'bootstrap'
+
   try {
+    currentStep = 'setupDotenv'
     await setupDotenv()
     LoaderHelper.start()
+    currentStep = 'setupCore'
     await setupCore()
     if (!IS_GITHUB_ACTIONS) {
+      currentStep = 'setupNode'
       await setupNode()
+      currentStep = 'setupPNPM'
       await setupPNPM()
+      currentStep = 'setupPython'
       await setupPython()
+      currentStep = 'setupUV'
       await setupUV()
     } else {
       LogHelper.info(
         'Skipping portable Node.js, pnpm, Python and uv setup because it is running in CI'
       )
     }
+    currentStep = 'setupNodejsBridgeEnv'
     await setupNodejsBridgeEnv()
+    currentStep = 'setupPythonBridgeEnv'
     await setupPythonBridgeEnv()
+    currentStep = 'setupTCPServerEnv'
     await setupTCPServerEnv()
+    currentStep = 'setupSkills'
     await setupSkills()
     LoaderHelper.stop()
     if (!IS_GITHUB_ACTIONS) {
+      currentStep = 'setupCMake'
       await setupCMake()
+      currentStep = 'setupNinja'
       await setupNinja()
+      currentStep = 'setupLlamaCPP'
       await setupLlamaCPP()
+      currentStep = 'setupLocalLLM'
       await setupLocalLLM()
+      currentStep = 'setupQMDLLM'
       await setupQMDLLM()
+      currentStep = 'setupNVIDIALibs'
       await setupNVIDIALibs()
+      currentStep = 'setupPyTorch'
       await setupPyTorch()
     } else {
       LogHelper.info(
         'Skipping CMake, Ninja, llama.cpp, local LLM, QMD models, NVIDIA, and PyTorch setups because it is running in CI'
       )
     }
+    currentStep = 'setupTCPServerModels'
     await setupTCPServerModels()
+    currentStep = 'generateHTTPAPIKey'
     await generateHTTPAPIKey()
+    currentStep = 'generateJSONSchemas'
     await generateJSONSchemas()
     LoaderHelper.start()
+    currentStep = 'train'
     await train()
+    currentStep = 'setFfprobePermissions'
     await setFfprobePermissions()
+    currentStep = 'createInstanceID'
     await createInstanceID()
 
     LogHelper.default('')
     LogHelper.success('Hooray! Leon is installed and ready to go!')
     LoaderHelper.stop()
   } catch (e) {
-    LogHelper.error(e)
     LoaderHelper.stop()
+    LogHelper.error(
+      `Setup failed during ${currentStep}: ${
+        e instanceof Error ? e.stack || e.message : String(e)
+      }`
+    )
+    process.exit(1)
   }
 })()

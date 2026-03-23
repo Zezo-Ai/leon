@@ -23,12 +23,14 @@ const src = globs.join(' ')
   LogHelper.info('Linting...')
 
   try {
-    await Promise.all([
-      command(`eslint ${src} --fix --ignore-pattern .gitignore`, {
-        shell: true,
-        stdio: 'inherit'
-      })
-    ])
+    await command(`eslint ${src} --fix --ignore-pattern .gitignore`, {
+      shell: true,
+      stdio: 'inherit'
+    })
+    await command('tsc --noEmit -p tsconfig.json', {
+      shell: true,
+      stdio: 'inherit'
+    })
 
     LogHelper.success('Looks great')
     LoaderHelper.stop()
