@@ -1,4 +1,4 @@
-import { type ScrollContainerProps } from '@leon-ai/aurora'
+import { type ScrollContainerProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

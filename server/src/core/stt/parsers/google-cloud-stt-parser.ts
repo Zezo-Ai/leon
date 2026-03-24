@@ -1,3 +1,4 @@
+/*
 import path from 'node:path'
 
 import type { SpeechClient } from '@google-cloud/speech'
@@ -17,10 +18,10 @@ export default class GoogleCloudSTTParser extends STTParserBase {
     LogHelper.title(this.name)
     LogHelper.success('New instance')
 
-    /**
+    /!**
      * Initialize Google Cloud Speech-to-Text based on the credentials in the JSON file
      * the env variable "GOOGLE_APPLICATION_CREDENTIALS" provides the JSON file path
-     */
+     *!/
 
     process.env['GOOGLE_APPLICATION_CREDENTIALS'] = path.join(
       VOICE_CONFIG_PATH,
@@ -36,9 +37,9 @@ export default class GoogleCloudSTTParser extends STTParserBase {
     }
   }
 
-  /**
+  /!**
    * Read audio buffer and return the transcript (decoded string)
-   */
+   *!/
   public async parse(buffer: Buffer): Promise<string | null> {
     if (this.client) {
       const audioBytes = buffer.toString('base64')
@@ -68,3 +69,4 @@ export default class GoogleCloudSTTParser extends STTParserBase {
     return null
   }
 }
+*/

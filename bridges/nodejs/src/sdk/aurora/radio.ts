@@ -1,4 +1,4 @@
-import { type RadioProps } from '@leon-ai/aurora'
+import { type RadioProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

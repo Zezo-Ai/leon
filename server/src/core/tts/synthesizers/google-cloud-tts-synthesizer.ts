@@ -1,3 +1,4 @@
+/*
 import path from 'node:path'
 import fs from 'node:fs'
 
@@ -97,3 +98,4 @@ export default class GoogleCloudTTSSynthesizer extends TTSSynthesizerBase {
     return null
   }
 }
+*/

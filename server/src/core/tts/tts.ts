@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import type { ShortLanguageCode } from '@/types'
 import type { TTSSynthesizer } from '@/core/tts/types'
 import { BRAIN, SOCKET_SERVER } from '@/core'
-import { SERVER_CORE_PATH, TTS_PROVIDER, VOICE_CONFIG_PATH } from '@/constants'
+import { SERVER_CORE_PATH, TTS_PROVIDER } from '@/constants'
 import { TTSSynthesizers, TTSProviders } from '@/core/tts/types'
 import { LogHelper } from '@/helpers/log-helper'
 import { LangHelper } from '@/helpers/lang-helper'
@@ -17,11 +17,11 @@ interface Speech {
 }
 
 const PROVIDERS_MAP = {
-  [TTSProviders.Local]: TTSSynthesizers.Local,
-  [TTSProviders.GoogleCloudTTS]: TTSSynthesizers.GoogleCloudTTS,
-  [TTSProviders.WatsonTTS]: TTSSynthesizers.WatsonTTS,
-  [TTSProviders.AmazonPolly]: TTSSynthesizers.AmazonPolly,
-  [TTSProviders.Flite]: TTSSynthesizers.Flite
+  [TTSProviders.Local]: TTSSynthesizers.Local
+  // [TTSProviders.GoogleCloudTTS]: TTSSynthesizers.GoogleCloudTTS,
+  // [TTSProviders.WatsonTTS]: TTSSynthesizers.WatsonTTS,
+  // [TTSProviders.AmazonPolly]: TTSSynthesizers.AmazonPolly,
+  // [TTSProviders.Flite]: TTSSynthesizers.Flite
 }
 
 export default class TTS {
@@ -59,7 +59,7 @@ export default class TTS {
       return false
     }
 
-    if (
+    /*if (
       TTS_PROVIDER === TTSProviders.GoogleCloudTTS &&
       typeof process.env['GOOGLE_APPLICATION_CREDENTIALS'] === 'undefined'
     ) {
@@ -76,7 +76,7 @@ export default class TTS {
       LogHelper.warning(
         `The "GOOGLE_APPLICATION_CREDENTIALS" env variable is already settled with the following value: "${process.env['GOOGLE_APPLICATION_CREDENTIALS']}"`
       )
-    }
+    }*/
 
     try {
       // Dynamically attribute the synthesizer
@@ -175,9 +175,9 @@ export default class TTS {
      * Flite fix. When the string is only one word,
      * Flite cannot save to a file. So we add a space at the end of the string
      */
-    if (TTS_PROVIDER === TTSProviders.Flite && text.indexOf(' ') === -1) {
+    /*if (TTS_PROVIDER === TTSProviders.Flite && text.indexOf(' ') === -1) {
       text += ' '
-    }
+    }*/
 
     const speech = { text, isFinalAnswer }
 

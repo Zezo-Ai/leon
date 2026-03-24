@@ -557,30 +557,27 @@ export default class OpenCodeTool extends Tool {
    */
   private async parseAuroraInterface(componentName: string): Promise<string> {
     try {
-      // Find the Aurora package in node_modules
-      const auroraPackagePath = path.join(
+      // Read Aurora source directly from Leon's vendored codebase.
+      const auroraSourcePath = path.join(
         process.cwd(),
-        'node_modules',
-        '@leon-ai',
         'aurora',
-        'dist',
         'src',
         'components'
       )
 
-      // Try different possible paths (some components are in subdirs like 'lists')
+      // Try different possible paths (some components are in subdirs like 'lists').
       const possiblePaths = [
-        path.join(auroraPackagePath, componentName, `${componentName}.d.ts`),
+        path.join(auroraSourcePath, componentName, `${componentName}.tsx`),
         path.join(
-          auroraPackagePath,
+          auroraSourcePath,
           'lists',
           componentName,
-          `${componentName}.d.ts`
+          `${componentName}.tsx`
         ),
         path.join(
-          auroraPackagePath,
+          auroraSourcePath,
           componentName.replace('-', '_'),
-          `${componentName}.d.ts`
+          `${componentName.replace('-', '_')}.tsx`
         )
       ]
 

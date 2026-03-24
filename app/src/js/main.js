@@ -1,5 +1,5 @@
 import axios from 'axios'
-import '@leon-ai/aurora/style.css'
+import '@aurora/style.css'
 
 window.leonInitStatusEvent = new EventTarget()
 

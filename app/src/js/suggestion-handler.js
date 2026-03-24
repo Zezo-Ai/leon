@@ -1,6 +1,7 @@
 import { createElement } from 'react'
 import { createRoot } from 'react-dom/client'
-import { WidgetWrapper, List, ListHeader, ListItem } from '@leon-ai/aurora'
+
+import { WidgetWrapper, List, ListHeader, ListItem } from '@aurora'
 
 export default function handleSuggestions(data, chatbot, client) {
   const container = document.createElement('div')

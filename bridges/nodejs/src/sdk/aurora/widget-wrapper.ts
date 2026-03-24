@@ -1,4 +1,4 @@
-import { type WidgetWrapperProps } from '@leon-ai/aurora'
+import { type WidgetWrapperProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

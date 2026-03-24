@@ -1,4 +1,4 @@
-import { type RangeSliderProps } from '@leon-ai/aurora'
+import { type RangeSliderProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

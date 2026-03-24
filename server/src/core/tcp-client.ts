@@ -69,8 +69,6 @@ export default class TCPClient {
        */
       if (strChunk.includes('"topic": "asr-')) {
         if (STT_PROVIDER === STTProviders.Local) {
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-expect-error
           STT.parser?.parse(strChunk)
         }
       } else {

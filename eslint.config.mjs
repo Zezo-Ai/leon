@@ -21,7 +21,7 @@ const compat = new FlatCompat({
 
 export default [
   {
-    ignores: ['**/*.spec.js']
+    ignores: ['**/*.spec.js', 'aurora/dist/**']
   },
   ...fixupConfigRules(
     compat.extends(

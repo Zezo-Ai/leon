@@ -1,3 +1,4 @@
+/*
 import type { Stream } from 'node:stream'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -97,3 +98,4 @@ export default class AmazonPollySynthesizer extends TTSSynthesizerBase {
     return null
   }
 }
+*/

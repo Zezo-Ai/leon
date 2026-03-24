@@ -1,4 +1,4 @@
-import { type TextProps } from '@leon-ai/aurora'
+import { type TextProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

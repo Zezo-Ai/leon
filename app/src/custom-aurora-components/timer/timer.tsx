@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { CircularProgress, Flexbox, Text } from '@leon-ai/aurora'
+import { CircularProgress, Flexbox, Text } from '@aurora'
 
 interface TimerProps {
   initialTime: number
