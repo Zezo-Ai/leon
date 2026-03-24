@@ -5,7 +5,7 @@
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
-    "url": "https://twitter.com/grenlouis"
+    "url": "https://x.com/grenlouis"
   },
   "license": "MIT",
   "homepage": "https://getleon.ai",
@@ -18,8 +18,7 @@
     "url": "https://github.com/leon-ai/leon/issues"
   },
   "engines": {
-    "node": ">=24.0.0",
-    "npm": ">=11.3.0"
+    "node": ">=24.0.0"
   },
   "volta": {
     "node": "24.13.1"
@@ -30,7 +29,7 @@
   "scripts": {
     "pre-commit": "lint-staged",
     "lint": "tsx scripts/lint.js",
-    "test": "npm run test:agent:unit && npm run test:workflow:unit && npm run test:workflow:e2e",
+    "test": "pnpm run test:agent:unit && pnpm run test:workflow:unit && pnpm run test:workflow:e2e",
     "test:agent:unit": "cross-env LEON_NODE_ENV=testing tsx scripts/run-agent-vitest.ts unit",
     "test:agent:e2e": "cross-env LEON_NODE_ENV=testing tsx scripts/run-agent-vitest.ts e2e",
     "test:workflow:unit": "cross-env LEON_NODE_ENV=testing vitest run --config vitest.config.ts test/workflow/unit",
@@ -42,17 +41,17 @@
     "preinstall": "node scripts/setup/preinstall.js",
     "postinstall": "tsx scripts/setup/setup.js",
     "dev:app": "vite --config app/vite.config.js",
-    "dev:server": "npm --loglevel=error run train && cross-env LEON_NODE_ENV=development nodemon",
-    "dev:server:no-lint": "npm --loglevel=error run train && cross-env LEON_NODE_ENV=development nodemon --config nodemon.nolint.json",
+    "dev:server": "pnpm --silent run train && cross-env LEON_NODE_ENV=development nodemon",
+    "dev:server:no-lint": "pnpm --silent run train && cross-env LEON_NODE_ENV=development nodemon --config nodemon.nolint.json",
     "inspect:gpu": "./node_modules/node-llama-cpp/dist/cli/cli.js inspect gpu",
     "wake": "cross-env LEON_HOST=http://localhost LEON_PORT=1337 node hotword/index.js",
     "delete-dist:server": "shx rm -rf ./server/dist",
-    "clean:python-deps": "shx rm -rf ./bridges/python/src/.venv ./tcp_server/src/.venv && npm run postinstall",
+    "clean:python-deps": "shx rm -rf ./bridges/python/src/.venv ./tcp_server/src/.venv && pnpm run postinstall",
     "prepare": "husky",
     "generate:http-api-key": "tsx scripts/generate/run-generate-http-api-key.js",
     "generate:json-schemas": "tsx scripts/generate/run-generate-json-schemas.js",
     "generate:prompt": "tsx scripts/generate/run-generate-prompt.js",
-    "build": "npm run build:app && npm run build:server",
+    "build": "pnpm run build:app && pnpm run build:server",
     "build:app": "cross-env LEON_NODE_ENV=production tsx scripts/app/run-build-app.js",
     "build:server": "tsx scripts/build-server.js",
     "start:tcp-server": "tsx scripts/run-tcp-server.js",
@@ -93,6 +92,7 @@
     "ajv-formats": "2.1.1",
     "axios": "1.6.2",
     "better-sqlite3": "12.6.2",
+    "consola": "3.4.2",
     "cross-env": "7.0.3",
     "dayjs": "1.11.10",
     "dotenv": "16.4.5",
@@ -105,6 +105,7 @@
     "ibm-watson": "6.1.1",
     "node-jq": "6.3.1",
     "node-wav": "0.0.2",
+    "ora": "9.3.0",
     "os-name": "4.0.1",
     "ps-list": "7.2.0",
     "react": "18.3.1",
@@ -142,7 +143,6 @@
     "git-changelog": "2.0.0",
     "globals": "15.12.0",
     "husky": "9.1.7",
-    "inquirer": "12.1.0",
     "json": "11.0.0",
     "lint-staged": "15.1.0",
     "node-llama-cpp": "3.17.1",

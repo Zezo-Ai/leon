@@ -10,8 +10,9 @@ import {
   CMAKE_VERSION
 } from '@/constants'
 import { FileHelper } from '@/helpers/file-helper'
-import { LogHelper } from '@/helpers/log-helper'
 import { SystemHelper } from '@/helpers/system-helper'
+
+import { createSetupStatus } from './setup-status'
 
 /**
  * Download and set up Leon-managed CMake
@@ -71,12 +72,12 @@ export default async function setupCMake() {
     return
   }
 
-  LogHelper.info('Downloading and setting up CMake...')
+  const status = createSetupStatus('Downloading and setting up CMake...').start()
 
   const manifest = readManifest()
 
   if (manifest?.version === CMAKE_VERSION && fs.existsSync(CMAKE_BIN_PATH)) {
-    LogHelper.success(`CMake is already at the latest version (${CMAKE_VERSION})`)
+    status.succeed(`CMake: ${CMAKE_VERSION}`)
 
     return
   }
@@ -86,16 +87,15 @@ export default async function setupCMake() {
   await cleanInstallDirectory()
 
   try {
-    LogHelper.info(`Downloading CMake ${CMAKE_VERSION}...`)
+    status.pause()
 
     await FileHelper.downloadFile(getDownloadURL(), archivePath, {
       cliProgress: true,
       parallelStreams: 3,
       skipExisting: false
     })
-
-    LogHelper.success('CMake downloaded')
-    LogHelper.info('Extracting CMake...')
+    status.text = 'Installing CMake...'
+    status.start()
 
     await FileHelper.extractArchive(archivePath, CMAKE_INSTALL_PATH, {
       stripComponents: 1
@@ -113,9 +113,12 @@ export default async function setupCMake() {
       })
     ])
 
-    LogHelper.success(`CMake ${CMAKE_VERSION} ready`)
+    status.succeed(`CMake: ${CMAKE_VERSION}`)
   } catch (error) {
     await fs.promises.rm(archivePath, { force: true })
+    if (status.isSpinning) {
+      status.fail('Failed to set up CMake')
+    }
     throw new Error(`Failed to set up CMake: ${error}`)
   }
 }

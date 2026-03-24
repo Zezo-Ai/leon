@@ -7,8 +7,9 @@ import {
   NODEJS_BRIDGE_ROOT_PATH,
   PNPM_RUNTIME_BIN_PATH
 } from '@/constants'
-import { LogHelper } from '@/helpers/log-helper'
 import { RuntimeHelper } from '@/helpers/runtime-helper'
+
+import { createSetupStatus } from './setup-status'
 
 const STAMP_FILE_PATH = path.join(
   NODEJS_BRIDGE_ROOT_PATH,
@@ -41,13 +42,13 @@ export default async function setupNodejsBridgeEnv() {
     return
   }
 
+  const status = createSetupStatus('Setting up Node.js bridge...').start()
+
   if (await isSyncCurrent()) {
-    LogHelper.success('Node.js bridge dependencies are up-to-date')
+    status.succeed('Node.js bridge: up-to-date')
 
     return
   }
-
-  LogHelper.info('Syncing Node.js bridge dependencies...')
 
   await command(
     RuntimeHelper.buildShellCommand(PNPM_RUNTIME_BIN_PATH, [
@@ -61,5 +62,5 @@ export default async function setupNodejsBridgeEnv() {
 
   await fs.promises.writeFile(STAMP_FILE_PATH, `${Date.now()}`)
 
-  LogHelper.success('Node.js bridge dependencies synced')
+  status.succeed('Node.js bridge: ready')
 }

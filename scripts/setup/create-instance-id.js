@@ -2,9 +2,12 @@ import fs from 'node:fs'
 
 import { LEON_FILE_PATH } from '@/constants'
 import { Telemetry } from '@/telemetry'
-import { LogHelper } from '@/helpers/log-helper'
+
+import { createSetupStatus } from './setup-status'
 
 export default async () => {
+  const status = createSetupStatus('Checking instance ID...').start()
+
   try {
     const { instanceID, birthDate } = await Telemetry.postInstall()
 
@@ -21,11 +24,11 @@ export default async () => {
         )
       )
 
-      LogHelper.success(`Instance ID created: ${instanceID}`)
+      status.succeed('Instance ID: ready')
     } else {
-      LogHelper.success(`Instance ID already exists: ${instanceID}`)
+      status.succeed('Instance ID: ready')
     }
   } catch (e) {
-    LogHelper.warning(`Failed to create the instance ID: ${e}`)
+    status.warn(`Failed to create the instance ID: ${e}`)
   }
 }

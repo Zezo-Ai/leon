@@ -63,14 +63,22 @@ export class SystemHelper {
     return this.hardwareInspectionLlamaPromise
   }
 
-  private static async resolveLlamaAPI(llama?: Llama): Promise<Llama | null> {
+  private static async resolveLlamaAPI(
+    llama?: Llama,
+    options: { allowCoreImport?: boolean } = {}
+  ): Promise<Llama | null> {
     if (llama) {
       return llama
     }
 
-    const coreLlama = (await import('@/core')).LLM_MANAGER.llama as Llama | null
-    if (coreLlama) {
-      return coreLlama
+    if (options.allowCoreImport !== false) {
+      const coreLlama = (await import('@/core')).LLM_MANAGER.llama as
+        | Llama
+        | null
+
+      if (coreLlama) {
+        return coreLlama
+      }
     }
 
     return this.getHardwareInspectionLlama()
@@ -234,8 +242,11 @@ export class SystemHelper {
    * Get the names of the GPU devices on the machine
    * @example getGPUDeviceNames() // ['Apple M1 Pro']
    */
-  public static async getGPUDeviceNames(llama?: Llama): Promise<string[]> {
-    const llamaAPI = await this.resolveLlamaAPI(llama)
+  public static async getGPUDeviceNames(
+    llama?: Llama,
+    options?: { allowCoreImport?: boolean }
+  ): Promise<string[]> {
+    const llamaAPI = await this.resolveLlamaAPI(llama, options)
 
     if (llamaAPI) {
       return llamaAPI.getGpuDeviceNames()
@@ -248,8 +259,11 @@ export class SystemHelper {
    * Check if the machine has a GPU
    * @example hasGPU() // true
    */
-  public static async hasGPU(llama?: Llama): Promise<boolean> {
-    const llamaAPI = await this.resolveLlamaAPI(llama)
+  public static async hasGPU(
+    llama?: Llama,
+    options?: { allowCoreImport?: boolean }
+  ): Promise<boolean> {
+    const llamaAPI = await this.resolveLlamaAPI(llama, options)
 
     if (llamaAPI) {
       return !!llamaAPI.gpu
@@ -263,9 +277,10 @@ export class SystemHelper {
    * @example getGraphicsComputeAPI() // 'cuda'
    */
   public static async getGraphicsComputeAPI(
-    llama?: Llama
+    llama?: Llama,
+    options?: { allowCoreImport?: boolean }
   ): Promise<GraphicsComputeAPIs> {
-    const llamaAPI = await this.resolveLlamaAPI(llama)
+    const llamaAPI = await this.resolveLlamaAPI(llama, options)
 
     if (llamaAPI && llamaAPI.gpu) {
       return llamaAPI.gpu as GraphicsComputeAPIs
@@ -278,8 +293,11 @@ export class SystemHelper {
    * Get the amount of used VRAM (in GB) on the machine
    * @example getUsedVRAM() // 6.04
    */
-  public static async getUsedVRAM(llama?: Llama): Promise<number> {
-    const llamaAPI = await this.resolveLlamaAPI(llama)
+  public static async getUsedVRAM(
+    llama?: Llama,
+    options?: { allowCoreImport?: boolean }
+  ): Promise<number> {
+    const llamaAPI = await this.resolveLlamaAPI(llama, options)
 
     if (llamaAPI) {
       const vramState = await llamaAPI.getVramState()
@@ -294,8 +312,11 @@ export class SystemHelper {
    * Get the total amount of VRAM (in GB) on the machine
    * @example getTotalVRAM() // 12
    */
-  public static async getTotalVRAM(llama?: Llama): Promise<number> {
-    const llamaAPI = await this.resolveLlamaAPI(llama)
+  public static async getTotalVRAM(
+    llama?: Llama,
+    options?: { allowCoreImport?: boolean }
+  ): Promise<number> {
+    const llamaAPI = await this.resolveLlamaAPI(llama, options)
 
     if (llamaAPI) {
       const vramState = await llamaAPI.getVramState()
@@ -310,16 +331,22 @@ export class SystemHelper {
    * Check if the machine can support a local LLM based on total VRAM
    * @example canSupportLocalLLM() // true
    */
-  public static async canSupportLocalLLM(llama?: Llama): Promise<boolean> {
-    return (await this.getTotalVRAM(llama)) >= 6
+  public static async canSupportLocalLLM(
+    llama?: Llama,
+    options?: { allowCoreImport?: boolean }
+  ): Promise<boolean> {
+    return (await this.getTotalVRAM(llama, options)) >= 6
   }
 
   /**
    * Get the amount of free VRAM (in GB) on the machine
    * @example getFreeVRAM() // 6
    */
-  public static async getFreeVRAM(llama?: Llama): Promise<number> {
-    const llamaAPI = await this.resolveLlamaAPI(llama)
+  public static async getFreeVRAM(
+    llama?: Llama,
+    options?: { allowCoreImport?: boolean }
+  ): Promise<number> {
+    const llamaAPI = await this.resolveLlamaAPI(llama, options)
 
     if (llamaAPI) {
       const vramState = await llamaAPI.getVramState()

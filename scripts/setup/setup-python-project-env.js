@@ -7,9 +7,10 @@ import {
   PYTHON_RUNTIME_BIN_PATH,
   UV_RUNTIME_BIN_PATH
 } from '@/constants'
-import { LogHelper } from '@/helpers/log-helper'
 import { RuntimeHelper } from '@/helpers/runtime-helper'
 import { SystemHelper } from '@/helpers/system-helper'
+
+import { createSetupStatus } from './setup-status'
 
 const PYPROJECT_FILE_NAME = 'pyproject.toml'
 
@@ -86,23 +87,23 @@ export async function setupPythonProjectEnv({
   projectPath,
   stampFileName
 }) {
+  const status = createSetupStatus(`Setting up ${name} dependencies...`).start()
   const pyprojectPath = path.join(projectPath, PYPROJECT_FILE_NAME)
   const stampPath = path.join(projectPath, stampFileName)
   const venvPath = path.join(projectPath, '.venv')
 
   if (!fs.existsSync(pyprojectPath)) {
+    status.pause()
     return
   }
 
   if (await isSyncCurrent(projectPath, stampFileName)) {
-    LogHelper.success(`${name} dependencies are up-to-date`)
+    status.succeed(`${name}: up-to-date`)
 
     return
   }
 
   const dependencies = await getPyprojectDependencies(projectPath)
-
-  LogHelper.info(`Syncing ${name} dependencies...`)
 
   await fs.promises.rm(venvPath, { recursive: true, force: true })
 
@@ -137,5 +138,5 @@ export async function setupPythonProjectEnv({
 
   await fs.promises.writeFile(stampPath, `${Date.now()}`)
 
-  LogHelper.success(`${name} dependencies synced`)
+  status.succeed(`${name}: ready`)
 }

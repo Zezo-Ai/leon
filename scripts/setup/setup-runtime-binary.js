@@ -2,8 +2,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { FileHelper } from '@/helpers/file-helper'
-import { LogHelper } from '@/helpers/log-helper'
 import { SystemHelper } from '@/helpers/system-helper'
+
+import { createSetupStatus } from './setup-status'
 
 function readManifest(manifestPath) {
   if (!fs.existsSync(manifestPath)) {
@@ -98,10 +99,11 @@ export async function setupRuntimeBinary({
   downloadURL,
   archiveFileName = null
 }) {
+  const status = createSetupStatus(`Downloading and setting up ${name}...`).start()
   const manifest = readManifest(manifestPath)
 
   if (manifest?.version === version && fs.existsSync(binaryPath)) {
-    LogHelper.success(`${name} is already at the latest version (${version})`)
+    status.succeed(`${name}: ${version}`)
 
     return
   }
@@ -109,7 +111,7 @@ export async function setupRuntimeBinary({
   await cleanInstallDirectory(basePath)
 
   try {
-    LogHelper.info(`Downloading ${name} ${version}...`)
+    status.pause()
 
     if (archiveFileName) {
       const archivePath = path.join(basePath, archiveFileName)
@@ -123,9 +125,8 @@ export async function setupRuntimeBinary({
           parallelStreams: 3,
           skipExisting: false
         })
-
-        LogHelper.success(`${name} downloaded`)
-        LogHelper.info(`Extracting ${name}...`)
+        status.text = `Installing ${name}...`
+        status.start()
 
         await FileHelper.extractArchive(archivePath, extractionPath)
 
@@ -146,6 +147,8 @@ export async function setupRuntimeBinary({
         parallelStreams: 3,
         skipExisting: false
       })
+      status.text = `Finalizing ${name}...`
+      status.start()
     }
 
     if (!SystemHelper.isWindows()) {
@@ -161,8 +164,12 @@ export async function setupRuntimeBinary({
       architecture: SystemHelper.getInformation().cpuArchitecture
     })
 
-    LogHelper.success(`${name} ${version} ready`)
+    status.succeed(`${name}: ${version}`)
   } catch (error) {
+    if (status.isSpinning) {
+      status.fail(`Failed to set up ${name}`)
+    }
+
     throw new Error(`Failed to set up ${name}: ${error}`)
   }
 }

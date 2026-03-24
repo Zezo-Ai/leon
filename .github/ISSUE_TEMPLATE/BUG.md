@@ -15,7 +15,7 @@ If the bug is related to the setup, please submit the issue at: https://github.c
 - Leon version:
 - OS (or browser) version:
 - Node.js version:
-- Complete "leon check" (or "npm run check") output:
+- Complete "leon check" (or "pnpm run check") output:
 - (optional) Leon skill version:
 
 ### Expected Behavior

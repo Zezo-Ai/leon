@@ -23,14 +23,17 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: 16.x
-          cache: npm
+          node-version: 24.x
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
 
       - name: Install
-        run: npm install
+        run: pnpm install
 
       - name: Check setup
-        run: npm run check
+        run: pnpm run check
 
       - name: Build
-        run: npm run build
+        run: pnpm run build

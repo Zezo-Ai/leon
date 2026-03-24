@@ -1,7 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { LogHelper } from '@/helpers/log-helper'
 import {
   domainSchemaObject,
   skillSchemaObject,
@@ -20,6 +19,8 @@ import {
   googleCloudVoiceConfiguration,
   watsonVoiceConfiguration
 } from '@/schemas/voice-config-schemas'
+
+import { createSetupStatus } from '../setup/setup-status'
 
 /**
  * Generate JSON schemas
@@ -49,7 +50,7 @@ export const generateSchemas = async (categoryName, schemas) => {
 }
 
 export default async () => {
-  LogHelper.info('Generating the JSON schemas...')
+  const status = createSetupStatus('Generating JSON schemas...').start()
 
   await Promise.all([
     generateSchemas(
@@ -88,5 +89,5 @@ export default async () => {
     )
   ])
 
-  LogHelper.success('JSON schemas generated')
+  status.succeed('JSON schemas: ready')
 }

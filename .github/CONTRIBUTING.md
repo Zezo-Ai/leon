@@ -34,7 +34,7 @@ Here are few examples about how you could help on Leon, by:
   To do so, you can run:
 
   ```sh
-  npm run lint
+  pnpm run lint
   ```
 
 - Make sure your **code passes the tests**. You can run the tests via the following command:
@@ -65,16 +65,16 @@ git clone https://github.com/leon-ai/leon.git leon
 cd leon
 
 # Install
-npm install
+pnpm install
 
 # Check the setup went well
-npm run check
+pnpm run check
 
 # Run the development server
-npm run dev:server
+pnpm run dev:server
 
 # Run the development web app
-npm run dev:app
+pnpm run dev:app
 ```
 
 ## Versioning

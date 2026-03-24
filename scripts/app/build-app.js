@@ -5,13 +5,14 @@ import { LogHelper } from '@/helpers/log-helper'
 /**
  * Build web app
  */
-export default () =>
-  new Promise(async (resolve) => {
-    await command('vite --config app/vite.config.js build', {
-      shell: true,
-      stdout: 'inherit'
-    })
+export default async function buildApp(options = {}) {
+  const { quiet = false } = options
 
-    LogHelper.success('Web app built')
-    resolve()
+  await command('vite build --config app/vite.config.js', {
+    stdio: quiet ? 'ignore' : 'inherit'
   })
+
+  if (!quiet) {
+    LogHelper.success('Web app built')
+  }
+}

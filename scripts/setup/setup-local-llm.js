@@ -1,7 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { CPUArchitectures } from '@/types'
 import {
   LLM_DIR_PATH,
   LLM_MANIFEST_PATH,
@@ -9,10 +8,11 @@ import {
   LLM_MINIMUM_TOTAL_VRAM,
   LLAMACPP_RELEASE_VERSION
 } from '@/constants'
-import { SystemHelper } from '@/helpers/system-helper'
-import { LogHelper } from '@/helpers/log-helper'
 import { FileHelper } from '@/helpers/file-helper'
 import { NetworkHelper } from '@/helpers/network-helper'
+
+import inspectLocalAICapability from './local-ai-capability'
+import { createSetupStatus } from './setup-status'
 
 /**
  * Download and set up the default local LLM
@@ -40,6 +40,7 @@ const DEFAULT_LLM_OPTIONS = [
       'https://huggingface.co/HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive/resolve/main/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf?download=true'
   }
 ]
+const LOCAL_AI_CHECK_TEXT = 'Checking local AI requirements...'
 
 function readManifest() {
   if (!fs.existsSync(LLM_MANIFEST_PATH)) {
@@ -80,48 +81,6 @@ function getSelectedModel(totalVRAM) {
   )
 }
 
-async function inspectHardware() {
-  const { getLlama, LlamaLogLevel } = await Function(
-    'return import("node-llama-cpp")'
-  )()
-  const llama = await getLlama({
-    logLevel: LlamaLogLevel.disabled
-  })
-
-  const [hasGPU, gpuDeviceNames, graphicsComputeAPI, totalVRAM] =
-    await Promise.all([
-      SystemHelper.hasGPU(llama),
-      SystemHelper.getGPUDeviceNames(llama),
-      SystemHelper.getGraphicsComputeAPI(llama),
-      SystemHelper.getTotalVRAM(llama)
-    ])
-
-  return {
-    llama,
-    hasGPU,
-    gpuDeviceNames,
-    graphicsComputeAPI,
-    totalVRAM
-  }
-}
-
-async function canInstallDefaultLLM(hardware) {
-  if (!hardware.hasGPU) {
-    return false
-  }
-
-  const isLinuxARM64 =
-    SystemHelper.isLinux() &&
-    SystemHelper.getInformation().cpuArchitecture === CPUArchitectures.ARM64
-
-  // Linux ARM64 is only supported when llama.cpp can be built with CUDA.
-  if (isLinuxARM64 && hardware.graphicsComputeAPI !== 'cuda') {
-    return false
-  }
-
-  return SystemHelper.canSupportLocalLLM(hardware.llama)
-}
-
 async function downloadLLM(selectedModel) {
   const manifest = readManifest()
   const targetPath = path.join(LLM_DIR_PATH, selectedModel.fileName)
@@ -133,11 +92,10 @@ async function downloadLLM(selectedModel) {
     fs.existsSync(targetPath)
 
   if (isCurrentModelInstalled) {
-    LogHelper.success(
-      `${selectedModel.name} (${selectedModel.version}) is already set up and uses the latest version`
-    )
-
-    return
+    return {
+      installed: false,
+      targetPath
+    }
   }
 
   await fs.promises.mkdir(LLM_DIR_PATH, { recursive: true })
@@ -146,10 +104,6 @@ async function downloadLLM(selectedModel) {
 
   const llmDownloadURL = await NetworkHelper.setHuggingFaceURL(
     selectedModel.downloadURL
-  )
-
-  LogHelper.info(
-    `Downloading ${selectedModel.name} (${selectedModel.version}) from ${llmDownloadURL}...`
   )
 
   await FileHelper.downloadFile(llmDownloadURL, targetPath)
@@ -164,28 +118,29 @@ async function downloadLLM(selectedModel) {
     }
   )
 
-  LogHelper.success('LLM manifest file updated')
-  LogHelper.success(`${selectedModel.name} (${selectedModel.version}) ready`)
+  return {
+    installed: true,
+    targetPath
+  }
 }
 
-export default async function setupLocalLLM() {
-  LogHelper.info(
-    'Checking local LLM hardware requirements can take a few minutes...'
-  )
+function getLocalAISummary(selectedModel, hardware) {
+  const gpuLabel = hardware.hasGPU ? hardware.gpuDeviceNames[0] : 'CPU'
+  const computeAPILabel = hardware.hasGPU
+    ? String(hardware.graphicsComputeAPI).toUpperCase()
+    : 'CPU'
 
-  const hardware = await inspectHardware()
+  return `${selectedModel.name} (${selectedModel.version}, ${gpuLabel}, ${computeAPILabel}, ${hardware.totalVRAM} GB VRAM)`
+}
 
-  if (hardware.hasGPU) {
-    LogHelper.info(`GPU detected: ${hardware.gpuDeviceNames[0]}`)
-    LogHelper.info(`Graphics compute API: ${hardware.graphicsComputeAPI}`)
-  }
-  LogHelper.info(`Total VRAM: ${hardware.totalVRAM} GB`)
+export default async function setupLocalLLM(localAICapability) {
+  const status = createSetupStatus(LOCAL_AI_CHECK_TEXT).start()
 
-  const canInstall = await canInstallDefaultLLM(hardware)
+  const hardware = localAICapability || (await inspectLocalAICapability())
 
-  if (!canInstall) {
-    LogHelper.warning(
-      `Local LLM support requires at least ${LLM_MINIMUM_TOTAL_VRAM} GB of total VRAM and a supported GPU setup. Current total VRAM is ${hardware.totalVRAM} GB. Leon will continue without installing a default local LLM.`
+  if (!hardware.canInstallLocalAI) {
+    status.succeed(
+      `Local LLM support requires at least ${LLM_MINIMUM_TOTAL_VRAM} GB of total VRAM and a supported GPU setup. Current total VRAM is ${hardware.totalVRAM} GB. I will continue without installing a default local LLM.`
     )
 
     return
@@ -194,12 +149,26 @@ export default async function setupLocalLLM() {
   const selectedModel = getSelectedModel(hardware.totalVRAM)
 
   if (!selectedModel) {
-    LogHelper.warning(
+    status.succeed(
       `No default local LLM matches the current total VRAM (${hardware.totalVRAM} GB).`
     )
 
     return
   }
 
-  await downloadLLM(selectedModel)
+  status.pause()
+
+  const { installed } = await downloadLLM(selectedModel)
+  status.text = 'Finalizing local AI...'
+  status.start()
+
+  if (installed) {
+    status.succeed(
+      `Local AI: ready - ${getLocalAISummary(selectedModel, hardware)}`
+    )
+  } else {
+    status.succeed(
+      `Local AI: ready - ${getLocalAISummary(selectedModel, hardware)}`
+    )
+  }
 }

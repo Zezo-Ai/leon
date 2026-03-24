@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { command } from 'execa'
+import execa from 'execa'
 
 import { CPUArchitectures } from '@/types'
 import {
@@ -17,8 +17,10 @@ import {
   LLAMACPP_RELEASE_VERSION
 } from '@/constants'
 import { FileHelper } from '@/helpers/file-helper'
-import { LogHelper } from '@/helpers/log-helper'
 import { SystemHelper } from '@/helpers/system-helper'
+
+import { createSetupStatus } from './setup-status'
+import { SetupUI } from './setup-ui'
 
 /**
  * Download and set up llama.cpp
@@ -130,9 +132,7 @@ async function isExistingInstallationHealthy(runtimeDirectoryPath) {
   }
 
   try {
-    await command(`"${binaryPath}" --version`, {
-      shell: true
-    })
+    await execa(binaryPath, ['--version'])
 
     return true
   } catch {
@@ -242,8 +242,6 @@ async function downloadAndExtractSourceArchive(sourceArchivePath) {
       removePath(LLAMACPP_SOURCE_PATH)
     ])
 
-    LogHelper.info(`Downloading llama.cpp ${LLAMACPP_RELEASE_VERSION} source...`)
-
     await FileHelper.downloadFile(LLAMACPP_SOURCE_URL, sourceArchivePath, {
       cliProgress: true,
       // Keep the source archive download conservative to avoid corrupted
@@ -252,8 +250,6 @@ async function downloadAndExtractSourceArchive(sourceArchivePath) {
       skipExisting: false
     })
 
-    LogHelper.success('llama.cpp source downloaded')
-    LogHelper.info('Extracting llama.cpp source...')
     await waitForArchiveToSettle(sourceArchivePath)
 
     try {
@@ -267,9 +263,7 @@ async function downloadAndExtractSourceArchive(sourceArchivePath) {
         throw error
       }
 
-      LogHelper.warning(
-        `Failed to extract llama.cpp source archive, retrying download once: ${error}`
-      )
+      await wait(LLAMACPP_SOURCE_ARCHIVE_SETTLE_POLL_DELAY_MS)
     }
   }
 }
@@ -300,13 +294,12 @@ function getPrebuiltAssetName(graphicsComputeAPI, hasGPU) {
   )
 }
 
-async function installPrebuilt(assetName, extraData = {}) {
+async function installPrebuilt(assetName, status, extraData = {}) {
   const archivePath = path.join(LLAMACPP_PATH, assetName)
 
   try {
     await cleanInstallDirectory()
-
-    LogHelper.info(`Downloading llama.cpp ${LLAMACPP_RELEASE_VERSION}...`)
+    status.pause()
 
     await FileHelper.downloadFile(
       `${LLAMACPP_RELEASE_BASE_URL}/${assetName}`,
@@ -317,9 +310,8 @@ async function installPrebuilt(assetName, extraData = {}) {
         skipExisting: false
       }
     )
-
-    LogHelper.success('llama.cpp downloaded')
-    LogHelper.info('Extracting llama.cpp...')
+    status.text = 'Installing llama.cpp...'
+    status.start()
 
     await FileHelper.extractArchive(archivePath, LLAMACPP_BUILD_PATH)
 
@@ -345,14 +337,13 @@ async function installPrebuilt(assetName, extraData = {}) {
         ...extraData
       }
     )
-
-    LogHelper.success(`llama.cpp ${LLAMACPP_RELEASE_VERSION} ready`)
+    status.succeed(`llama.cpp ${LLAMACPP_RELEASE_VERSION} ready`)
   } finally {
     await removePath(archivePath)
   }
 }
 
-async function buildFromSource() {
+async function buildFromSource(status) {
   const sourceArchivePath = path.join(
     LLAMACPP_PATH,
     `llama.cpp-${LLAMACPP_RELEASE_VERSION}.tar.gz`
@@ -361,25 +352,34 @@ async function buildFromSource() {
   try {
     await cleanInstallDirectory()
 
+    status.pause()
     await downloadAndExtractSourceArchive(sourceArchivePath)
-    LogHelper.success('llama.cpp source extracted')
-    LogHelper.info('Building llama.cpp from source...')
+    status.text = 'Building llama.cpp from source...'
+    status.start()
 
     // Always use Leon-managed CMake for the source build.
-    await command(
-      `"${CMAKE_BIN_PATH}" -B build -G Ninja -DCMAKE_MAKE_PROGRAM="${NINJA_BIN_PATH}" -DGGML_CUDA=ON -DLLAMA_BUILD_SERVER=ON -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=native`,
+    await execa(
+      CMAKE_BIN_PATH,
+      [
+        '-B',
+        'build',
+        '-G',
+        'Ninja',
+        `-DCMAKE_MAKE_PROGRAM=${NINJA_BIN_PATH}`,
+        '-DGGML_CUDA=ON',
+        '-DLLAMA_BUILD_SERVER=ON',
+        '-DLLAMA_BUILD_TESTS=OFF',
+        '-DLLAMA_BUILD_EXAMPLES=OFF',
+        '-DCMAKE_BUILD_TYPE=Release',
+        '-DCMAKE_CUDA_ARCHITECTURES=native'
+      ],
       {
-        cwd: LLAMACPP_SOURCE_PATH,
-        shell: true
+        cwd: LLAMACPP_SOURCE_PATH
       }
     )
-    await command(
-      `"${CMAKE_BIN_PATH}" --build build --target llama-server -j`,
-      {
-        cwd: LLAMACPP_SOURCE_PATH,
-        shell: true
-      }
-    )
+    await execa(CMAKE_BIN_PATH, ['--build', 'build', '--target', 'llama-server', '-j'], {
+      cwd: LLAMACPP_SOURCE_PATH
+    })
 
     if (
       !fs.existsSync(getBinaryPath(LLAMACPP_SOURCE_BUILD_PATH))
@@ -400,14 +400,14 @@ async function buildFromSource() {
       }
     )
 
-    LogHelper.success(`llama.cpp ${LLAMACPP_RELEASE_VERSION} ready`)
+    status.succeed(`llama.cpp ${LLAMACPP_RELEASE_VERSION} ready`)
   } finally {
     await removePath(sourceArchivePath)
   }
 }
 
 export default async function setupLlamaCPP() {
-  LogHelper.info('Downloading and setting up llama.cpp...')
+  const status = createSetupStatus('Setting up llama.cpp...').start()
 
   const existingInstallation = readManifest()
   const manifest = existingInstallation?.manifest
@@ -417,9 +417,7 @@ export default async function setupLlamaCPP() {
     manifest?.version === LLAMACPP_RELEASE_VERSION &&
     (await isExistingInstallationHealthy(runtimeDirectoryPath))
   ) {
-    LogHelper.success(
-      `llama.cpp is already at the latest version (${LLAMACPP_RELEASE_VERSION})`
-    )
+    status.succeed(`llama.cpp: ${LLAMACPP_RELEASE_VERSION}`)
 
     return true
   }
@@ -429,9 +427,8 @@ export default async function setupLlamaCPP() {
     runtimeDirectoryPath &&
     fs.existsSync(getBinaryPath(runtimeDirectoryPath))
   ) {
-    LogHelper.warning(
-      'The current llama.cpp installation is corrupted. Reinstalling it...'
-    )
+    status.pause()
+    SetupUI.warning('The current llama.cpp installation looks corrupted. Reinstalling it.')
   }
 
   let hasGPU = false
@@ -448,15 +445,14 @@ export default async function setupLlamaCPP() {
     hasGPU = await SystemHelper.hasGPU(llama)
     graphicsComputeAPI = await SystemHelper.getGraphicsComputeAPI(llama)
   } catch (error) {
-    LogHelper.warning(
-      `Failed to inspect GPU support for llama.cpp setup: ${error}`
-    )
+      status.pause()
+    SetupUI.warning(`Failed to inspect GPU support for llama.cpp setup: ${error}`)
   }
 
   if (SystemHelper.isLinux() && CPU_ARCH === CPUArchitectures.ARM64) {
     // Linux ARM64 only supports the local setup when a CUDA build is possible.
     if (!(hasGPU && graphicsComputeAPI === 'cuda')) {
-      LogHelper.warning(
+      status.succeed(
         'Linux ARM64 local LLM support requires a CUDA GPU. Skipping llama.cpp setup.'
       )
 
@@ -464,11 +460,13 @@ export default async function setupLlamaCPP() {
     }
 
     try {
-      await buildFromSource()
+      await buildFromSource(status)
 
       return true
-    } catch (error) {
-      LogHelper.error(`Failed to build llama.cpp from source: ${error}`)
+    } catch {
+      if (status.isSpinning) {
+        status.fail('Failed to build llama.cpp from source')
+      }
 
       return false
     }
@@ -476,14 +474,14 @@ export default async function setupLlamaCPP() {
 
   if (SystemHelper.isLinux() && hasGPU && graphicsComputeAPI === 'cuda') {
     try {
-      await buildFromSource()
+      await buildFromSource(status)
 
       return true
-    } catch (error) {
-      LogHelper.warning(
-        `Failed to build llama.cpp from source, falling back to Vulkan binaries: ${error}`
+    } catch {
+      SetupUI.warning(
+        'I could not build llama.cpp from source, so I will use the Vulkan binaries instead.'
       )
-      await installPrebuilt(getLinuxVulkanAssetName(), {
+      await installPrebuilt(getLinuxVulkanAssetName(), status, {
         fallbackFromSourceBuild: true
       })
 
@@ -491,7 +489,10 @@ export default async function setupLlamaCPP() {
     }
   }
 
-  await installPrebuilt(getPrebuiltAssetName(graphicsComputeAPI, hasGPU))
+  await installPrebuilt(
+    getPrebuiltAssetName(graphicsComputeAPI, hasGPU),
+    status
+  )
 
   return true
 }

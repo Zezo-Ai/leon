@@ -27,7 +27,7 @@ export class Updater {
         LogHelper.warning(`A new version is available: ${latestVersion}`)
         LogHelper.warning(`Current version: ${this.currentVersion}`)
         LogHelper.warning(
-          `Run the following command to update Leon and benefit from the latest features: "npm install --save @leon-ai/leon@${latestVersion}"`
+          `Run the following command to update Leon and benefit from the latest features: "pnpm add @leon-ai/leon@${latestVersion}"`
         )
 
         SOCKET_SERVER.socket?.emit('new-update', latestVersion)

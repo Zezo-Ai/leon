@@ -1,14 +1,15 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { LogHelper } from '@/helpers/log-helper'
+import { createSetupStatus } from './setup-status'
 
 /**
  * Set up Leon's core configuration
  */
 export default () =>
   new Promise(async (resolve) => {
-    LogHelper.info('Configuring core...')
+    const status = createSetupStatus('Configuring core...').start()
+    let hasUpdatedCoreConfig = false
 
     const dir = 'core/config'
     const list = async (dir) => {
@@ -29,17 +30,14 @@ export default () =>
           fs.createReadStream(`${dir}/${entities[i]}`).pipe(
             fs.createWriteStream(`${dir}/${file}`)
           )
-
-          LogHelper.success(`${file} file created`)
-        } else if (
-          entities[i].indexOf('.sample.json') !== -1 &&
-          fs.existsSync(`${dir}/${file}`)
-        ) {
-          LogHelper.success(`${file} already exists`)
+          hasUpdatedCoreConfig = true
         }
       }
     }
 
     await list(dir)
+    status.succeed(
+      hasUpdatedCoreConfig ? 'Core: updated' : 'Core: ready'
+    )
     resolve()
   })

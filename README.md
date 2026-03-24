@@ -158,22 +158,25 @@ To install these prerequisites, you can follow the [How To section](https://docs
 ### Installation
 
 ```sh
-# Install the Leon CLI
-npm install --global @leon-ai/cli
+# Clone the repository
+git clone https://github.com/leon-ai/leon.git
 
-# Install Leon (stable branch)
-leon create birth
-# OR install from the develop branch: leon create birth --develop
+# Go to the project root
+cd leon
+
+# Install pnpm
+npm install --global pnpm@latest
+
+# Install dependencies and run Leon
+pnpm install
+pnpm start
 ```
 
 ### Usage
 
 ```sh
 # Check the setup went well
-leon check
-
-# Run
-leon start
+pnpm run check
 
 # Go to http://localhost:1337
 # Hooray! Leon is running

@@ -2,9 +2,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { homedir } from 'node:os'
 
-import { LogHelper } from '@/helpers/log-helper'
 import { FileHelper } from '@/helpers/file-helper'
 import { NetworkHelper } from '@/helpers/network-helper'
+
+import { createSetupStatus } from './setup-status'
 
 const QMD_MODELS_DIR_PATH = path.join(homedir(), '.cache', 'qmd', 'models')
 
@@ -39,40 +40,53 @@ async function downloadModel(model) {
   const legacyPath = path.join(QMD_MODELS_DIR_PATH, legacyFilename)
 
   if (fs.existsSync(destinationPath)) {
-    LogHelper.success(`${model.filename} is already downloaded`)
-    return
+    return 'existing'
   }
 
   if (legacyFilename !== model.filename && fs.existsSync(legacyPath)) {
     await fs.promises.rename(legacyPath, destinationPath)
-    LogHelper.success(
-      `Renamed ${legacyFilename} to ${model.filename}`
-    )
-    return
+
+    return 'renamed'
   }
 
   const resolvedURL = await NetworkHelper.setHuggingFaceURL(model.url)
 
-  LogHelper.info(`Downloading ${model.filename}...`)
   await FileHelper.downloadFile(resolvedURL, destinationPath)
-  LogHelper.success(`${model.filename} downloaded at ${destinationPath}`)
+
+  return 'downloaded'
 }
 
 export default async () => {
-  try {
-    LogHelper.info('Checking QMD models...')
+  const status = createSetupStatus('Checking QMD models...').start()
 
+  try {
     await fs.promises.mkdir(QMD_MODELS_DIR_PATH, {
       recursive: true
     })
 
+    status.pause()
+    let downloadedModelCount = 0
+
     for (const model of QMD_MODELS) {
-      await downloadModel(model)
+      const modelState = await downloadModel(model)
+
+      if (modelState === 'downloaded') {
+        downloadedModelCount += 1
+      }
     }
 
-    LogHelper.success('QMD models are ready')
+    status.text = 'Finalizing QMD models...'
+    status.start()
+
+    status.succeed(
+      downloadedModelCount > 0
+        ? `QMD models: ready - ${downloadedModelCount} downloaded`
+        : 'QMD models: ready'
+    )
   } catch (e) {
-    LogHelper.error(`Failed to set up QMD models: ${e}`)
-    process.exit(1)
+    if (status.isSpinning) {
+      status.fail('Failed to set up QMD models')
+    }
+    throw e
   }
 }

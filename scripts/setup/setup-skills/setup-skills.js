@@ -1,7 +1,8 @@
 import path from 'node:path'
 
-import { LogHelper } from '@/helpers/log-helper'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
+
+import { createSetupStatus } from '../setup-status'
 
 import setupSkillsSettings from './setup-skills-settings'
 import syncSkillDependencies from './sync-skill-dependencies'
@@ -10,7 +11,7 @@ import syncSkillDependencies from './sync-skill-dependencies'
  * Browse skills and set them up
  */
 export default async function () {
-  LogHelper.info('Setting up skills...')
+  const status = createSetupStatus('Setting up skills...').start()
 
   try {
     const skillNames = await SkillDomainHelper.listSkillFolders()
@@ -28,16 +29,13 @@ export default async function () {
         bridge: currentSkill.bridge
       }
 
-      LogHelper.info(`Setting up "${skillName}" skill...`)
-
       await setupSkillsSettings(skillName, skillContext)
       await syncSkillDependencies(skillName, skillContext)
-
-      LogHelper.success(`"${skillName}" skill set up`)
     }
 
-    LogHelper.success('Skills are set up')
+    status.succeed('Skills: ready')
   } catch (e) {
-    LogHelper.error(`Failed to set up skills: ${e}`)
+    status.fail('Failed to set up skills')
+    throw e
   }
 }

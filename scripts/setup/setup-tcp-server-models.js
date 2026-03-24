@@ -11,9 +11,10 @@ import {
   PYTHON_TCP_SERVER_ASR_MODEL_HF_PREFIX_DOWNLOAD_URL,
   PYTHON_TCP_SERVER_TTS_BERT_BASE_MODEL_HF_PREFIX_DOWNLOAD_URL
 } from '@/constants'
-import { LogHelper } from '@/helpers/log-helper'
 import { FileHelper } from '@/helpers/file-helper'
 import { NetworkHelper } from '@/helpers/network-helper'
+
+import { createSetupStatus } from './setup-status'
 
 const ASR_MODEL_FILES = [
   'model.bin',
@@ -37,52 +38,23 @@ const TTS_BERT_BASE_MODEL_FILES = [
 ]
 
 async function installTTSModel() {
-  try {
-    LogHelper.info('Installing TTS model...')
+  const destPath = PYTHON_TCP_SERVER_TTS_MODEL_PATH
+  const pythonTCPServerTTSModelDownloadURL = await NetworkHelper.setHuggingFaceURL(
+    PYTHON_TCP_SERVER_TTS_MODEL_HF_DOWNLOAD_URL
+  )
 
-    const destPath = PYTHON_TCP_SERVER_TTS_MODEL_PATH
-
-    LogHelper.info('Downloading TTS model...')
-
-    const pythonTCPServerTTSModelDownloadURL =
-      await NetworkHelper.setHuggingFaceURL(
-        PYTHON_TCP_SERVER_TTS_MODEL_HF_DOWNLOAD_URL
-      )
-
-    await FileHelper.downloadFile(pythonTCPServerTTSModelDownloadURL, destPath)
-
-    LogHelper.success(`TTS model downloaded at ${destPath}`)
-  } catch (e) {
-    LogHelper.error(`Failed to install TTS model: ${e}`)
-    process.exit(1)
-  }
+  await FileHelper.downloadFile(pythonTCPServerTTSModelDownloadURL, destPath)
 }
 async function installASRModel() {
-  try {
-    LogHelper.info('Installing ASR model...')
-
-    for (const modelFile of ASR_MODEL_FILES) {
-      const pythonTCPServerASRModelDownloadURL =
-        await NetworkHelper.setHuggingFaceURL(
-          PYTHON_TCP_SERVER_ASR_MODEL_HF_PREFIX_DOWNLOAD_URL
-        )
-      const modelInstallationFileURL = `${pythonTCPServerASRModelDownloadURL}/${modelFile}?download=true`
-      const destPath = path.join(
-        PYTHON_TCP_SERVER_ASR_MODEL_DIR_PATH,
-        modelFile
+  for (const modelFile of ASR_MODEL_FILES) {
+    const pythonTCPServerASRModelDownloadURL =
+      await NetworkHelper.setHuggingFaceURL(
+        PYTHON_TCP_SERVER_ASR_MODEL_HF_PREFIX_DOWNLOAD_URL
       )
+    const modelInstallationFileURL = `${pythonTCPServerASRModelDownloadURL}/${modelFile}?download=true`
+    const destPath = path.join(PYTHON_TCP_SERVER_ASR_MODEL_DIR_PATH, modelFile)
 
-      LogHelper.info(`Downloading ${modelFile}...`)
-
-      await FileHelper.downloadFile(modelInstallationFileURL, destPath)
-
-      LogHelper.success(`${modelFile} downloaded at ${destPath}`)
-    }
-
-    LogHelper.success('ASR model installed')
-  } catch (e) {
-    LogHelper.error(`Failed to install ASR model: ${e}`)
-    process.exit(1)
+    await FileHelper.downloadFile(modelInstallationFileURL, destPath)
   }
 }
 /*async function installTTSBERTFrenchModel() {
@@ -110,52 +82,56 @@ async function installASRModel() {
   }
 }*/
 async function installTTSBERTBaseModel() {
-  try {
-    LogHelper.info('Installing TTS BERT base model...')
-
-    for (const modelFile of TTS_BERT_BASE_MODEL_FILES) {
-      const pythonTCPServerTTSBERTBaseModelPrefixDownloadURL =
-        await NetworkHelper.setHuggingFaceURL(
-          PYTHON_TCP_SERVER_TTS_BERT_BASE_MODEL_HF_PREFIX_DOWNLOAD_URL
-        )
-      const modelInstallationFileURL = `${pythonTCPServerTTSBERTBaseModelPrefixDownloadURL}/${modelFile}?download=true`
-      const destPath = path.join(
-        PYTHON_TCP_SERVER_TTS_BERT_BASE_DIR_PATH,
-        modelFile
+  for (const modelFile of TTS_BERT_BASE_MODEL_FILES) {
+    const pythonTCPServerTTSBERTBaseModelPrefixDownloadURL =
+      await NetworkHelper.setHuggingFaceURL(
+        PYTHON_TCP_SERVER_TTS_BERT_BASE_MODEL_HF_PREFIX_DOWNLOAD_URL
       )
+    const modelInstallationFileURL = `${pythonTCPServerTTSBERTBaseModelPrefixDownloadURL}/${modelFile}?download=true`
+    const destPath = path.join(PYTHON_TCP_SERVER_TTS_BERT_BASE_DIR_PATH, modelFile)
 
-      LogHelper.info(`Downloading ${modelFile}...`)
-
-      await FileHelper.downloadFile(modelInstallationFileURL, destPath)
-
-      LogHelper.success(`${modelFile} downloaded at ${destPath}`)
-    }
-
-    LogHelper.success('TTS BERT base model installed')
-  } catch (e) {
-    LogHelper.error(`Failed to install TTS BERT base model: ${e}`)
-    process.exit(1)
+    await FileHelper.downloadFile(modelInstallationFileURL, destPath)
   }
 }
 
-export default async () => {
-  LogHelper.info(
-    'Checking whether TTS BERT base language model files are downloaded...'
-  )
-  const areTTSBERTBaseFilesDownloaded = fs.existsSync(
-    path.join(
-      PYTHON_TCP_SERVER_TTS_BERT_BASE_DIR_PATH,
-      TTS_BERT_BASE_MODEL_FILES[TTS_BERT_BASE_MODEL_FILES.length - 1]
-    )
-  )
-  if (!areTTSBERTBaseFilesDownloaded) {
-    LogHelper.info('TTS BERT base language model files not downloaded')
-    await installTTSBERTBaseModel()
-  } else {
-    LogHelper.success(
-      'TTS BERT base language model files are already downloaded'
-    )
+async function ensureModel({
+  checkText,
+  installText,
+  successText,
+  isInstalled,
+  install
+}) {
+  const status = createSetupStatus(checkText).start()
+
+  if (isInstalled()) {
+    status.succeed(successText)
+    return
   }
+
+  status.pause()
+
+  await install()
+
+  status.text = installText
+  status.start()
+
+  status.succeed(successText)
+}
+
+export default async () => {
+  await ensureModel({
+    checkText: 'Checking voice language model files...',
+    installText: 'Installing voice language model files...',
+    successText: 'Voice language model files: ready',
+    isInstalled: () =>
+      fs.existsSync(
+        path.join(
+          PYTHON_TCP_SERVER_TTS_BERT_BASE_DIR_PATH,
+          TTS_BERT_BASE_MODEL_FILES[TTS_BERT_BASE_MODEL_FILES.length - 1]
+        )
+      ),
+    install: installTTSBERTBaseModel
+  })
 
   // TODO: later when multiple languages are supported
   /*LogHelper.info(
@@ -176,27 +152,25 @@ export default async () => {
     )
   }*/
 
-  LogHelper.info('Checking whether the TTS model is installed...')
-  const isTTSModelInstalled = fs.existsSync(PYTHON_TCP_SERVER_TTS_MODEL_PATH)
-  if (!isTTSModelInstalled) {
-    LogHelper.info('TTS model is not installed')
-    await installTTSModel()
-  } else {
-    LogHelper.success('TTS model is already installed')
-  }
+  await ensureModel({
+    checkText: 'Checking TTS model...',
+    installText: 'Installing TTS model...',
+    successText: 'TTS model: ready',
+    isInstalled: () => fs.existsSync(PYTHON_TCP_SERVER_TTS_MODEL_PATH),
+    install: installTTSModel
+  })
 
-  LogHelper.info('Checking whether the ASR model is installed...')
-  // Check if model.bin file exists in directory (last file in the list)
-  const isASRModelInstalled = fs.existsSync(
-    path.join(
-      PYTHON_TCP_SERVER_ASR_MODEL_DIR_PATH,
-      ASR_MODEL_FILES[ASR_MODEL_FILES.length - 1]
-    )
-  )
-  if (!isASRModelInstalled) {
-    LogHelper.info('ASR model is not installed')
-    await installASRModel()
-  } else {
-    LogHelper.success('ASR model is already installed')
-  }
+  await ensureModel({
+    checkText: 'Checking ASR model...',
+    installText: 'Installing ASR model...',
+    successText: 'ASR model: ready',
+    isInstalled: () =>
+      fs.existsSync(
+        path.join(
+          PYTHON_TCP_SERVER_ASR_MODEL_DIR_PATH,
+          ASR_MODEL_FILES[ASR_MODEL_FILES.length - 1]
+        )
+      ),
+    install: installASRModel
+  })
 }

@@ -8,7 +8,6 @@ import {
   PYTHON_RUNTIME_BIN_PATH,
   UV_RUNTIME_BIN_PATH
 } from '@/constants'
-import { LogHelper } from '@/helpers/log-helper'
 import { RuntimeHelper } from '@/helpers/runtime-helper'
 
 import { getPyprojectDependencies } from '../setup-python-project-env'
@@ -73,16 +72,8 @@ const syncNodejsSkillDependencies = async (skillFriendlyName, skillPath) => {
   }
 
   if (await isSyncCurrent(skillPath, packageJSONPath)) {
-    LogHelper.success(
-      `"${skillFriendlyName}" skill dependencies are up-to-date`
-    )
-
     return
   }
-
-  LogHelper.info(
-    `Syncing dependencies for the "${skillFriendlyName}" skill...`
-  )
 
   await fs.promises.mkdir(runtimePath, { recursive: true })
   await fs.promises.rm(nodeModulesPath, { recursive: true, force: true })
@@ -100,8 +91,6 @@ const syncNodejsSkillDependencies = async (skillFriendlyName, skillPath) => {
   )
 
   await markSkillDependenciesAsSynced(skillPath)
-
-  LogHelper.success(`"${skillFriendlyName}" skill dependencies synced`)
 }
 
 /**
@@ -136,16 +125,8 @@ const syncPythonSkillDependencies = async (skillFriendlyName, skillPath) => {
   }
 
   if (await isSyncCurrent(skillPath, manifestPath)) {
-    LogHelper.success(
-      `"${skillFriendlyName}" skill dependencies are up-to-date`
-    )
-
     return
   }
-
-  LogHelper.info(
-    `Syncing dependencies for the "${skillFriendlyName}" skill...`
-  )
 
   const runtimePath = RuntimeHelper.getSkillRuntimePath(skillPath)
   const vendorPath = RuntimeHelper.getPythonSkillRuntimeVendorPath(skillPath)
@@ -160,8 +141,6 @@ const syncPythonSkillDependencies = async (skillFriendlyName, skillPath) => {
   }
 
   await markSkillDependenciesAsSynced(skillPath)
-
-  LogHelper.success(`"${skillFriendlyName}" skill dependencies synced`)
 }
 
 /**

@@ -10,8 +10,9 @@ import {
   NINJA_VERSION
 } from '@/constants'
 import { FileHelper } from '@/helpers/file-helper'
-import { LogHelper } from '@/helpers/log-helper'
 import { SystemHelper } from '@/helpers/system-helper'
+
+import { createSetupStatus } from './setup-status'
 
 /**
  * Download and set up Leon-managed Ninja
@@ -71,12 +72,12 @@ export default async function setupNinja() {
     return
   }
 
-  LogHelper.info('Downloading and setting up Ninja...')
+  const status = createSetupStatus('Downloading and setting up Ninja...').start()
 
   const manifest = readManifest()
 
   if (manifest?.version === NINJA_VERSION && fs.existsSync(NINJA_BIN_PATH)) {
-    LogHelper.success(`Ninja is already at the latest version (${NINJA_VERSION})`)
+    status.succeed(`Ninja: ${NINJA_VERSION}`)
 
     return
   }
@@ -86,16 +87,15 @@ export default async function setupNinja() {
   await cleanInstallDirectory()
 
   try {
-    LogHelper.info(`Downloading Ninja ${NINJA_VERSION}...`)
+    status.pause()
 
     await FileHelper.downloadFile(getDownloadURL(), archivePath, {
       cliProgress: true,
       parallelStreams: 3,
       skipExisting: false
     })
-
-    LogHelper.success('Ninja downloaded')
-    LogHelper.info('Extracting Ninja...')
+    status.text = 'Installing Ninja...'
+    status.start()
 
     await FileHelper.extractArchive(archivePath, NINJA_INSTALL_PATH)
     await fs.promises.chmod(NINJA_BIN_PATH, 0o755)
@@ -112,9 +112,12 @@ export default async function setupNinja() {
       })
     ])
 
-    LogHelper.success(`Ninja ${NINJA_VERSION} ready`)
+    status.succeed(`Ninja: ${NINJA_VERSION}`)
   } catch (error) {
     await fs.promises.rm(archivePath, { force: true })
+    if (status.isSpinning) {
+      status.fail('Failed to set up Ninja')
+    }
     throw new Error(`Failed to set up Ninja: ${error}`)
   }
 }

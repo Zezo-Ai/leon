@@ -23,17 +23,20 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: 16.x
-          cache: npm
+          node-version: 24.x
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
 
       - name: Install
-        run: npm install
+        run: pnpm install
 
       - name: Run agent unit tests
-        run: npm run test:agent:unit
+        run: pnpm run test:agent:unit
 
       - name: Run workflow unit tests
-        run: npm run test:workflow:unit
+        run: pnpm run test:workflow:unit
 
       - name: Run workflow e2e tests
-        run: npm run test:workflow:e2e
+        run: pnpm run test:workflow:e2e

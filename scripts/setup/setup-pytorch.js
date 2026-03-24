@@ -11,10 +11,12 @@ import {
 } from '@/constants'
 import { FileHelper } from '@/helpers/file-helper'
 import { SystemHelper } from '@/helpers/system-helper'
-import { LogHelper } from '@/helpers/log-helper'
+
+import { createSetupStatus } from './setup-status'
 
 const { type: OS_TYPE, cpuArchitecture: CPU_ARCH } =
   SystemHelper.getInformation()
+const PYTORCH_SETUP_TEXT = 'Setting up PyTorch...'
 
 async function ensureDirectoryLink(linkPath, targetPath) {
   if (!fs.existsSync(targetPath)) {
@@ -102,12 +104,6 @@ function readManifest(manifestPath) {
  */
 async function installPyTorch(requiredVersion, targetPath, manifestPath) {
   const manifest = readManifest(manifestPath)
-  const installedVersion = manifest?.version
-
-  if (installedVersion) {
-    LogHelper.info(`Found PyTorch ${installedVersion}`)
-    LogHelper.info(`Latest version is ${requiredVersion}`)
-  }
 
   if (!manifest || manifest.version !== requiredVersion) {
     const wheelPath = path.join(PYTORCH_PATH, `torch-${requiredVersion}.whl`)
@@ -122,23 +118,16 @@ async function installPyTorch(requiredVersion, targetPath, manifestPath) {
     try {
       const downloadURL = getPyTorchDownloadURL(requiredVersion)
 
-      LogHelper.info(`Downloading PyTorch ${requiredVersion}...`)
-
       await FileHelper.downloadFile(downloadURL, wheelPath, {
         cliProgress: true,
         parallelStreams: 3,
         skipExisting: false
       })
 
-      LogHelper.success('PyTorch downloaded')
-      LogHelper.info('Extracting PyTorch wheel...')
-
       // Extract wheel (wheels are just ZIP files)
       await FileHelper.extractArchive(wheelPath, targetPath, {
         stripComponents: 0
       })
-
-      LogHelper.success('PyTorch extracted')
 
       // Clean up and create manifest
       await Promise.all([
@@ -149,39 +138,29 @@ async function installPyTorch(requiredVersion, targetPath, manifestPath) {
         })
       ])
 
-      LogHelper.success('PyTorch manifest file created')
-
       if (!SystemHelper.isMacOS()) {
         await ensureDirectoryLink(PYTORCH_NVIDIA_PATH, NVIDIA_LIBS_PATH)
       }
-
-      LogHelper.success(`PyTorch ${requiredVersion} ready`)
     } catch (error) {
-      LogHelper.error(`Failed to install PyTorch: ${error}`)
-      LogHelper.warning(
-        'PyTorch may require manual download from PyTorch website'
+      throw new Error(
+        `PyTorch may require manual download from https://pytorch.org/get-started/locally/: ${error}`
       )
-      LogHelper.warning(
-        'Please visit: https://pytorch.org/get-started/locally/'
-      )
-
-      throw error
     }
-  } else {
-    LogHelper.success(
-      `PyTorch is already at the latest version (${requiredVersion})`
-    )
+
+    return true
   }
+
+  return false
 }
 
 /**
  * Main setup function
  */
 async function setupPyTorch() {
-  LogHelper.info('Downloading and setting up PyTorch...')
+  const status = createSetupStatus(PYTORCH_SETUP_TEXT).start()
 
   try {
-    await installPyTorch(
+    const installed = await installPyTorch(
       PYTORCH_VERSION,
       PYTORCH_TORCH_PATH,
       PYTORCH_MANIFEST_PATH
@@ -191,10 +170,16 @@ async function setupPyTorch() {
       await ensureDirectoryLink(PYTORCH_NVIDIA_PATH, NVIDIA_LIBS_PATH)
     }
 
-    LogHelper.success(`PyTorch setup complete in: ${PYTORCH_TORCH_PATH}`)
+    if (installed) {
+      status.succeed(`PyTorch: ${PYTORCH_VERSION}`)
+    } else {
+      status.succeed(`PyTorch: ${PYTORCH_VERSION}`)
+    }
   } catch (error) {
-    LogHelper.error(`PyTorch setup failed: ${error}`)
-    process.exit(1)
+    if (status.isSpinning) {
+      status.fail('Failed to set up PyTorch')
+    }
+    throw error
   }
 }
 

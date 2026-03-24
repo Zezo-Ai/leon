@@ -6,7 +6,6 @@ import {
   UV_VERSION
 } from '@/constants'
 import { CPUArchitectures } from '@/types'
-import { LogHelper } from '@/helpers/log-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 
 import { setupRuntimeBinary } from './setup-runtime-binary'
@@ -52,8 +51,6 @@ function getAssetFileName() {
 }
 
 export default async function setupUV() {
-  LogHelper.info('Downloading and setting up uv...')
-
   const assetFileName = getAssetFileName()
 
   await setupRuntimeBinary({
