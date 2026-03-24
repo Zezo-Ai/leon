@@ -1,3 +1,4 @@
+/*
 import path from 'node:path'
 import fs from 'node:fs'
 
@@ -53,9 +54,9 @@ export default class CoquiSTTParser extends STTParserBase {
     LogHelper.success('Parser initialized')
   }
 
-  /**
+  /!**
    * Read audio buffer and return the transcript (decoded string)
-   */
+   *!/
   public async parse(buffer: Buffer): Promise<string | null> {
     const wavDecode = wav.decode(buffer)
 
@@ -73,3 +74,4 @@ export default class CoquiSTTParser extends STTParserBase {
     return null
   }
 }
+*/

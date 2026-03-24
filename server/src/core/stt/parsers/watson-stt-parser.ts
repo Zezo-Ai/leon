@@ -1,3 +1,4 @@
+/*
 import path from 'node:path'
 import fs from 'node:fs'
 import { Duplex } from 'node:stream'
@@ -36,9 +37,9 @@ export default class WatsonSTTParser extends STTParserBase {
     }
   }
 
-  /**
+  /!**
    * Read audio buffer and return the transcript (decoded string)
-   */
+   *!/
   public async parse(buffer: Buffer): Promise<string | null> {
     if (this.client) {
       const stream = new Duplex()
@@ -65,3 +66,4 @@ export default class WatsonSTTParser extends STTParserBase {
     return null
   }
 }
+*/

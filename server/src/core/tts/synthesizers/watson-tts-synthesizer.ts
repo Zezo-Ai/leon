@@ -1,3 +1,4 @@
+/*
 import path from 'node:path'
 import fs from 'node:fs'
 
@@ -91,3 +92,4 @@ export default class WatsonTTSSynthesizer extends TTSSynthesizerBase {
     return null
   }
 }
+*/

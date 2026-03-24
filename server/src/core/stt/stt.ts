@@ -3,17 +3,17 @@ import path from 'node:path'
 
 import type { ASRAudioFormat } from '@/core/asr/types'
 import type { STTParser } from '@/core/stt/types'
-import { SERVER_CORE_PATH, STT_PROVIDER, VOICE_CONFIG_PATH } from '@/constants'
+import { SERVER_CORE_PATH, STT_PROVIDER } from '@/constants'
 import { SOCKET_SERVER, ASR } from '@/core'
 import { STTParserNames, STTProviders } from '@/core/stt/types'
 import { LogHelper } from '@/helpers/log-helper'
 import { FileHelper } from '@/helpers/file-helper'
 
 const PROVIDERS_MAP = {
-  [STTProviders.Local]: STTParserNames.Local,
-  [STTProviders.GoogleCloudSTT]: STTParserNames.GoogleCloudSTT,
-  [STTProviders.WatsonSTT]: STTParserNames.WatsonSTT,
-  [STTProviders.CoquiSTT]: STTParserNames.CoquiSTT
+  [STTProviders.Local]: STTParserNames.Local
+ //  [STTProviders.GoogleCloudSTT]: STTParserNames.GoogleCloudSTT,
+  // [STTProviders.WatsonSTT]: STTParserNames.WatsonSTT,
+  // [STTProviders.CoquiSTT]: STTParserNames.CoquiSTT
 }
 
 export default class STT {
@@ -53,7 +53,7 @@ export default class STT {
       return false
     }
 
-    if (
+    /*if (
       STT_PROVIDER === STTProviders.GoogleCloudSTT &&
       typeof process.env['GOOGLE_APPLICATION_CREDENTIALS'] === 'undefined'
     ) {
@@ -70,7 +70,7 @@ export default class STT {
       LogHelper.warning(
         `The "GOOGLE_APPLICATION_CREDENTIALS" env variable is already settled with the following value: "${process.env['GOOGLE_APPLICATION_CREDENTIALS']}"`
       )
-    }
+    }*/
 
     try {
       // Dynamically attribute the parser
