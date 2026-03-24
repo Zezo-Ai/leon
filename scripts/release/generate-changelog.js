@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 
-import { command } from 'execa'
+import execa from 'execa'
 
 import { LogHelper } from '@/helpers/log-helper'
 
@@ -15,10 +15,16 @@ export default (version) =>
     LogHelper.info(`Generating ${changelog}...`)
 
     try {
-      await command(
-        `git-changelog --changelogrc .changelogrc --template scripts/assets/CHANGELOG-TEMPLATE.md --file scripts/tmp/${tmpChangelog} --version_name ${version}`,
-        { shell: true }
-      )
+      await execa('git-changelog', [
+        '--changelogrc',
+        '.changelogrc',
+        '--template',
+        'scripts/assets/CHANGELOG-TEMPLATE.md',
+        '--file',
+        `scripts/tmp/${tmpChangelog}`,
+        '--version_name',
+        version
+      ])
     } catch (e) {
       LogHelper.error(`Error during git-changelog: ${e}`)
       reject(e)
@@ -28,13 +34,17 @@ export default (version) =>
       LogHelper.info('Getting remote origin URL...')
       LogHelper.info('Getting previous tag...')
 
-      const sh = await command(
-        'git config --get remote.origin.url && git tag | tail -n1',
-        { shell: true }
-      )
+      const remoteOriginResult = await execa('git', [
+        'config',
+        '--get',
+        'remote.origin.url'
+      ])
+      const gitTagResult = await execa('git', ['tag'])
 
-      const repoUrl = sh.stdout.substr(0, sh.stdout.lastIndexOf('.git'))
-      const previousTag = sh.stdout.substr(sh.stdout.indexOf('\n') + 1).trim()
+      const repoUrl = remoteOriginResult.stdout
+        .trim()
+        .replace(/\.git$/, '')
+      const previousTag = gitTagResult.stdout.trim().split('\n').pop() || ''
       const changelogData = await fs.promises.readFile(changelog, 'utf8')
       const compareUrl = `${repoUrl}/compare/${previousTag}...v${version}`
       let tmpData = await fs.promises.readFile(

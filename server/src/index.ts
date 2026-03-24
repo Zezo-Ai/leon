@@ -80,9 +80,10 @@ import { SystemHelper } from '@/helpers/system-helper'
       '--nvidia-path',
       NVIDIA_LIBS_PATH
     ]
+    const tcpServerCommandArgs = [PYTHON_TCP_SERVER_ENTRY_PATH, ...tcpServerArgs]
     const tcpServerCmd = RuntimeHelper.buildShellCommand(
       PYTHON_TCP_SERVER_RUNTIME_BIN_PATH,
-      [PYTHON_TCP_SERVER_ENTRY_PATH, ...tcpServerArgs]
+      tcpServerCommandArgs
     )
     LogHelper.title('Python TCP Server')
     LogHelper.info(`Running command: ${tcpServerCmd}`)
@@ -107,11 +108,14 @@ import { SystemHelper } from '@/helpers/system-helper'
       tcpServerEnv['LD_LIBRARY_PATH'] = combinedLdPath
     }
 
-    global.pythonTCPServerProcess = spawn(tcpServerCmd, {
-      shell: true,
+    global.pythonTCPServerProcess = spawn(
+      PYTHON_TCP_SERVER_RUNTIME_BIN_PATH,
+      tcpServerCommandArgs,
+      {
       detached: IS_DEVELOPMENT_ENV,
       env: tcpServerEnv
-    })
+      }
+    )
     global.pythonTCPServerProcess.stdout.on('data', (data: Buffer) => {
       LogHelper.title('Python TCP Server')
       LogHelper.info(data.toString())

@@ -1,13 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { command } from 'execa'
+import execa from 'execa'
 
 import {
   PYTHON_RUNTIME_BIN_PATH,
   UV_RUNTIME_BIN_PATH
 } from '@/constants'
-import { RuntimeHelper } from '@/helpers/runtime-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 
 import { createSetupStatus } from './setup-status'
@@ -35,14 +34,11 @@ export async function getPyprojectDependencies(projectPath) {
     'print(json.dumps(deps))'
   ].join('; ')
 
-  const result = await command(
-    RuntimeHelper.buildShellCommand(PYTHON_RUNTIME_BIN_PATH, [
+  const result = await execa(PYTHON_RUNTIME_BIN_PATH, [
       '-c',
       readerScript,
       pyprojectPath
-    ]),
-    { shell: true }
-  )
+    ])
 
   return JSON.parse(result.stdout)
 }
@@ -107,33 +103,21 @@ export async function setupPythonProjectEnv({
 
   await fs.promises.rm(venvPath, { recursive: true, force: true })
 
-  await command(
-    RuntimeHelper.buildShellCommand(UV_RUNTIME_BIN_PATH, [
+  await execa(UV_RUNTIME_BIN_PATH, [
       'venv',
       '--python',
       PYTHON_RUNTIME_BIN_PATH,
       venvPath
-    ]),
-    {
-      shell: true,
-      cwd: projectPath
-    }
-  )
+    ], { cwd: projectPath })
 
   if (dependencies.length > 0) {
-    await command(
-      RuntimeHelper.buildShellCommand(UV_RUNTIME_BIN_PATH, [
+    await execa(UV_RUNTIME_BIN_PATH, [
         'pip',
         'install',
         '--python',
         getProjectVenvPythonPath(projectPath),
         ...dependencies
-      ]),
-      {
-        shell: true,
-        cwd: projectPath
-      }
-    )
+      ], { cwd: projectPath })
   }
 
   await fs.promises.writeFile(stampPath, `${Date.now()}`)

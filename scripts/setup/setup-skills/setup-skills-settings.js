@@ -1,8 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { commandSync } from 'execa'
-
 /**
  * Set up skills settings
  */
@@ -36,13 +34,7 @@ export default async function (skillFriendlyName, currentSkill) {
             }
 
             try {
-              // Add new skill settings in the settings.json file
-              commandSync(
-                `json -I -f ${settingsPath} -e 'this.${
-                  settingsSampleKeys[j]
-                }=${JSON.stringify(configKey[settingsSampleKeys[j]])}'`,
-                { shell: true }
-              )
+              settings[settingsSampleKeys[j]] = configKey[settingsSampleKeys[j]]
             } catch (e) {
               throw new Error(
                 `Error while adding "${settingsSampleKeys[j]}" settings key to ${settingsPath}: ${e}`
@@ -50,6 +42,11 @@ export default async function (skillFriendlyName, currentSkill) {
             }
           }
         }
+
+        await fs.promises.writeFile(
+          settingsPath,
+          `${JSON.stringify(settings, null, 2)}\n`
+        )
       }
     } else if (!fs.existsSync(settingsSamplePath)) {
       // Stop the setup if the settings.sample.json of the current skill does not exist

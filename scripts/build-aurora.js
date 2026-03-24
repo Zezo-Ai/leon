@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { command } from 'execa'
+import execa from 'execa'
 
 import { LogHelper } from '@/helpers/log-helper'
 
@@ -21,7 +21,7 @@ export default async function buildAurora(options = {}) {
     force: true
   })
 
-  await command(`${TSC_BIN_PATH} --project ${AURORA_TSCONFIG_PATH}`, {
+  await execa(TSC_BIN_PATH, ['--project', AURORA_TSCONFIG_PATH], {
     stdio: quiet ? 'ignore' : 'inherit'
   })
 

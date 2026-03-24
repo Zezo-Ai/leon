@@ -1,4 +1,4 @@
-import { command } from 'execa'
+import fs from 'node:fs'
 
 import { LogHelper } from '@/helpers/log-helper'
 
@@ -9,25 +9,21 @@ export default (version) =>
   new Promise(async (resolve, reject) => {
     LogHelper.info('Updating version...')
 
-    const promises = []
-    // const files = ['package.json', 'package-lock.json']
-    const files = ['package.json']
-
-    for (let i = 0; i < files.length; i += 1) {
-      promises.push(
-        command(`json -I -f ${files[i]} -e 'this.version="${version}"'`, {
-          shell: true
-        })
-      )
-    }
-
     try {
-      await Promise.all(promises)
+      const packageJSONPath = 'package.json'
+      const packageJSON = JSON.parse(
+        await fs.promises.readFile(packageJSONPath, 'utf8')
+      )
+      packageJSON.version = version
+      await fs.promises.writeFile(
+        packageJSONPath,
+        `${JSON.stringify(packageJSON, null, 2)}\n`
+      )
 
       LogHelper.success(`Version updated to ${version}`)
       resolve()
     } catch (e) {
-      LogHelper.error(`Error while updating version: ${e.stderr}`)
+      LogHelper.error(`Error while updating version: ${e}`)
       reject(e)
     }
   })

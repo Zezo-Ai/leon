@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { command } from 'execa'
+import execa from 'execa'
 
 import {
   PNPM_RUNTIME_BIN_PATH,
@@ -81,14 +81,11 @@ const syncNodejsSkillDependencies = async (skillFriendlyName, skillPath) => {
 
   // Install from the runtime directory itself so pnpm does not create importer
   // metadata under the skill source tree.
-  await command(
-    RuntimeHelper.buildShellCommand(PNPM_RUNTIME_BIN_PATH, [
+  await execa(PNPM_RUNTIME_BIN_PATH, [
       'install',
       '--ignore-workspace',
       '--lockfile=false'
-    ]),
-    { shell: true, cwd: runtimePath }
-  )
+    ], { cwd: runtimePath })
 
   await markSkillDependenciesAsSynced(skillPath)
 }
@@ -98,8 +95,7 @@ const syncNodejsSkillDependencies = async (skillFriendlyName, skillPath) => {
  * portable and isolated from the bridge-wide Python environment.
  */
 const installPythonDependencies = async (dependencies, vendorPath) => {
-  await command(
-    RuntimeHelper.buildShellCommand(UV_RUNTIME_BIN_PATH, [
+  await execa(UV_RUNTIME_BIN_PATH, [
       'pip',
       'install',
       '--python',
@@ -107,9 +103,7 @@ const installPythonDependencies = async (dependencies, vendorPath) => {
       '--target',
       vendorPath,
       ...dependencies
-    ]),
-    { shell: true }
-  )
+    ])
 }
 
 /**

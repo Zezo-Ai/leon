@@ -141,7 +141,7 @@ importers:
       '@eslint/js':
         specifier: 9.15.0
         version: 9.15.0
-      '@stylistic/eslint-plugin-ts':
+      '@stylistic/eslint-plugin':
         specifier: 4.4.1
         version: 4.4.1(eslint@9.15.0)(typescript@5.9.3)
       '@tsconfig/node16':
@@ -1122,8 +1122,8 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@stylistic/eslint-plugin-ts@4.4.1':
-    resolution: {integrity: sha512-2r6cLcmdF6til66lx8esBYvBvsn7xCmLT50gw/n1rGGlTq/OxeNjBIh4c3VEaDGMa/5TybrZTia6sQUHdIWx1w==}
+  '@stylistic/eslint-plugin@4.4.1':
+    resolution: {integrity: sha512-CEigAk7eOLyHvdgmpZsKFwtiqS2wFwI1fn4j09IU9GmD4euFM4jEBAViWeCqaNLlbX2k2+A/Fq9cje4HQBXuJQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: '>=9.0.0'
@@ -5084,12 +5084,14 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@stylistic/eslint-plugin-ts@4.4.1(eslint@9.15.0)(typescript@5.9.3)':
+  '@stylistic/eslint-plugin@4.4.1(eslint@9.15.0)(typescript@5.9.3)':
     dependencies:
       '@typescript-eslint/utils': 8.57.2(eslint@9.15.0)(typescript@5.9.3)
       eslint: 9.15.0
       eslint-visitor-keys: 4.2.0
       espree: 10.3.0
+      estraverse: 5.3.0
+      picomatch: 4.0.3
     transitivePeerDependencies:
       - supports-color
       - typescript

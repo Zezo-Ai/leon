@@ -1,13 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { command } from 'execa'
+import execa from 'execa'
 
 import {
   NODEJS_BRIDGE_ROOT_PATH,
   PNPM_RUNTIME_BIN_PATH
 } from '@/constants'
-import { RuntimeHelper } from '@/helpers/runtime-helper'
 
 import { createSetupStatus } from './setup-status'
 
@@ -50,15 +49,12 @@ export default async function setupNodejsBridgeEnv() {
     return
   }
 
-  await command(
-    RuntimeHelper.buildShellCommand(PNPM_RUNTIME_BIN_PATH, [
+  await execa(PNPM_RUNTIME_BIN_PATH, [
       'install',
       '--dir',
       NODEJS_BRIDGE_ROOT_PATH,
       '--lockfile=false'
-    ]),
-    { shell: true }
-  )
+    ])
 
   await fs.promises.writeFile(STAMP_FILE_PATH, `${Date.now()}`)
 

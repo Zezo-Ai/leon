@@ -2,8 +2,8 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 import { fixupConfigRules, fixupPluginRules } from '@eslint/compat'
+import stylistic from '@stylistic/eslint-plugin'
 import typescriptEslint from '@typescript-eslint/eslint-plugin'
-import stylisticTs from '@stylistic/eslint-plugin-ts'
 import unicorn from 'eslint-plugin-unicorn'
 import _import from 'eslint-plugin-import'
 import globals from 'globals'
@@ -33,8 +33,8 @@ export default [
   ),
   {
     plugins: {
+      '@stylistic': stylistic,
       '@typescript-eslint': fixupPluginRules(typescriptEslint),
-      '@stylistic/ts': stylisticTs,
       unicorn,
       import: fixupPluginRules(_import)
     },
@@ -64,13 +64,13 @@ export default [
       ],
       'prefer-destructuring': ['off'],
       'comma-dangle': ['error', 'never'],
-      '@stylistic/ts/comma-dangle': ['error', 'never'],
+      '@stylistic/comma-dangle': ['error', 'never'],
       semi: ['error', 'never'],
       quotes: ['error', 'single'],
-      '@stylistic/ts/quotes': ['error', 'single'],
+      '@stylistic/quotes': ['error', 'single'],
       'object-curly-spacing': ['error', 'always'],
       'unicorn/prefer-node-protocol': 'error',
-      '@stylistic/ts/member-delimiter-style': [
+      '@stylistic/member-delimiter-style': [
         'error',
         {
           multiline: {

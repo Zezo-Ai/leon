@@ -289,39 +289,41 @@ export class LogicActionSkillHandler {
         const { bridge: skillBridge } = nluProcessResult.skillConfig
 
         if (skillBridge === SkillBridges.Python) {
+          const pythonBridgeCommandArgs = [
+            PYTHON_BRIDGE_ENTRY_PATH,
+            '--runtime',
+            'skill',
+            intentObjectPath
+          ]
           const pythonBridgeCommand = RuntimeHelper.buildShellCommand(
             PYTHON_BRIDGE_RUNTIME_BIN_PATH,
-            [
-              PYTHON_BRIDGE_ENTRY_PATH,
-              '--runtime',
-              'skill',
-              intentObjectPath
-            ]
+            pythonBridgeCommandArgs
           )
 
           LogHelper.title('Brain')
           LogHelper.info(`Running command: ${pythonBridgeCommand}`)
           BRAIN.skillProcess = spawn(
-            pythonBridgeCommand,
-            { shell: true }
+            PYTHON_BRIDGE_RUNTIME_BIN_PATH,
+            pythonBridgeCommandArgs
           )
         } else if (skillBridge === SkillBridges.NodeJS) {
+          const nodejsBridgeCommandArgs = [
+            TSX_CLI_PATH,
+            NODEJS_BRIDGE_ENTRY_PATH,
+            '--runtime',
+            'skill',
+            intentObjectPath
+          ]
           const nodejsBridgeCommand = RuntimeHelper.buildShellCommand(
             NODE_RUNTIME_BIN_PATH,
-            [
-              TSX_CLI_PATH,
-              NODEJS_BRIDGE_ENTRY_PATH,
-              '--runtime',
-              'skill',
-              intentObjectPath
-            ]
+            nodejsBridgeCommandArgs
           )
 
           LogHelper.title('Brain')
           LogHelper.info(`Running command: ${nodejsBridgeCommand}`)
           BRAIN.skillProcess = spawn(
-            nodejsBridgeCommand,
-            { shell: true }
+            NODE_RUNTIME_BIN_PATH,
+            nodejsBridgeCommandArgs
           )
         } else {
           LogHelper.error(`The skill bridge is not supported: ${skillBridge}`)

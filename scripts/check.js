@@ -4,7 +4,7 @@ import path from 'node:path'
 import { spawn } from 'node:child_process'
 
 import dotenv from 'dotenv'
-import { command } from 'execa'
+import execa from 'execa'
 import semver from 'semver'
 import kill from 'tree-kill'
 
@@ -112,10 +112,7 @@ function extractFirstVersion(rawOutput) {
 }
 
 async function getCommandVersion(executablePath, args = []) {
-  const result = await command(
-    RuntimeHelper.buildShellCommand(executablePath, args),
-    { shell: true }
-  )
+  const result = await execa(executablePath, args)
 
   return {
     raw: result.stdout.trim(),
@@ -218,26 +215,20 @@ async function createPythonBridgeIntentObject() {
 }
 
 async function runNodejsBridgeCheck(intentObjectPath) {
-  return command(
-    RuntimeHelper.buildShellCommand(NODE_RUNTIME_BIN_PATH, [
+  return execa(NODE_RUNTIME_BIN_PATH, [
       TSX_CLI_PATH,
       NODEJS_BRIDGE_ENTRY_PATH,
       '--runtime',
       'skill',
       intentObjectPath
-    ]),
-    { shell: true }
-  )
+    ])
 }
 
 async function runPythonBridgeCheck(intentObjectPath) {
-  return command(
-    RuntimeHelper.buildShellCommand(PYTHON_BRIDGE_RUNTIME_BIN_PATH, [
+  return execa(PYTHON_BRIDGE_RUNTIME_BIN_PATH, [
       PYTHON_BRIDGE_ENTRY_PATH,
       intentObjectPath
-    ]),
-    { shell: true }
-  )
+    ])
 }
 
 function buildTCPServerEnv() {
