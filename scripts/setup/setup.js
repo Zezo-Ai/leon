@@ -123,8 +123,20 @@ import setFfprobePermissions from './set-ffprobe-permissions'
       // Inspect local AI support, ask the user what to enable, and install local AI components.
       SetupUI.section('Local AI')
       currentStep = 'inspectLocalAICapability'
-      SetupUI.info('I\'m checking what this computer can handle...')
+      const capabilityStatus = createSetupStatus(
+        'Checking what this computer can handle...'
+      ).start()
       localAICapability = await inspectLocalAICapability()
+
+      if (localAICapability.canInstallLocalAI) {
+        capabilityStatus.succeed(
+          'Local AI supported: better privacy and less to configure online'
+        )
+      } else {
+        capabilityStatus.stop()
+        SetupUI.info('Local AI is not supported on this computer')
+      }
+
       currentStep = 'setupPreferences'
       preferences = await setupPreferences(localAICapability)
 

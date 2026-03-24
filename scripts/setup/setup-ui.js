@@ -66,7 +66,7 @@ export class SetupUI {
   }
 
   static bullet(text) {
-    console.log(`• ${text}`)
+    console.log(`● ${text}`)
   }
 
   static underlined(text) {
