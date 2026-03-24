@@ -8,6 +8,21 @@ const HUGGING_FACE_URL = 'https://huggingface.co'
 const HUGGING_FACE_MIRROR_URL = 'https://hf-mirror.com'
 const PARALLEL_DOWNLOAD_MIN_BYTES = 128 * 1_024 * 1_024
 const PARALLEL_DOWNLOAD_MIN_RANGE_BYTES = 16 * 1_024 * 1_024
+const DOWNLOAD_PROGRESS_SPINNER_COLOR_START = '\x1b[36m'
+const DOWNLOAD_PROGRESS_SPINNER_COLOR_END = '\x1b[39m'
+const DOWNLOAD_PROGRESS_SPINNER_FRAMES = [
+  '⣾',
+  '⣽',
+  '⣻',
+  '⢿',
+  '⡿',
+  '⣟',
+  '⣯',
+  '⣷'
+]
+const DOWNLOAD_PROGRESS_SPINNER_INTERVAL_MS = 80
+const SETUP_DOWNLOAD_PROGRESS_START_EVENT = 'leon:setup-download-progress:start'
+const SETUP_DOWNLOAD_PROGRESS_END_EVENT = 'leon:setup-download-progress:end'
 
 export interface DownloadFileOptions {
   cliProgress?: boolean
@@ -244,9 +259,13 @@ export class NetworkHelper {
     const startedAt = Date.now()
     const isTTY = process.stdout.isTTY
     const renderIntervalMs = isTTY ? 200 : 5_000
+    const shouldEmitSetupDownloadProgressEvents = options.cliProgress
     let lastRenderAt = 0
+    let didEmitSetupDownloadProgressStart = false
 
     if (options.cliProgress) {
+      process.emit(SETUP_DOWNLOAD_PROGRESS_START_EVENT)
+      didEmitSetupDownloadProgressStart = true
       console.log('')
       console.log(fileName)
     }
@@ -292,6 +311,13 @@ export class NetworkHelper {
       }
 
       lastRenderAt = now
+      const spinnerFrame =
+        DOWNLOAD_PROGRESS_SPINNER_FRAMES[
+          Math.floor(
+            (now - startedAt) / DOWNLOAD_PROGRESS_SPINNER_INTERVAL_MS
+          ) % DOWNLOAD_PROGRESS_SPINNER_FRAMES.length
+        ]
+      const coloredSpinnerFrame = `${DOWNLOAD_PROGRESS_SPINNER_COLOR_START}${spinnerFrame}${DOWNLOAD_PROGRESS_SPINNER_COLOR_END}`
       const progressPrefix =
         typeof totalBytes === 'number' && totalBytes > 0
           ? `${((downloadedBytes / totalBytes) * 100).toFixed(1)}% (${this.formatBytes(downloadedBytes)}/${this.formatBytes(totalBytes)})`
@@ -300,7 +326,7 @@ export class NetworkHelper {
         progress.etaMs !== null
           ? ` | ${this.formatDuration(progress.etaMs)} left`
           : ''
-      const line = `${progressPrefix} ${this.formatBytes(
+      const line = `${coloredSpinnerFrame} ${progressPrefix} ${this.formatBytes(
         progress.bytesPerSecond
       )}/s${eta}`
 
@@ -331,11 +357,24 @@ export class NetworkHelper {
             )}`
           )
         }
+
+        if (didEmitSetupDownloadProgressStart) {
+          process.emit(SETUP_DOWNLOAD_PROGRESS_END_EVENT)
+          didEmitSetupDownloadProgressStart = false
+        }
       },
       fail: (): void => {
         if (options.cliProgress && isTTY) {
           readline.clearLine(process.stdout, 0)
           readline.cursorTo(process.stdout, 0)
+        }
+
+        if (
+          shouldEmitSetupDownloadProgressEvents &&
+          didEmitSetupDownloadProgressStart
+        ) {
+          process.emit(SETUP_DOWNLOAD_PROGRESS_END_EVENT)
+          didEmitSetupDownloadProgressStart = false
         }
       }
     }

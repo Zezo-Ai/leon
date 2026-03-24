@@ -64,7 +64,7 @@ export default async () => {
       recursive: true
     })
 
-    status.stop()
+    status.pause()
     let downloadedModelCount = 0
 
     for (const model of QMD_MODELS) {
@@ -75,9 +75,10 @@ export default async () => {
       }
     }
 
-    const completedStatus = createSetupStatus('Finalizing QMD models...').start()
+    status.text = 'Finalizing QMD models...'
+    status.start()
 
-    completedStatus.succeed(
+    status.succeed(
       downloadedModelCount > 0
         ? `QMD models: ready - ${downloadedModelCount} downloaded`
         : 'QMD models: ready'

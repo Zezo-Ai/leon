@@ -299,7 +299,7 @@ async function installPrebuilt(assetName, status, extraData = {}) {
 
   try {
     await cleanInstallDirectory()
-    status.stop()
+    status.pause()
 
     await FileHelper.downloadFile(
       `${LLAMACPP_RELEASE_BASE_URL}/${assetName}`,
@@ -352,7 +352,7 @@ async function buildFromSource(status) {
   try {
     await cleanInstallDirectory()
 
-    status.stop()
+    status.pause()
     await downloadAndExtractSourceArchive(sourceArchivePath)
     status.text = 'Building llama.cpp from source...'
     status.start()
@@ -427,7 +427,7 @@ export default async function setupLlamaCPP() {
     runtimeDirectoryPath &&
     fs.existsSync(getBinaryPath(runtimeDirectoryPath))
   ) {
-    status.stop()
+    status.pause()
     SetupUI.warning('The current llama.cpp installation looks corrupted. Reinstalling it.')
   }
 
@@ -445,7 +445,7 @@ export default async function setupLlamaCPP() {
     hasGPU = await SystemHelper.hasGPU(llama)
     graphicsComputeAPI = await SystemHelper.getGraphicsComputeAPI(llama)
   } catch (error) {
-    status.stop()
+      status.pause()
     SetupUI.warning(`Failed to inspect GPU support for llama.cpp setup: ${error}`)
   }
 

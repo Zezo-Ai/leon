@@ -1,5 +1,11 @@
 import { SetupUI } from './setup-ui'
 
+const FIRST_JOKE_DELAY_MS = 8_000
+const MIN_REPEAT_JOKE_DELAY_MS = 25_000
+const MAX_REPEAT_JOKE_DELAY_MS = 40_000
+const DOWNLOAD_PROGRESS_START_EVENT = 'leon:setup-download-progress:start'
+const DOWNLOAD_PROGRESS_END_EVENT = 'leon:setup-download-progress:end'
+
 const SETUP_JOKES = [
   'I promise this part is more organized than my early prototypes.',
   'Still working. No dramatic plot twist so far.',
@@ -22,6 +28,18 @@ const SETUP_JOKES = [
   'I could pretend this is instant, but honesty is part of my charm.',
   'Some assistants bring small talk. I bring dependencies.'
 ]
+const SETUP_COMPLETION_JOKES = [
+  'I am installed, calibrated, and only slightly too pleased with myself.',
+  'That went well. I am trying not to make it my whole personality.',
+  'Setup complete. I would bow, but I do not have knees.',
+  'Everything is ready. Suspiciously ready, but ready.',
+  'I am officially prepared to be useful and occasionally dramatic.',
+  'Installation complete. Nobody had to jiggle the cable.',
+  'I made it through setup without becoming folklore.',
+  'That was the serious part. I can be charming again now.',
+  'I am ready. Please admire how professional this looks.',
+  'Setup finished. I would celebrate louder, but I respect your terminal.'
+]
 
 function shuffleJokes(jokes) {
   const shuffledJokes = [...jokes]
@@ -37,19 +55,133 @@ function shuffleJokes(jokes) {
   return shuffledJokes
 }
 
+const remainingJokes = shuffleJokes(SETUP_JOKES)
+let areSetupJokesBoundToProgress = false
+let activeDownloadProgressCount = 0
+
+function getRandomRepeatDelay() {
+  return (
+    MIN_REPEAT_JOKE_DELAY_MS +
+    Math.floor(
+      Math.random() *
+        (MAX_REPEAT_JOKE_DELAY_MS - MIN_REPEAT_JOKE_DELAY_MS + 1)
+    )
+  )
+}
+
+function getNextSetupJoke() {
+  return remainingJokes.shift() || null
+}
+
+function getRandomSetupCompletionJoke() {
+  return (
+    SETUP_COMPLETION_JOKES[
+      Math.floor(Math.random() * SETUP_COMPLETION_JOKES.length)
+    ] || null
+  )
+}
+
+function bindSetupJokesToDownloadProgress() {
+  if (areSetupJokesBoundToProgress) {
+    return
+  }
+
+  process.on(DOWNLOAD_PROGRESS_START_EVENT, () => {
+    activeDownloadProgressCount += 1
+  })
+
+  process.on(DOWNLOAD_PROGRESS_END_EVENT, () => {
+    activeDownloadProgressCount = Math.max(0, activeDownloadProgressCount - 1)
+  })
+
+  areSetupJokesBoundToProgress = true
+}
+
 /**
- * Create a per-run joke teller so setup messages stay varied.
+ * Create a per-task joke scheduler so setup jokes only appear
+ * when a task has actually been running for a while.
  */
-export function createSetupJokeTeller() {
-  const remainingJokes = shuffleJokes(SETUP_JOKES)
+export function createSetupJokeScheduler() {
+  bindSetupJokesToDownloadProgress()
 
-  return () => {
-    const nextJoke = remainingJokes.shift()
+  let timerId = null
+  let remainingDelayMs = FIRST_JOKE_DELAY_MS
+  let isRunning = false
+  let isFinished = false
 
-    if (!nextJoke) {
+  const clearTimer = () => {
+    if (!timerId) {
       return
     }
 
-    SetupUI.aside(nextJoke)
+    clearTimeout(timerId)
+    timerId = null
   }
+
+  const scheduleNextJoke = () => {
+    if (isFinished || !isRunning || timerId || remainingJokes.length === 0) {
+      return
+    }
+
+    timerId = setTimeout(() => {
+      timerId = null
+
+      if (isFinished || !isRunning) {
+        return
+      }
+
+      const nextJoke = getNextSetupJoke()
+
+      if (!nextJoke) {
+        return
+      }
+
+      if (activeDownloadProgressCount > 0 && process.stdout.isTTY) {
+        process.stdout.write('\n')
+      }
+
+      SetupUI.aside(nextJoke)
+      remainingDelayMs = getRandomRepeatDelay()
+      scheduleNextJoke()
+    }, remainingDelayMs)
+  }
+
+  const scheduler = {
+    start() {
+      if (isFinished) {
+        return
+      }
+
+      isRunning = true
+      scheduleNextJoke()
+    },
+    stop() {
+      if (isFinished || !isRunning) {
+        return
+      }
+
+      isRunning = false
+      clearTimer()
+    },
+    finish() {
+      isFinished = true
+      isRunning = false
+      clearTimer()
+    }
+  }
+
+  return scheduler
+}
+
+/**
+ * Tell one install-complete joke before the final success message.
+ */
+export function tellSetupCompletionJoke() {
+  const joke = getRandomSetupCompletionJoke()
+
+  if (!joke) {
+    return
+  }
+
+  SetupUI.aside(joke)
 }

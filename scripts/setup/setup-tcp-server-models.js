@@ -108,13 +108,14 @@ async function ensureModel({
     return
   }
 
-  status.stop()
+  status.pause()
 
   await install()
 
-  const completedStatus = createSetupStatus(installText).start()
+  status.text = installText
+  status.start()
 
-  completedStatus.succeed(successText)
+  status.succeed(successText)
 }
 
 export default async () => {

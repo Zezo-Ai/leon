@@ -111,7 +111,7 @@ export async function setupRuntimeBinary({
   await cleanInstallDirectory(basePath)
 
   try {
-    status.stop()
+    status.pause()
 
     if (archiveFileName) {
       const archivePath = path.join(basePath, archiveFileName)

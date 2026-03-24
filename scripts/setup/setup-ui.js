@@ -11,6 +11,14 @@ function dim(text) {
   return `\x1b[2m${text}\x1b[0m`
 }
 
+function green(text) {
+  return `\x1b[32m${text}\x1b[0m`
+}
+
+function underline(text) {
+  return `\x1b[4m${text}\x1b[24m`
+}
+
 /**
  * Setup-only presentation helpers built on top of consola.
  */
@@ -29,6 +37,10 @@ export class SetupUI {
 
   static success(text) {
     setupConsola.success(text)
+  }
+
+  static successHighlight(text) {
+    console.log(green(`✔ ${text}`))
   }
 
   static warning(text) {
@@ -51,5 +63,13 @@ export class SetupUI {
 
   static recap(items) {
     setupConsola.box(items.join('\n'))
+  }
+
+  static bullet(text) {
+    console.log(`• ${text}`)
+  }
+
+  static underlined(text) {
+    return underline(text)
   }
 }

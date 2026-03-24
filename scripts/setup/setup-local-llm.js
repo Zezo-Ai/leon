@@ -156,17 +156,18 @@ export default async function setupLocalLLM(localAICapability) {
     return
   }
 
-  status.stop()
+  status.pause()
 
   const { installed } = await downloadLLM(selectedModel)
-  const completedStatus = createSetupStatus('Finalizing local AI...').start()
+  status.text = 'Finalizing local AI...'
+  status.start()
 
   if (installed) {
-    completedStatus.succeed(
+    status.succeed(
       `Local AI: ready - ${getLocalAISummary(selectedModel, hardware)}`
     )
   } else {
-    completedStatus.succeed(
+    status.succeed(
       `Local AI: ready - ${getLocalAISummary(selectedModel, hardware)}`
     )
   }

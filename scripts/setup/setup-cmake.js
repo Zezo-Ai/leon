@@ -87,7 +87,7 @@ export default async function setupCMake() {
   await cleanInstallDirectory()
 
   try {
-    status.stop()
+    status.pause()
 
     await FileHelper.downloadFile(getDownloadURL(), archivePath, {
       cliProgress: true,

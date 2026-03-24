@@ -93,7 +93,7 @@ export async function setupPythonProjectEnv({
   const venvPath = path.join(projectPath, '.venv')
 
   if (!fs.existsSync(pyprojectPath)) {
-    status.stop()
+    status.pause()
     return
   }
 

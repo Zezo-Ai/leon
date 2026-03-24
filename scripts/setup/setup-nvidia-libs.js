@@ -180,7 +180,7 @@ async function installNVIDIALibrary(
 
     try {
       const downloadURL = getNVIDIADownloadURL(library, requiredVersion)
-      status.stop()
+      status.pause()
 
       await FileHelper.downloadFile(downloadURL, archivePath, {
         cliProgress: true,

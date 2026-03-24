@@ -11,22 +11,34 @@ dotenv.config()
  *
  * npm run train [en or fr]
  */
-export default () =>
+export default (options = {}) =>
   new Promise(async (resolve, reject) => {
-    const status = createSetupStatus('Training the skill router...').start()
+    const { quiet = false } = options
+    const status = quiet
+      ? null
+      : createSetupStatus('Training the skill router...').start()
 
     try {
       try {
         await trainSkillRouterDuty()
 
-        status.succeed('Skill router: ready')
+        if (status) {
+          status.succeed('Skill router: ready')
+        }
+
         resolve()
       } catch {
-        status.fail('Failed to train the skill router')
+        if (status) {
+          status.fail('Failed to train the skill router')
+        }
+
         reject()
       }
     } catch (e) {
-      status.fail('Failed to train the skill router')
+      if (status) {
+        status.fail('Failed to train the skill router')
+      }
+
       reject(e)
     }
   })
