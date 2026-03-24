@@ -30,6 +30,7 @@ import setupNVIDIALibs from './setup-nvidia-libs.js'
 import setupPyTorch from './setup-pytorch.js'
 import setupTCPServerModels from './setup-tcp-server-models'
 import inspectLocalAICapability from './local-ai-capability'
+import inspectVoiceSetupState from './inspect-voice-setup-state'
 import { printSetupBanner } from './setup-banner'
 import { tellSetupCompletionJoke } from './setup-jokes'
 import setupPreferences from './setup-preferences'
@@ -41,11 +42,59 @@ import setupGitHooks from './setup-git-hooks'
 
 const DISABLED_LLM_TARGET_VALUE = 'none'
 
-async function syncLLMSetupChoice(preferences) {
+function isExplicitLocalLLMTarget(value) {
+  const normalizedValue = (value || '').trim()
+
+  return (
+    normalizedValue.startsWith('llamacpp/') ||
+    normalizedValue.startsWith('sglang/') ||
+    normalizedValue.startsWith('/')
+  )
+}
+
+async function resolveExistingLLMChoice() {
   const llmEnvValues = await readDotEnvVariables([
     'LEON_LLM',
     'LEON_WORKFLOW_LLM',
     'LEON_AGENT_LLM'
+  ])
+  const hasGlobalLLMSetting = Object.hasOwn(llmEnvValues, 'LEON_LLM')
+  const leonLLM = (llmEnvValues['LEON_LLM'] || '').trim()
+  const leonWorkflowLLM = (llmEnvValues['LEON_WORKFLOW_LLM'] || '').trim()
+  const leonAgentLLM = (llmEnvValues['LEON_AGENT_LLM'] || '').trim()
+  const overrideTargets = [leonWorkflowLLM, leonAgentLLM].filter(Boolean)
+
+  if (overrideTargets.length > 0) {
+    return {
+      hasResolvedChoice: true,
+      setupLocalAI: overrideTargets.some((target) =>
+        isExplicitLocalLLMTarget(target)
+      ),
+      label: overrideTargets.join(', ')
+    }
+  }
+
+  if (!hasGlobalLLMSetting || leonLLM === DISABLED_LLM_TARGET_VALUE) {
+    return {
+      hasResolvedChoice: false,
+      setupLocalAI: false,
+      label: ''
+    }
+  }
+
+  return {
+    hasResolvedChoice: true,
+    setupLocalAI: leonLLM === '' || isExplicitLocalLLMTarget(leonLLM),
+    label: leonLLM === '' ? 'Local AI' : leonLLM
+  }
+}
+
+async function syncLLMSetupChoice(preferences) {
+  const llmEnvValues = await readDotEnvVariables([
+    'LEON_LLM',
+    'LEON_WORKFLOW_LLM',
+    'LEON_AGENT_LLM',
+    preferences.remoteLLMAPIKeyEnv
   ])
   const leonLLM = (llmEnvValues['LEON_LLM'] || '').trim()
   const leonWorkflowLLM = (llmEnvValues['LEON_WORKFLOW_LLM'] || '').trim()
@@ -54,6 +103,27 @@ async function syncLLMSetupChoice(preferences) {
     leonWorkflowLLM !== '' || leonAgentLLM !== ''
   const hasExplicitGlobalTarget =
     leonLLM !== '' && leonLLM !== DISABLED_LLM_TARGET_VALUE
+
+  if (
+    preferences.remoteLLMProvider &&
+    preferences.remoteLLMModel &&
+    preferences.remoteLLMAPIKeyEnv &&
+    preferences.remoteLLMAPIKey
+  ) {
+    await updateDotEnvVariable(
+      preferences.remoteLLMAPIKeyEnv,
+      preferences.remoteLLMAPIKey.trim()
+    )
+
+    if (!hasExplicitModeOverride) {
+      await updateDotEnvVariable(
+        'LEON_LLM',
+        `${preferences.remoteLLMProvider}/${preferences.remoteLLMModel}`
+      )
+    }
+
+    return
+  }
 
   if (hasExplicitModeOverride || hasExplicitGlobalTarget) {
     return
@@ -84,6 +154,9 @@ async function syncLLMSetupChoice(preferences) {
     setupVoice: false
   }
   let localAICapability = null
+  let voiceSetupState = {
+    isReady: false
+  }
   const getExitCodeFromSignal = (signal) => (signal === 'SIGINT' ? 130 : 143)
 
   // Clean up process signal listeners when setup exits normally or with an error.
@@ -137,8 +210,17 @@ async function syncLLMSetupChoice(preferences) {
         SetupUI.info('Local AI is not supported on this computer')
       }
 
+      currentStep = 'resolveExistingLLMChoice'
+      const existingLLMChoice = await resolveExistingLLMChoice()
+      currentStep = 'inspectVoiceSetupState'
+      voiceSetupState = inspectVoiceSetupState()
+
       currentStep = 'setupPreferences'
-      preferences = await setupPreferences(localAICapability)
+      preferences = await setupPreferences(
+        localAICapability,
+        existingLLMChoice,
+        voiceSetupState
+      )
     }
 
     // Prepare the local runtime, bridges, skills, and shared memory models.

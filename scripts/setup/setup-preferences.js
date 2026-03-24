@@ -1,12 +1,21 @@
 import { SetupUI, setupConsola } from './setup-ui'
+import setupRemoteLLM from './setup-remote-llm'
 
 /**
  * Ask lightweight setup questions so users can skip optional downloads.
  */
-export default async function setupPreferences(localAICapability) {
+export default async function setupPreferences(
+  localAICapability,
+  existingLLMChoice,
+  voiceSetupState
+) {
   const defaultPreferences = {
     setupLocalAI: localAICapability.canInstallLocalAI,
-    setupVoice: false
+    setupVoice: false,
+    remoteLLMProvider: '',
+    remoteLLMModel: '',
+    remoteLLMAPIKeyEnv: '',
+    remoteLLMAPIKey: ''
   }
 
   if (
@@ -23,14 +32,63 @@ export default async function setupPreferences(localAICapability) {
     return defaultPreferences
   }
 
-  if (localAICapability.canInstallLocalAI) {
-    SetupUI.questionIntro(2)
-  } else {
+  if (existingLLMChoice.hasResolvedChoice) {
     SetupUI.info(
-      'This computer is not a good fit for local AI or voice features, so I will set up the essentials.'
+      `I found your current AI setup, so I will keep using it: ${existingLLMChoice.label}`
     )
 
-    return defaultPreferences
+    if (!localAICapability.canInstallLocalAI) {
+      return {
+        ...defaultPreferences,
+        setupLocalAI: existingLLMChoice.setupLocalAI,
+        setupVoice: false
+      }
+    }
+
+    if (voiceSetupState.isReady) {
+      SetupUI.info('Voice is already ready, so I will keep it as is.')
+
+      return {
+        ...defaultPreferences,
+        setupLocalAI: existingLLMChoice.setupLocalAI,
+        setupVoice: true
+      }
+    }
+
+    SetupUI.questionIntro(1)
+
+    const setupVoice = await setupConsola.prompt(
+      'Do you want to talk to me with your voice now?',
+      {
+        type: 'confirm',
+        initial: false,
+        cancel: 'default'
+      }
+    )
+
+    return {
+      ...defaultPreferences,
+      setupLocalAI: existingLLMChoice.setupLocalAI,
+      setupVoice
+    }
+  }
+
+  if (voiceSetupState.isReady) {
+    SetupUI.info('Voice is already ready, so I will keep it as is.')
+  }
+
+  if (localAICapability.canInstallLocalAI) {
+    SetupUI.info(
+      'I just have a few quick questions so I can set things up the way you want.'
+    )
+  } else {
+    SetupUI.info(
+      'This computer is not a good fit for local AI or voice features.'
+    )
+    return {
+      ...defaultPreferences,
+      ...(await setupRemoteLLM())
+    }
   }
 
   const setupLocalAI = await setupConsola.prompt(
@@ -41,19 +99,31 @@ export default async function setupPreferences(localAICapability) {
       cancel: 'default'
     }
   )
-  const setupVoice = await setupConsola.prompt(
-    'Do you want to talk to me with your voice now?',
-    {
-      type: 'confirm',
-      initial: false,
-      cancel: 'default'
-    }
-  )
+
+  let remoteLLMPreferences = {
+    remoteLLMProvider: '',
+    remoteLLMModel: '',
+    remoteLLMAPIKeyEnv: '',
+    remoteLLMAPIKey: ''
+  }
+
+  if (!setupLocalAI) {
+    remoteLLMPreferences = await setupRemoteLLM()
+  }
+
+  const setupVoice = voiceSetupState.isReady
+    ? true
+    : await setupConsola.prompt('Do you want to talk to me with your voice now?', {
+        type: 'confirm',
+        initial: false,
+        cancel: 'default'
+      })
 
   const preferences = {
     ...defaultPreferences,
     setupLocalAI,
-    setupVoice
+    setupVoice,
+    ...remoteLLMPreferences
   }
 
   return preferences
