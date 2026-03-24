@@ -1,5 +1,6 @@
 import { IS_GITHUB_ACTIONS } from '@/constants'
 import { LogHelper } from '@/helpers/log-helper'
+import { NetworkHelper } from '@/helpers/network-helper'
 
 import train from '../train/train'
 import generateHTTPAPIKey from '../generate/generate-http-api-key'
@@ -38,12 +39,36 @@ import setFfprobePermissions from './set-ffprobe-permissions'
  */
 ;(async () => {
   let currentStep = 'bootstrap'
+  let shutdownSignal = null
   let preferences = {
     setupLocalAI: false,
     setupVoice: false
   }
   let localAICapability = null
   const tellSetupJoke = createSetupJokeTeller()
+  const getExitCodeFromSignal = (signal) => (signal === 'SIGINT' ? 130 : 143)
+  const cleanupSignalHandlers = () => {
+    process.off('SIGINT', handleShutdownSignal)
+    process.off('SIGTERM', handleShutdownSignal)
+  }
+  const handleShutdownSignal = (signal) => {
+    if (shutdownSignal) {
+      process.exit(getExitCodeFromSignal(signal))
+    }
+
+    shutdownSignal = signal
+
+    const abortedDownloadCount = NetworkHelper.abortActiveDownloads(
+      `Setup interrupted by ${signal}`
+    )
+
+    if (abortedDownloadCount === 0) {
+      process.exit(getExitCodeFromSignal(signal))
+    }
+  }
+
+  process.on('SIGINT', handleShutdownSignal)
+  process.on('SIGTERM', handleShutdownSignal)
 
   try {
     if (!IS_GITHUB_ACTIONS) {
@@ -152,11 +177,17 @@ import setFfprobePermissions from './set-ffprobe-permissions'
       'To get regular updates about me, feel free to follow my creator: https://x.com/grenlouis.'
     )
   } catch (e) {
+    if (shutdownSignal) {
+      cleanupSignalHandlers()
+      process.exit(getExitCodeFromSignal(shutdownSignal))
+    }
+
     LogHelper.error(
       `Setup failed during ${currentStep}: ${
         e instanceof Error ? e.stack || e.message : String(e)
       }`
     )
+    cleanupSignalHandlers()
     process.exit(1)
   }
 })()
