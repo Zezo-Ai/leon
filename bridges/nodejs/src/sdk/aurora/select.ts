@@ -1,4 +1,4 @@
-import { type SelectProps } from '@leon-ai/aurora'
+import { type SelectProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

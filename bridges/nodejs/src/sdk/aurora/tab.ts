@@ -1,4 +1,4 @@
-import { type TabProps } from '@leon-ai/aurora'
+import { type TabProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

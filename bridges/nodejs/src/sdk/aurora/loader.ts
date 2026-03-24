@@ -1,4 +1,4 @@
-import { type LoaderProps } from '@leon-ai/aurora'
+import { type LoaderProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

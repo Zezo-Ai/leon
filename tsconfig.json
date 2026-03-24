@@ -11,6 +11,9 @@
     "paths": {
       "@@/*": ["./*"],
       "@/*": ["./server/src/*"],
+      "@aurora/style.css": ["./aurora/style.css"],
+      "@aurora": ["./aurora/dist/index.d.ts"],
+      "@aurora/*": ["./aurora/dist/*"],
       "@bridge/*": ["./bridges/nodejs/src/*"],
       "@sdk/*": ["./bridges/nodejs/src/sdk/*"]
     },
@@ -19,7 +22,7 @@
     "resolveJsonModule": true,
     "declaration": true
   },
-  "files": ["server/src/global.d.ts"],
+  "files": ["server/src/global.d.ts", "aurora/global.d.ts"],
   "include": ["server/src/**/*"],
   "exclude": ["node_modules", "server/dist", "bridges", "tcp_server"]
 }

@@ -1,4 +1,4 @@
-import { type InputProps } from '@leon-ai/aurora'
+import { type InputProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

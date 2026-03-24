@@ -1,4 +1,4 @@
-import { type ImageProps } from '@leon-ai/aurora'
+import { type ImageProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

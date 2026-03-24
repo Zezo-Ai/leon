@@ -1,4 +1,4 @@
-import { type ListHeaderProps } from '@leon-ai/aurora'
+import { type ListHeaderProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

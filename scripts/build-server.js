@@ -6,6 +6,7 @@ import { command } from 'execa'
 
 import { LogHelper } from '@/helpers/log-helper'
 
+import buildAurora from './build-aurora'
 import train from './train/train'
 
 const SERVER_DIST_PATH = path.join(process.cwd(), 'server', 'dist')
@@ -120,6 +121,11 @@ export default async function buildServer(options = {}) {
   await runBuildStep(
     'Training skill router duty...',
     () => train({ quiet }),
+    quiet
+  )
+  await runBuildStep(
+    'Building Aurora declarations...',
+    () => buildAurora({ quiet }),
     quiet
   )
   await runBuildStep(

@@ -275,8 +275,6 @@ export const skillSchemaObject = Type.Strict(
             })
           ),
           parameters: Type.Optional(
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-expect-error
             Type.Record(Type.String(), actionParametersType, {
               description:
                 'Parameters are used to define the data that the action expects to receive. They can be used to pass data from the utterance to the action code.'

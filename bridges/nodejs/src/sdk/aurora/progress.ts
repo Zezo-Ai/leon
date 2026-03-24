@@ -1,4 +1,4 @@
-import { type ProgressProps } from '@leon-ai/aurora'
+import { type ProgressProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

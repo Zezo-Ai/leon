@@ -1,4 +1,4 @@
-import { type ButtonProps } from '@leon-ai/aurora'
+import { type ButtonProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

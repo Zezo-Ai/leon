@@ -1,5 +1,6 @@
 import { createElement } from 'react'
-import * as auroraComponents from '@leon-ai/aurora'
+
+import * as auroraComponents from '@aurora'
 
 import * as customAuroraComponents from '../custom-aurora-components'
 

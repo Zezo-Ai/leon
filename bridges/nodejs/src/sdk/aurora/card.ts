@@ -1,4 +1,4 @@
-import { type CardProps } from '@leon-ai/aurora'
+import { type CardProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

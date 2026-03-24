@@ -1,4 +1,4 @@
-import { type FlexboxProps } from '@leon-ai/aurora'
+import { type FlexboxProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

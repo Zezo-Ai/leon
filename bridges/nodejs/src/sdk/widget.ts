@@ -1,4 +1,4 @@
-import { type WidgetWrapperProps } from '@leon-ai/aurora'
+import { type WidgetWrapperProps } from '@aurora'
 
 import { INTENT_OBJECT, SKILL_LOCALE_CONFIG } from '@bridge/constants'
 import { WidgetComponent } from '@sdk/widget-component'

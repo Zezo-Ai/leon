@@ -1,4 +1,4 @@
-import { type StatusProps } from '@leon-ai/aurora'
+import { type StatusProps } from '@aurora'
 
 import { WidgetComponent } from '../widget-component'
 

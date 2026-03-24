@@ -1,8 +1,9 @@
 import { createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import axios from 'axios'
+
 // eslint-disable-next-line no-redeclare
-import { WidgetWrapper, Flexbox, Loader, Text } from '@leon-ai/aurora'
+import { WidgetWrapper, Flexbox, Loader, Text } from '@aurora'
 
 import renderAuroraComponent from './render-aurora-component'
 import ToolUIHandler from './tool-ui-handler'
