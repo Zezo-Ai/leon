@@ -14,11 +14,7 @@ export default async function setupPreferences(localAICapability) {
     !process.stdin.isTTY ||
     !process.stdout.isTTY
   ) {
-    if (localAICapability.canInstallLocalAI) {
-      SetupUI.info(
-        'I can run AI directly on this computer, so I will set up local AI automatically.'
-      )
-    } else {
+    if (!localAICapability.canInstallLocalAI) {
       SetupUI.info(
         'This computer is not a good fit for local AI or voice features, so I will set up the essentials.'
       )
@@ -28,9 +24,6 @@ export default async function setupPreferences(localAICapability) {
   }
 
   if (localAICapability.canInstallLocalAI) {
-    SetupUI.info(
-      'I can run AI directly on this computer. That means better privacy and less to configure online.'
-    )
     SetupUI.questionIntro(2)
   } else {
     SetupUI.info(
