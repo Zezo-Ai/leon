@@ -84,6 +84,29 @@ import setupGitHooks from './setup-git-hooks'
       printSetupBanner()
     }
 
+    // Ask setup questions first so the rest of the install can run unattended.
+    if (!IS_GITHUB_ACTIONS) {
+      SetupUI.section('Quick Setup')
+
+      currentStep = 'inspectLocalAICapability'
+      const capabilityStatus = createSetupStatus(
+        'Checking what this computer can handle...'
+      ).start()
+      localAICapability = await inspectLocalAICapability()
+
+      if (localAICapability.canInstallLocalAI) {
+        capabilityStatus.succeed(
+          'Local AI supported: better privacy and less to configure online'
+        )
+      } else {
+        capabilityStatus.stop()
+        SetupUI.info('Local AI is not supported on this computer')
+      }
+
+      currentStep = 'setupPreferences'
+      preferences = await setupPreferences(localAICapability)
+    }
+
     // Prepare the local runtime, bridges, skills, and shared memory models.
     SetupUI.section('Base Setup')
 
@@ -121,25 +144,8 @@ import setupGitHooks from './setup-git-hooks'
     }
 
     if (!IS_GITHUB_ACTIONS) {
-      // Inspect local AI support, ask the user what to enable, and install local AI components.
+      // Install local AI components based on the earlier capability check and answers.
       SetupUI.section('Local AI')
-      currentStep = 'inspectLocalAICapability'
-      const capabilityStatus = createSetupStatus(
-        'Checking what this computer can handle...'
-      ).start()
-      localAICapability = await inspectLocalAICapability()
-
-      if (localAICapability.canInstallLocalAI) {
-        capabilityStatus.succeed(
-          'Local AI supported: better privacy and less to configure online'
-        )
-      } else {
-        capabilityStatus.stop()
-        SetupUI.info('Local AI is not supported on this computer')
-      }
-
-      currentStep = 'setupPreferences'
-      preferences = await setupPreferences(localAICapability)
 
       if (preferences.setupLocalAI) {
         currentStep = 'setupCMake'
@@ -150,8 +156,10 @@ import setupGitHooks from './setup-git-hooks'
         await setupLlamaCPP()
         currentStep = 'setupLocalLLM'
         await setupLocalLLM(localAICapability)
-      } else {
+      } else if (localAICapability?.canInstallLocalAI) {
         SetupUI.info('I will skip local AI for now. You can add it later.')
+      } else {
+        SetupUI.info('I will skip local AI because this computer does not support it.')
       }
 
       if (preferences.setupVoice) {
