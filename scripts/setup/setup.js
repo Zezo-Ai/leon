@@ -212,7 +212,9 @@ import setFfprobePermissions from './set-ffprobe-permissions'
       `Voice: ${preferences.setupVoice ? 'enabled' : 'skipped'}`
     ])
     tellSetupCompletionJoke()
+    console.log('')
     SetupUI.successHighlight('Hooray! I\'m installed and ready to go!')
+    console.log('')
     SetupUI.bullet(
       `Follow my creator to get regular updates about me: ${SetupUI.underlined(
         'https://x.com/grenlouis'
