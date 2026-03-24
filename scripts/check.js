@@ -348,6 +348,11 @@ function startTCPServerCheck() {
 }
 
 function validateLocalLLMTarget(target, label, result) {
+  if (!target.isEnabled) {
+    addDetail(result, `${label}: disabled`)
+    return
+  }
+
   if (!target.isLocal) {
     addDetail(result, `${label}: ${target.label}`)
     return

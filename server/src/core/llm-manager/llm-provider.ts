@@ -98,6 +98,8 @@ const EMPTY_COMPLETION_RETRY_DELAY_MS = 750
 const MAX_LOG_SERIALIZED_LENGTH = 4_000
 const DEFAULT_TEMPERATURE = 0 // Disabled
 const DEFAULT_MAX_TOKENS = 8_192
+const NO_LLM_ENABLED_MESSAGE =
+  'I need an AI engine before I can answer. Enable local AI or configure an online provider.'
 export default class LLMProvider {
   private static instance: LLMProvider
 
@@ -188,7 +190,7 @@ export default class LLMProvider {
     const agentTarget = AGENT_LLM_TARGET
 
     for (const target of [workflowTarget, agentTarget]) {
-      if (!target.isResolved) {
+      if (target.isEnabled && !target.isResolved) {
         LogHelper.error(
           target.resolutionError ||
             `The LLM target "${target.label}" is not resolved.`
@@ -198,9 +200,22 @@ export default class LLMProvider {
       }
     }
 
+    if (!workflowTarget.isEnabled && !agentTarget.isEnabled) {
+      this.disposeCurrentProviders()
+      this.workflowLLMProvider = undefined
+      this.agentLLMProvider = undefined
+
+      LogHelper.title('LLM Provider')
+      LogHelper.warning(
+        'No LLM is enabled. Leon will start without AI responses until you enable local AI or configure an online provider.'
+      )
+
+      return false
+    }
+
     const configuredProviders = new Set<LLMProviders>([
-      workflowTarget.provider,
-      agentTarget.provider
+      ...(workflowTarget.isEnabled ? [workflowTarget.provider] : []),
+      ...(agentTarget.isEnabled ? [agentTarget.provider] : [])
     ])
 
     for (const providerName of configuredProviders) {
@@ -219,12 +234,14 @@ export default class LLMProvider {
     )
 
     this.disposeCurrentProviders()
-    this.workflowLLMProvider = await this.createProvider(
-      workflowTarget
-    )
+    this.workflowLLMProvider = workflowTarget.isEnabled
+      ? await this.createProvider(workflowTarget)
+      : undefined
     this.agentLLMProvider = shouldShareLocalProvider
       ? this.workflowLLMProvider
-      : await this.createProvider(agentTarget)
+      : agentTarget.isEnabled
+        ? await this.createProvider(agentTarget)
+        : undefined
 
     await this.bootLocalServerProviders()
 
@@ -296,10 +313,31 @@ export default class LLMProvider {
       : WORKFLOW_LLM_TARGET.provider
   }
 
+  private getTargetForDuty(dutyType: LLMDuties | null): ResolvedLLMTarget {
+    return dutyType === LLMDuties.ReAct
+      ? AGENT_LLM_TARGET
+      : WORKFLOW_LLM_TARGET
+  }
+
   private getProviderForDuty(dutyType: LLMDuties | null): Provider | undefined {
     return dutyType === LLMDuties.ReAct
       ? this.agentLLMProvider
       : this.workflowLLMProvider
+  }
+
+  private getUnavailableProviderMessage(target: ResolvedLLMTarget): string {
+    if (!target.isEnabled) {
+      return NO_LLM_ENABLED_MESSAGE
+    }
+
+    if (!target.isResolved) {
+      return (
+        target.resolutionError ||
+        'The configured LLM target is not resolved yet.'
+      )
+    }
+
+    return 'The LLM provider is not ready yet.'
   }
 
   private getDefaultTimeoutForProvider(providerName: LLMProviders): number {
@@ -1911,7 +1949,16 @@ export default class LLMProvider {
     LogHelper.time(measureExecutionTimeLabel)
 
     if (!provider) {
-      LogHelper.error('LLM provider is not ready')
+      const target = this.getTargetForDuty(completionParams.dutyType)
+      const unavailableProviderMessage =
+        this.getUnavailableProviderMessage(target)
+
+      LogHelper.error(unavailableProviderMessage)
+
+      if (trackProviderErrors) {
+        this.lastProviderErrorMessage = unavailableProviderMessage
+      }
+
       return null
     }
 

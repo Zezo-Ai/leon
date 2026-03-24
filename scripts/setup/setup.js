@@ -8,7 +8,10 @@ import train from '../train/train'
 import generateHTTPAPIKey from '../generate/generate-http-api-key'
 import generateJSONSchemas from '../generate/generate-json-schemas'
 
-import setupDotenv from './setup-dotenv'
+import setupDotenv, {
+  readDotEnvVariables,
+  updateDotEnvVariable
+} from './setup-dotenv'
 import setupCore from './setup-core'
 import setupNode from './setup-node'
 import setupPNPM from './setup-pnpm'
@@ -35,6 +38,37 @@ import { SetupUI } from './setup-ui'
 import createInstanceID from './create-instance-id'
 import setFfprobePermissions from './set-ffprobe-permissions'
 import setupGitHooks from './setup-git-hooks'
+
+const DISABLED_LLM_TARGET_VALUE = 'none'
+
+async function syncLLMSetupChoice(preferences) {
+  const llmEnvValues = await readDotEnvVariables([
+    'LEON_LLM',
+    'LEON_WORKFLOW_LLM',
+    'LEON_AGENT_LLM'
+  ])
+  const leonLLM = (llmEnvValues['LEON_LLM'] || '').trim()
+  const leonWorkflowLLM = (llmEnvValues['LEON_WORKFLOW_LLM'] || '').trim()
+  const leonAgentLLM = (llmEnvValues['LEON_AGENT_LLM'] || '').trim()
+  const hasExplicitModeOverride =
+    leonWorkflowLLM !== '' || leonAgentLLM !== ''
+  const hasExplicitGlobalTarget =
+    leonLLM !== '' && leonLLM !== DISABLED_LLM_TARGET_VALUE
+
+  if (hasExplicitModeOverride || hasExplicitGlobalTarget) {
+    return
+  }
+
+  if (preferences.setupLocalAI) {
+    if (leonLLM === DISABLED_LLM_TARGET_VALUE) {
+      await updateDotEnvVariable('LEON_LLM', '')
+    }
+
+    return
+  }
+
+  await updateDotEnvVariable('LEON_LLM', DISABLED_LLM_TARGET_VALUE)
+}
 
 // Do not load ".env" file because it is not created yet
 
@@ -112,6 +146,8 @@ import setupGitHooks from './setup-git-hooks'
 
     currentStep = 'setupDotenv'
     await setupDotenv()
+    currentStep = 'syncLLMSetupChoice'
+    await syncLLMSetupChoice(preferences)
     currentStep = 'setupCore'
     await setupCore()
     if (!IS_GITHUB_ACTIONS) {
@@ -243,6 +279,7 @@ import setupGitHooks from './setup-git-hooks'
         'https://x.com/grenlouis'
       )}`
     )
+    console.log('')
   } catch (e) {
     // Exit with the original signal code when setup was intentionally interrupted.
     if (shutdownSignal) {

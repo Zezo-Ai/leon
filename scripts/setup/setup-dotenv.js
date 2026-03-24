@@ -3,6 +3,9 @@ import path from 'node:path'
 
 import { createSetupStatus } from './setup-status'
 
+const DOT_ENV_PATH = path.join(process.cwd(), '.env')
+const DOT_ENV_SAMPLE_PATH = path.join(process.cwd(), '.env.sample')
+
 function getEnvVariableName(line) {
   const trimmedLine = line.trim()
 
@@ -20,10 +23,8 @@ function getEnvVariableName(line) {
 }
 
 async function mergeMissingEnvVariables() {
-  const samplePath = path.join(process.cwd(), '.env.sample')
-  const dotEnvPath = path.join(process.cwd(), '.env')
-  const sampleContent = await fs.promises.readFile(samplePath, 'utf8')
-  const dotEnvContent = await fs.promises.readFile(dotEnvPath, 'utf8')
+  const sampleContent = await fs.promises.readFile(DOT_ENV_SAMPLE_PATH, 'utf8')
+  const dotEnvContent = await fs.promises.readFile(DOT_ENV_PATH, 'utf8')
   const dotEnvLines = dotEnvContent.split('\n')
   const existingVariableNames = new Set(
     dotEnvLines
@@ -48,11 +49,70 @@ async function mergeMissingEnvVariables() {
   const separator = normalizedDotEnvContent.trim() === '' ? '' : '\n'
   const mergedContent = `${normalizedDotEnvContent}${separator}${missingSampleLines.join('\n')}\n`
 
-  await fs.promises.writeFile(dotEnvPath, mergedContent)
+  await fs.promises.writeFile(DOT_ENV_PATH, mergedContent)
 
   return `.env: +${missingSampleLines.length} variable${
     missingSampleLines.length > 1 ? 's' : ''
   }`
+}
+
+/**
+ * Read selected variables from `.env` without mutating process.env.
+ */
+export async function readDotEnvVariables(variableNames) {
+  if (!fs.existsSync(DOT_ENV_PATH)) {
+    return {}
+  }
+
+  const dotEnvContent = await fs.promises.readFile(DOT_ENV_PATH, 'utf8')
+  const values = {}
+
+  for (const line of dotEnvContent.split('\n')) {
+    const variableName = getEnvVariableName(line)
+
+    if (!variableName || !variableNames.includes(variableName)) {
+      continue
+    }
+
+    values[variableName] = line.slice(line.indexOf('=') + 1)
+  }
+
+  return values
+}
+
+/**
+ * Upsert a single variable inside `.env`.
+ */
+export async function updateDotEnvVariable(variableName, value) {
+  const dotEnvContent = fs.existsSync(DOT_ENV_PATH)
+    ? await fs.promises.readFile(DOT_ENV_PATH, 'utf8')
+    : ''
+  const dotEnvLines = dotEnvContent === '' ? [] : dotEnvContent.split('\n')
+  const nextLine = `${variableName}=${value}`
+  let hasUpdatedLine = false
+
+  const updatedLines = dotEnvLines.map((line) => {
+    if (getEnvVariableName(line) !== variableName) {
+      return line
+    }
+
+    hasUpdatedLine = true
+
+    return nextLine
+  })
+
+  if (!hasUpdatedLine) {
+    updatedLines.push(nextLine)
+  }
+
+  const normalizedLines = updatedLines.filter(
+    (line, index, lines) => !(index === lines.length - 1 && line === '')
+  )
+
+  await fs.promises.writeFile(
+    DOT_ENV_PATH,
+    `${normalizedLines.join('\n')}\n`
+  )
 }
 
 /**
@@ -63,10 +123,10 @@ export default () =>
     const status = createSetupStatus('Preparing .env...').start()
 
     const createDotenv = () => {
-      fs.createReadStream('.env.sample').pipe(fs.createWriteStream('.env'))
+      fs.createReadStream(DOT_ENV_SAMPLE_PATH).pipe(fs.createWriteStream(DOT_ENV_PATH))
     }
 
-    if (!fs.existsSync('.env')) {
+    if (!fs.existsSync(DOT_ENV_PATH)) {
       createDotenv()
       status.succeed('.env: created')
 

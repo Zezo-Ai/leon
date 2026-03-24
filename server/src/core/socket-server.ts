@@ -3,8 +3,8 @@ import { Server as SocketIOServer, Socket } from 'socket.io'
 import axios from 'axios'
 
 import {
-  AGENT_LLM_PROVIDER,
-  WORKFLOW_LLM_PROVIDER,
+  AGENT_LLM_TARGET,
+  WORKFLOW_LLM_TARGET,
   LANG,
   HAS_STT,
   HAS_TTS,
@@ -149,9 +149,12 @@ export default class SocketServer {
           })
         }
 
-        const usesLlamaCPP =
-          WORKFLOW_LLM_PROVIDER === LLMProviders.LlamaCPP ||
-          AGENT_LLM_PROVIDER === LLMProviders.LlamaCPP
+        const usesLlamaCPP = [WORKFLOW_LLM_TARGET, AGENT_LLM_TARGET].some(
+          (target) =>
+            target.isEnabled &&
+            target.isResolved &&
+            target.provider === LLMProviders.LlamaCPP
+        )
 
         if (usesLlamaCPP) {
           socket.emit(

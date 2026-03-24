@@ -5,6 +5,7 @@ import psList from 'ps-list'
 import kill from 'tree-kill'
 
 import {
+  AGENT_LLM_TARGET,
   IS_DEVELOPMENT_ENV,
   IS_PRODUCTION_ENV,
   IS_TELEMETRY_ENABLED,
@@ -20,7 +21,8 @@ import {
   PYTORCH_TORCH_PATH,
   PYTHON_TCP_SERVER_ENTRY_PATH,
   PYTHON_TCP_SERVER_RUNTIME_BIN_PATH,
-  SHOULD_START_PYTHON_TCP_SERVER
+  SHOULD_START_PYTHON_TCP_SERVER,
+  WORKFLOW_LLM_TARGET
 } from '@/constants'
 import {
   PYTHON_TCP_CLIENT,
@@ -173,7 +175,18 @@ import { SystemHelper } from '@/helpers/system-helper'
       LogHelper.error(`LLM Manager failed to init: ${e}`)
     }
   } else {
-    LogHelper.warning('Skipping LLM Manager init because LLM Provider is not ready')
+    const hasEnabledLLMTarget =
+      WORKFLOW_LLM_TARGET.isEnabled || AGENT_LLM_TARGET.isEnabled
+
+    if (hasEnabledLLMTarget) {
+      LogHelper.warning(
+        'Skipping LLM Manager init because the LLM provider is not ready'
+      )
+    } else {
+      LogHelper.info(
+        'Skipping LLM Manager init because no LLM is enabled yet'
+      )
+    }
   }
 
   try {

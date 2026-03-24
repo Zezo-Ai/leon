@@ -38,7 +38,7 @@ import { SkillRouterLLMDuty } from '@/core/llm-manager/llm-duties/skill-router-l
 import { ActionCallingLLMDuty } from '@/core/llm-manager/llm-duties/action-calling-llm-duty'
 import { SlotFillingLLMDuty } from '@/core/llm-manager/llm-duties/slot-filling-llm-duty'
 import { ReActLLMDuty } from '@/core/llm-manager/llm-duties/react-llm-duty'
-import { LEON_ROUTING_MODE } from '@/constants'
+import { AGENT_LLM_TARGET, LEON_ROUTING_MODE, WORKFLOW_LLM_TARGET } from '@/constants'
 import { RoutingMode } from '@/types'
 import { WorkflowProgressWidget } from '@/core/nlp/nlu/workflow-progress-widget'
 
@@ -62,6 +62,9 @@ export const DEFAULT_NLU_RESULT = {
 }
 
 type RoutingRoute = 'workflow' | 'react'
+
+const NO_LLM_ENABLED_MESSAGE =
+  'I need an AI engine before I can answer. Enable local AI or configure an online provider.'
 
 export default class NLU {
   private static instance: NLU
@@ -137,8 +140,8 @@ export default class NLU {
     }
   }
 
-  private async handleProviderFailure(): Promise<boolean> {
-    const providerError = LLM_PROVIDER.consumeLastProviderErrorMessage()
+  private async handleProviderFailure(message?: string): Promise<boolean> {
+    const providerError = message || LLM_PROVIDER.consumeLastProviderErrorMessage()
 
     if (!providerError) {
       return false
@@ -1182,6 +1185,16 @@ export default class NLU {
             )
 
             this._currentResponseRoute = routingDecision.route
+            const isLLMDisabledForRoute =
+              (routingDecision.route === this.routingRoutes.react &&
+                !AGENT_LLM_TARGET.isEnabled) ||
+              (routingDecision.route === this.routingRoutes.workflow &&
+                !WORKFLOW_LLM_TARGET.isEnabled)
+
+            if (isLLMDisabledForRoute) {
+              await this.handleProviderFailure(NO_LLM_ENABLED_MESSAGE)
+              return resolve(null)
+            }
             this.startWorkflowProgressForTurn(
               routingDecision.mode,
               this.conversation.hasPendingAction()

@@ -8,6 +8,7 @@ export interface ResolvedLLMTarget {
   model: string
   label: string
   isLocal: boolean
+  isEnabled: boolean
   isResolved: boolean
   resolutionError?: string
 }
@@ -84,6 +85,18 @@ function createResolvedLLMTarget(
     model,
     label,
     isLocal,
+    isEnabled: true,
+    isResolved: true
+  }
+}
+
+function createDisabledLLMTarget(): ResolvedLLMTarget {
+  return {
+    provider: LLMProviders.None,
+    model: '',
+    label: 'disabled',
+    isLocal: false,
+    isEnabled: false,
     isResolved: true
   }
 }
@@ -97,6 +110,7 @@ function createUnresolvedLocalLLMTarget(
     model: '',
     label: `${provider}/not-installed`,
     isLocal: true,
+    isEnabled: true,
     isResolved: false,
     resolutionError
   }
@@ -110,6 +124,10 @@ export function resolveConfiguredLLMTarget(
   }
 ): ResolvedLLMTarget {
   const normalizedValue = rawValue.trim()
+
+  if (normalizedValue === LLMProviders.None) {
+    return createDisabledLLMTarget()
+  }
 
   if (!normalizedValue) {
     if (!options.defaultInstalledLLMPath) {
@@ -138,6 +156,10 @@ export function resolveConfiguredLLMTarget(
 
   if (separatorIndex === -1) {
     const provider = normalizeProvider(normalizedValue)
+
+    if (provider === LLMProviders.None) {
+      return createDisabledLLMTarget()
+    }
 
     if (!LOCAL_PROVIDERS.has(provider)) {
       throw new Error(
