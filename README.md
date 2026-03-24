@@ -168,7 +168,7 @@ cd leon
 npm install --global pnpm@latest
 
 # Install dependencies and run Leon
-pnpm install
+pnpm install --reporter=silent
 pnpm start
 ```
 

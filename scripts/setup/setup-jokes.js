@@ -1,8 +1,8 @@
 import { SetupUI } from './setup-ui'
 
 const FIRST_JOKE_DELAY_MS = 8_000
-const MIN_REPEAT_JOKE_DELAY_MS = 25_000
-const MAX_REPEAT_JOKE_DELAY_MS = 40_000
+const MIN_REPEAT_JOKE_DELAY_MS = 42_000
+const MAX_REPEAT_JOKE_DELAY_MS = 120_000
 const DOWNLOAD_PROGRESS_START_EVENT = 'leon:setup-download-progress:start'
 const DOWNLOAD_PROGRESS_END_EVENT = 'leon:setup-download-progress:end'
 

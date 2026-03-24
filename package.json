@@ -47,7 +47,6 @@
     "wake": "cross-env LEON_HOST=http://localhost LEON_PORT=1337 node hotword/index.js",
     "delete-dist:server": "shx rm -rf ./server/dist",
     "clean:python-deps": "shx rm -rf ./bridges/python/src/.venv ./tcp_server/src/.venv && pnpm run postinstall",
-    "prepare": "husky",
     "generate:http-api-key": "tsx scripts/generate/run-generate-http-api-key.js",
     "generate:json-schemas": "tsx scripts/generate/run-generate-json-schemas.js",
     "generate:prompt": "tsx scripts/generate/run-generate-prompt.js",

@@ -34,6 +34,7 @@ import { createSetupStatus } from './setup-status'
 import { SetupUI } from './setup-ui'
 import createInstanceID from './create-instance-id'
 import setFfprobePermissions from './set-ffprobe-permissions'
+import setupGitHooks from './setup-git-hooks'
 
 // Do not load ".env" file because it is not created yet
 
@@ -189,6 +190,8 @@ import setFfprobePermissions from './set-ffprobe-permissions'
     await setFfprobePermissions()
     currentStep = 'createInstanceID'
     await createInstanceID()
+    currentStep = 'setupGitHooks'
+    await setupGitHooks()
     currentStep = 'buildApp'
     {
       const status = createSetupStatus('Building app...').start()
