@@ -142,10 +142,9 @@ export default async function setupRemoteLLM() {
   )
 
   return {
-    providerLabel: provider.label,
-    providerValue: provider.value,
-    modelValue,
-    apiKeyEnv: provider.apiKeyEnv,
-    apiKey
+    remoteLLMProvider: provider.value,
+    remoteLLMModel: modelValue,
+    remoteLLMAPIKeyEnv: provider.apiKeyEnv,
+    remoteLLMAPIKey: apiKey
   }
 }
