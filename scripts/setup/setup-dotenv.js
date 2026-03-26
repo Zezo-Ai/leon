@@ -5,6 +5,11 @@ import { createSetupStatus } from './setup-status'
 
 const DOT_ENV_PATH = path.join(process.cwd(), '.env')
 const DOT_ENV_SAMPLE_PATH = path.join(process.cwd(), '.env.sample')
+const ENV_LINE_SEPARATOR_PATTERN = /\r?\n/
+
+function splitEnvLines(content) {
+  return content.split(ENV_LINE_SEPARATOR_PATTERN)
+}
 
 function getEnvVariableName(line) {
   const trimmedLine = line.trim()
@@ -25,14 +30,14 @@ function getEnvVariableName(line) {
 async function mergeMissingEnvVariables() {
   const sampleContent = await fs.promises.readFile(DOT_ENV_SAMPLE_PATH, 'utf8')
   const dotEnvContent = await fs.promises.readFile(DOT_ENV_PATH, 'utf8')
-  const dotEnvLines = dotEnvContent.split('\n')
+  const dotEnvLines = splitEnvLines(dotEnvContent)
   const existingVariableNames = new Set(
     dotEnvLines
       .map((line) => getEnvVariableName(line))
       .filter((variableName) => variableName !== null)
   )
   const missingSampleLines = sampleContent
-    .split('\n')
+    .split(ENV_LINE_SEPARATOR_PATTERN)
     .filter((line) => {
       const variableName = getEnvVariableName(line)
 
@@ -67,14 +72,14 @@ export async function readDotEnvVariables(variableNames) {
   const dotEnvContent = await fs.promises.readFile(DOT_ENV_PATH, 'utf8')
   const values = {}
 
-  for (const line of dotEnvContent.split('\n')) {
+  for (const line of splitEnvLines(dotEnvContent)) {
     const variableName = getEnvVariableName(line)
 
     if (!variableName || !variableNames.includes(variableName)) {
       continue
     }
 
-    values[variableName] = line.slice(line.indexOf('=') + 1)
+    values[variableName] = line.slice(line.indexOf('=') + 1).replace(/\r$/, '')
   }
 
   return values
@@ -87,7 +92,7 @@ export async function updateDotEnvVariable(variableName, value) {
   const dotEnvContent = fs.existsSync(DOT_ENV_PATH)
     ? await fs.promises.readFile(DOT_ENV_PATH, 'utf8')
     : ''
-  const dotEnvLines = dotEnvContent === '' ? [] : dotEnvContent.split('\n')
+  const dotEnvLines = dotEnvContent === '' ? [] : splitEnvLines(dotEnvContent)
   const nextLine = `${variableName}=${value}`
   let hasUpdatedLine = false
 
@@ -118,22 +123,15 @@ export async function updateDotEnvVariable(variableName, value) {
 /**
  * Duplicate the .env.sample to .env file
  */
-export default () =>
-  new Promise(async (resolve) => {
-    const status = createSetupStatus('Preparing .env...').start()
+export default async () => {
+  const status = createSetupStatus('Preparing .env...').start()
 
-    const createDotenv = () => {
-      fs.createReadStream(DOT_ENV_SAMPLE_PATH).pipe(fs.createWriteStream(DOT_ENV_PATH))
-    }
+  if (!fs.existsSync(DOT_ENV_PATH)) {
+    await fs.promises.copyFile(DOT_ENV_SAMPLE_PATH, DOT_ENV_PATH)
+    status.succeed('.env: created')
 
-    if (!fs.existsSync(DOT_ENV_PATH)) {
-      createDotenv()
-      status.succeed('.env: created')
+    return
+  }
 
-      resolve()
-    } else {
-      status.succeed(await mergeMissingEnvVariables())
-
-      resolve()
-    }
-  })
+  status.succeed(await mergeMissingEnvVariables())
+}
