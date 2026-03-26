@@ -1,15 +1,10 @@
 import { useState } from 'react'
 import classNames from 'clsx'
 import {
-  Slider as ArkSlider,
-  SliderControl,
-  SliderRange,
-  SliderThumb,
-  SliderTrack,
-  type SliderProps as ArkSliderProps
-} from '@ark-ui/react'
-
-import { generateKeyId } from '../../lib/utils'
+  Slider,
+  type SliderRootProps as ArkSliderProps,
+  type SliderValueChangeDetails
+} from '@ark-ui/react/slider'
 
 import './range-slider.sass'
 
@@ -21,8 +16,6 @@ interface RangeSliderOnChangeData {
 export interface RangeSliderProps
   extends Pick<
     ArkSliderProps,
-    | 'value'
-    | 'defaultValue'
     | 'max'
     | 'min'
     | 'step'
@@ -30,10 +23,20 @@ export interface RangeSliderProps
     | 'orientation'
   > {
   name: string
+  value?: number | number[]
+  defaultValue?: number | number[]
   width?: number | string
   height?: number | string
   hiddenThumb?: boolean
   onChange?: (data: RangeSliderOnChangeData) => void
+}
+
+function normalizeValue(value?: number | number[]): number[] | undefined {
+  if (typeof value === 'undefined') {
+    return undefined
+  }
+
+  return Array.isArray(value) ? value : [value]
 }
 
 export function RangeSlider({
@@ -50,37 +53,40 @@ export function RangeSlider({
   hiddenThumb,
   onChange
 }: RangeSliderProps) {
-  const [newValue, setNewValue] = useState(value)
+  const [newValue, setNewValue] = useState(normalizeValue(value ?? defaultValue))
+  const normalizedValue = normalizeValue(value)
+  const normalizedDefaultValue = normalizeValue(defaultValue)
+  const currentValue = normalizedValue ?? newValue ?? normalizedDefaultValue
+  const currentScalarValue = currentValue?.[0] ?? min
   const valueInPercent =
-    Number(((Number(newValue) - min) / (max - min)).toFixed(2)) * 100
+    Number((((currentScalarValue - min) / (max - min)) * 100).toFixed(2))
 
   return (
     <div
-      key={`aurora-range-slider_${generateKeyId()}`}
       className="aurora-range-slider-container"
       style={{
         width,
         height
       }}
     >
-      <ArkSlider
+      <Slider.Root
         className={classNames('aurora-range-slider', {
           'aurora-range-slider--hidden-thumb': hiddenThumb
         })}
         name={name}
-        value={newValue}
-        defaultValue={defaultValue}
+        value={normalizedValue}
+        defaultValue={normalizedDefaultValue}
         max={max}
         min={min}
         step={step}
         disabled={disabled}
         orientation={orientation}
-        onChange={(event) => {
+        onValueChange={(event: SliderValueChangeDetails) => {
           setNewValue(event.value)
 
           const data = {
             name,
-            value: event?.value
+            value: event.value[0]
           }
 
           if (onChange) {
@@ -88,20 +94,21 @@ export function RangeSlider({
           }
         }}
       >
-        <input type="hidden" name={name} value={newValue} />
-        <SliderControl className="aurora-range-slider-control">
-          <SliderTrack className="aurora-range-slider-track">
-            <SliderRange
+        <Slider.Control className="aurora-range-slider-control">
+          <Slider.Track className="aurora-range-slider-track">
+            <Slider.Range
               className="aurora-range-slider-range"
               style={{
                 [orientation === 'horizontal' ? 'width' : 'height']:
                   `${valueInPercent}%`
               }}
             />
-          </SliderTrack>
-          <SliderThumb className="aurora-range-slider-thumb" />
-        </SliderControl>
-      </ArkSlider>
+          </Slider.Track>
+          <Slider.Thumb className="aurora-range-slider-thumb" index={0}>
+            <Slider.HiddenInput />
+          </Slider.Thumb>
+        </Slider.Control>
+      </Slider.Root>
     </div>
   )
 }

@@ -212,16 +212,15 @@ You'll find a write-up on this [blog post](https://blog.getleon.ai/the-story-beh
 
 ## 🔔 Stay Tuned
 
-- [Twitter](https://twitter.com/grenlouis)
-- [Newsletter](https://newsletter.getleon.ai/subscription/form)
+- [X / Twitter](https://x.com/grenlouis)
+- [Newsletter](https://leonai.substack.com/subscribe)
 - [Blog](https://blog.getleon.ai)
 - [GitHub issues](https://github.com/leon-ai/leon/issues)
 - [YouTube](https://www.youtube.com/channel/UCW6mk6j6nQUzFYY97r47emQ)
-- [#LeonAI](<https://twitter.com/search?f=live&q=%23LeonAI%20(from%3Agrenlouis%20OR%20from%3Alouistiti_fr)&src=typed_query>)
 
 ## 👨 Author
 
-**Louis Grenard** ([@grenlouis](https://twitter.com/grenlouis))
+**Louis Grenard** ([@grenlouis](https://x.com/grenlouis))
 
 ## 👍 Sponsors
 

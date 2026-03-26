@@ -1,7 +1,7 @@
 import {
-  TabContent as ArkTabContent,
+  Tabs,
   type TabContentProps as ArkTabContentProps
-} from '@ark-ui/react'
+} from '@ark-ui/react/tabs'
 
 import { generateKeyId } from '../../../lib/utils'
 
@@ -12,12 +12,12 @@ export function TabContent({
   value
 }: TabContentProps): React.JSX.Element {
   return (
-    <ArkTabContent
+    <Tabs.Content
       key={`aurora-tab-content_${generateKeyId()}`}
       className="aurora-tab-content"
       value={value}
     >
       {children}
-    </ArkTabContent>
+    </Tabs.Content>
   )
 }
