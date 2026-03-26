@@ -6,6 +6,8 @@ import { SystemHelper } from '@/helpers/system-helper'
 
 import { createSetupStatus } from './setup-status'
 
+const MOVE_FALLBACK_ERROR_CODES = new Set(['EXDEV', 'EPERM', 'EBUSY', 'EACCES'])
+
 function readManifest(manifestPath) {
   if (!fs.existsSync(manifestPath)) {
     return null
@@ -22,15 +24,19 @@ async function removePath(targetPath) {
   await fs.promises.rm(targetPath, { recursive: true, force: true })
 }
 
+function isMoveFallbackError(error) {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    MOVE_FALLBACK_ERROR_CODES.has(error.code)
+  )
+}
+
 async function movePath(sourcePath, destinationPath) {
   try {
     await fs.promises.rename(sourcePath, destinationPath)
   } catch (error) {
-    if (
-      !(error instanceof Error) ||
-      !('code' in error) ||
-      error.code !== 'EXDEV'
-    ) {
+    if (!isMoveFallbackError(error)) {
       throw error
     }
 
