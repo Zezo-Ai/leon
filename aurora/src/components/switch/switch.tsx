@@ -1,14 +1,9 @@
 import { useState } from 'react'
 import {
   Switch as ArkSwitch,
-  SwitchLabel,
-  SwitchInput,
-  SwitchControl,
-  SwitchThumb,
-  type SwitchProps as ArkSwitchProps
-} from '@ark-ui/react'
-
-import { generateKeyId } from '../../lib/utils'
+  type SwitchCheckedChangeDetails,
+  type SwitchRootProps as ArkSwitchProps
+} from '@ark-ui/react/switch'
 
 import './switch.sass'
 
@@ -37,15 +32,14 @@ export function Switch({
   const [isChecked, setIsChecked] = useState(checked)
 
   return (
-    <ArkSwitch
-      key={`aurora-switch_${generateKeyId()}`}
+    <ArkSwitch.Root
       className="aurora-switch"
       name={name}
       value={value}
       checked={isChecked}
       disabled={disabled}
       required={required}
-      onChange={(event) => {
+      onCheckedChange={(event: SwitchCheckedChangeDetails) => {
         setIsChecked(event.checked)
 
         const data = {
@@ -59,13 +53,11 @@ export function Switch({
         }
       }}
     >
-      <>
-        <SwitchInput />
-        <SwitchControl className="aurora-switch-control">
-          <SwitchThumb className="aurora-switch-thumb" />
-        </SwitchControl>
-        <SwitchLabel className="aurora-switch-label">{label}</SwitchLabel>
-      </>
-    </ArkSwitch>
+      <ArkSwitch.HiddenInput />
+      <ArkSwitch.Control className="aurora-switch-control">
+        <ArkSwitch.Thumb className="aurora-switch-thumb" />
+      </ArkSwitch.Control>
+      <ArkSwitch.Label className="aurora-switch-label">{label}</ArkSwitch.Label>
+    </ArkSwitch.Root>
   )
 }

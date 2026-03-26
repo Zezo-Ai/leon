@@ -12,7 +12,7 @@
   &[data-disabled]
     cursor: not-allowed
     opacity: var(--a-opacity-disabled)
-  &:hover:not([data-checked], [data-disabled]) .aurora-switch-control
+  &:hover:not([data-state="checked"], [data-disabled]) .aurora-switch-control
     background-color: var(--a-color-background-surface-secondary-hover)
 
 .aurora-switch-control
@@ -24,7 +24,7 @@
   width: var(--a-switch-width)
   height: 22px
   transition: background-color var(--a-transition-duration-main) var(--a-transition-timing-main)
-  &[data-checked]
+  &[data-state="checked"]
     background-color: var(--a-color-accent)
 
 .aurora-switch-thumb
@@ -37,7 +37,7 @@
   border: 1px solid var(--a-color-input-border)
   background-color: var(--a-color-background-surface)
   transition: transform var(--a-transition-duration-main) var(--a-transition-timing-main), border-color var(--a-transition-duration-main) var(--a-transition-timing-main)
-  &[data-checked]
+  &[data-state="checked"]
     border-color: transparent
     transform: translateX(calc(var(--a-switch-width) - var(--a-thumb-size) - 4px))
 

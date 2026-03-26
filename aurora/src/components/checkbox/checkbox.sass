@@ -23,10 +23,10 @@
   background-color: var(--a-color-input-background)
   transition: background-color var(--a-transition-duration-main) var(--a-transition-timing-main), border-color var(--a-transition-duration-main) var(--a-transition-timing-main)
 
-  &[data-hover]:not([data-checked])
+  &[data-hover]:not([data-state="checked"])
     border-color: var(--a-color-input-border-hover)
     background-color: var(--a-color-input-background-hover)
-  &[data-checked]
+  &[data-state="checked"]
     border-color: transparent
     background-color: var(--a-color-input-border-focus)
   &[data-disabled]

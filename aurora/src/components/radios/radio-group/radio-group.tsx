@@ -1,9 +1,8 @@
 import {
   RadioGroup as ArkRadioGroup,
-  type RadioGroupProps as ArkRadioGroupProps
-} from '@ark-ui/react'
-
-import { generateKeyId } from '../../../lib/utils'
+  type RadioGroupRootProps as ArkRadioGroupProps,
+  type RadioGroupValueChangeDetails
+} from '@ark-ui/react/radio-group'
 
 import './radio-group.sass'
 
@@ -30,14 +29,13 @@ export function RadioGroup({
   onChange
 }: RadioGroupProps) {
   return (
-    <ArkRadioGroup
-      key={`aurora-radio-group_${generateKeyId()}`}
+    <ArkRadioGroup.Root
       className="aurora-radio-group"
       name={name}
       defaultValue={defaultValue}
       value={value}
       disabled={disabled}
-      onChange={(event) => {
+      onValueChange={(event: RadioGroupValueChangeDetails) => {
         const data = {
           name,
           value: event.value
@@ -50,6 +48,6 @@ export function RadioGroup({
       orientation="horizontal"
     >
       {children}
-    </ArkRadioGroup>
+    </ArkRadioGroup.Root>
   )
 }

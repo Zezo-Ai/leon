@@ -1,7 +1,7 @@
 import {
-  TabTrigger,
+  Tabs,
   type TabTriggerProps as ArkTabTriggerProps
-} from '@ark-ui/react'
+} from '@ark-ui/react/tabs'
 
 import { generateKeyId } from '../../../lib/utils'
 
@@ -16,13 +16,13 @@ export function Tab({
   disabled
 }: TabProps): React.JSX.Element {
   return (
-    <TabTrigger
+    <Tabs.Trigger
       key={`aurora-tab_${generateKeyId()}`}
       className="aurora-tab"
       value={value}
       disabled={disabled}
     >
       {children}
-    </TabTrigger>
+    </Tabs.Trigger>
   )
 }

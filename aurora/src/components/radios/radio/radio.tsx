@@ -1,12 +1,7 @@
 import {
-  Radio as ArkRadio,
-  RadioLabel,
-  RadioInput,
-  RadioControl,
-  type RadioProps as ArkRadioProps
-} from '@ark-ui/react'
-
-import { generateKeyId } from '../../../lib/utils'
+  RadioGroup,
+  type RadioGroupItemProps as ArkRadioProps
+} from '@ark-ui/react/radio-group'
 
 export interface RadioProps extends Pick<ArkRadioProps, 'value' | 'disabled'> {
   label: string
@@ -14,15 +9,16 @@ export interface RadioProps extends Pick<ArkRadioProps, 'value' | 'disabled'> {
 
 export function Radio({ label, value, disabled }: RadioProps) {
   return (
-    <ArkRadio
-      key={`aurora-radio_${generateKeyId()}`}
+    <RadioGroup.Item
       className="aurora-radio"
       value={value}
       disabled={disabled}
     >
-      <RadioInput />
-      <RadioControl className="aurora-radio-control" />
-      <RadioLabel className="aurora-radio-label">{label}</RadioLabel>
-    </ArkRadio>
+      <RadioGroup.ItemHiddenInput />
+      <RadioGroup.ItemControl className="aurora-radio-control" />
+      <RadioGroup.ItemText className="aurora-radio-label">
+        {label}
+      </RadioGroup.ItemText>
+    </RadioGroup.Item>
   )
 }

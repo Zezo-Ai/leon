@@ -6,7 +6,7 @@ export const INIT_MESSAGES = [
     `<ul>
 <li>We've got lots in the works. Check out <a href="http://roadmap.getleon.ai/" target="_blank">our roadmap</a>.</li>
 <li>Stay updated on our progress by checking out our <a href="https://blog.getleon.ai/" target="_blank">blog</a>.</li>
-<li>You can also get updates straight to your inbox <a href="https://newsletter.getleon.ai/subscription/form" target="_blank">here</a>.</li>
+<li>You can also get updates straight to your inbox <a href="https://leonai.substack.com/subscribe" target="_blank">here</a>.</li>
 `
   ],
   [

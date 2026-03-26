@@ -1,14 +1,11 @@
 import { useState } from 'react'
 import {
   Checkbox as ArkCheckbox,
-  CheckboxLabel,
-  CheckboxInput,
-  CheckboxControl,
-  type CheckboxProps as ArkCheckboxProps
-} from '@ark-ui/react'
+  type CheckboxCheckedChangeDetails,
+  type CheckboxRootProps as ArkCheckboxProps
+} from '@ark-ui/react/checkbox'
 
 import { Icon } from '../icon'
-import { generateKeyId } from '../../lib/utils'
 
 import './checkbox.sass'
 
@@ -40,15 +37,14 @@ export function Checkbox({
   const [isChecked, setIsChecked] = useState(checked)
 
   return (
-    <ArkCheckbox
-      key={`aurora-checkbox_${generateKeyId()}`}
+    <ArkCheckbox.Root
       className="aurora-checkbox"
       name={name}
       value={value}
       checked={isChecked}
       disabled={disabled}
       required={required}
-      onChange={(event) => {
+      onCheckedChange={(event: CheckboxCheckedChangeDetails) => {
         setIsChecked(event.checked as boolean)
 
         const data = {
@@ -62,21 +58,17 @@ export function Checkbox({
         }
       }}
     >
-      {(state) => (
-        <>
-          <CheckboxInput />
-          <CheckboxControl className="aurora-checkbox-control">
-            {state.isChecked ? (
-              <Icon iconName="check" size="sm" animated />
-            ) : (
-              <div className="aurora-checkbox-placeholder" />
-            )}
-          </CheckboxControl>
-          <CheckboxLabel className="aurora-checkbox-label">
-            {label}
-          </CheckboxLabel>
-        </>
-      )}
-    </ArkCheckbox>
+      <ArkCheckbox.HiddenInput />
+      <ArkCheckbox.Control className="aurora-checkbox-control">
+        {isChecked ? (
+          <Icon iconName="check" size="sm" animated />
+        ) : (
+          <div className="aurora-checkbox-placeholder" />
+        )}
+      </ArkCheckbox.Control>
+      <ArkCheckbox.Label className="aurora-checkbox-label">
+        {label}
+      </ArkCheckbox.Label>
+    </ArkCheckbox.Root>
   )
 }

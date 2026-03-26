@@ -1,12 +1,15 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import url from 'node:url'
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 
 import {
   NetworkHelper,
   type DownloadFileOptions
 } from '@/helpers/network-helper'
+import { SystemHelper } from '@/helpers/system-helper'
+
+const ZIP_ARCHIVE_EXTENSIONS = new Set(['.zip', '.whl'])
 
 export class FileHelper {
   /**
@@ -80,19 +83,29 @@ export class FileHelper {
     const basename = path.basename(archivePath).toLowerCase()
 
     try {
-      if (ext === '.zip' || ext === '.whl') {
-        execSync(`unzip -o -q "${archivePath}" -d "${targetPath}"`, {
-          stdio: 'inherit'
-        })
+      if (ZIP_ARCHIVE_EXTENSIONS.has(ext)) {
+        if (SystemHelper.isWindows()) {
+          execFileSync('tar', ['-xf', archivePath, '-C', targetPath], {
+            stdio: 'inherit'
+          })
+        } else {
+          execFileSync('unzip', ['-o', '-q', archivePath, '-d', targetPath], {
+            stdio: 'inherit'
+          })
+        }
       } else if (
         basename.endsWith('.tar.gz') ||
         basename.endsWith('.tar.xz') ||
         basename.endsWith('.tgz') ||
         ext === '.tar'
       ) {
-        const stripFlag =
-          stripComponents > 0 ? `--strip-components=${stripComponents}` : ''
-        execSync(`tar -xf "${archivePath}" -C "${targetPath}" ${stripFlag}`, {
+        const tarArgs = ['-xf', archivePath, '-C', targetPath]
+
+        if (stripComponents > 0) {
+          tarArgs.push(`--strip-components=${stripComponents}`)
+        }
+
+        execFileSync('tar', tarArgs, {
           stdio: 'inherit'
         })
       } else {
