@@ -9,6 +9,7 @@ import { LogHelper } from '@/helpers/log-helper'
 import buildAurora from './build-aurora'
 import train from './train/train'
 
+const MOVE_FALLBACK_ERROR_CODES = new Set(['EXDEV', 'EPERM', 'EBUSY', 'EACCES'])
 const SERVER_DIST_PATH = path.join(process.cwd(), 'server', 'dist')
 const SERVER_DIST_SRC_PATH = path.join(SERVER_DIST_PATH, 'server', 'src')
 const SERVER_DIST_SERVER_PATH = path.join(SERVER_DIST_PATH, 'server')
@@ -27,15 +28,19 @@ const SERVER_MEMORY_SQL_DESTINATION_PATH = path.join(
   'sql'
 )
 
+function isMoveFallbackError(error) {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    MOVE_FALLBACK_ERROR_CODES.has(error.code)
+  )
+}
+
 async function movePath(sourcePath, destinationPath) {
   try {
     await fs.promises.rename(sourcePath, destinationPath)
   } catch (error) {
-    if (
-      !(error instanceof Error) ||
-      !('code' in error) ||
-      error.code !== 'EXDEV'
-    ) {
+    if (!isMoveFallbackError(error)) {
       throw error
     }
 

@@ -23,6 +23,7 @@ const DOWNLOAD_PROGRESS_SPINNER_FRAMES = [
 const DOWNLOAD_PROGRESS_SPINNER_INTERVAL_MS = 80
 const SETUP_DOWNLOAD_PROGRESS_START_EVENT = 'leon:setup-download-progress:start'
 const SETUP_DOWNLOAD_PROGRESS_END_EVENT = 'leon:setup-download-progress:end'
+const MOVE_FALLBACK_ERROR_CODES = new Set(['EXDEV', 'EPERM', 'EBUSY', 'EACCES'])
 
 export interface DownloadFileOptions {
   cliProgress?: boolean
@@ -124,6 +125,17 @@ export class NetworkHelper {
     )
   }
 
+  private static isMoveFallbackError(
+    error: unknown
+  ): error is NodeJS.ErrnoException {
+    return (
+      error instanceof Error &&
+      'code' in error &&
+      typeof error.code === 'string' &&
+      MOVE_FALLBACK_ERROR_CODES.has(error.code)
+    )
+  }
+
   private static formatBytes(bytes: number): string {
     const units = ['B', 'KB', 'MB', 'GB', 'TB']
     let value = bytes
@@ -203,11 +215,7 @@ export class NetworkHelper {
     try {
       await fs.promises.rename(sourcePath, destinationPath)
     } catch (error) {
-      if (
-        !(error instanceof Error) ||
-        !('code' in error) ||
-        error.code !== 'EXDEV'
-      ) {
+      if (!this.isMoveFallbackError(error)) {
         throw error
       }
 

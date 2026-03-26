@@ -30,6 +30,7 @@ import { SetupUI } from './setup-ui'
  * 4. Keep the final binaries in their stable runtime directory
  */
 
+const MOVE_FALLBACK_ERROR_CODES = new Set(['EXDEV', 'EPERM', 'EBUSY', 'EACCES'])
 const { cpuArchitecture: CPU_ARCH } = SystemHelper.getInformation()
 const LLAMA_SERVER_BINARY_NAME = SystemHelper.isWindows()
   ? 'llama-server.exe'
@@ -94,17 +95,21 @@ function wait(delayMs) {
   })
 }
 
+function isMoveFallbackError(error) {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    MOVE_FALLBACK_ERROR_CODES.has(error.code)
+  )
+}
+
 async function movePath(sourcePath, destinationPath) {
   await removePath(destinationPath)
 
   try {
     await fs.promises.rename(sourcePath, destinationPath)
   } catch (error) {
-    if (
-      !(error instanceof Error) ||
-      !('code' in error) ||
-      error.code !== 'EXDEV'
-    ) {
+    if (!isMoveFallbackError(error)) {
       throw error
     }
 

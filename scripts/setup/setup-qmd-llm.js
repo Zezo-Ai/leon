@@ -7,6 +7,7 @@ import { NetworkHelper } from '@/helpers/network-helper'
 
 import { createSetupStatus } from './setup-status'
 
+const MOVE_FALLBACK_ERROR_CODES = new Set(['EXDEV', 'EPERM', 'EBUSY', 'EACCES'])
 const QMD_MODELS_DIR_PATH = path.join(homedir(), '.cache', 'qmd', 'models')
 
 const QMD_MODELS = [
@@ -34,6 +35,27 @@ function getModelFilenameFromURL(modelURL) {
   return path.basename(parsedURL.pathname)
 }
 
+function isMoveFallbackError(error) {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    MOVE_FALLBACK_ERROR_CODES.has(error.code)
+  )
+}
+
+async function movePath(sourcePath, destinationPath) {
+  try {
+    await fs.promises.rename(sourcePath, destinationPath)
+  } catch (error) {
+    if (!isMoveFallbackError(error)) {
+      throw error
+    }
+
+    await fs.promises.copyFile(sourcePath, destinationPath)
+    await fs.promises.rm(sourcePath, { force: true })
+  }
+}
+
 async function downloadModel(model) {
   const destinationPath = path.join(QMD_MODELS_DIR_PATH, model.filename)
   const legacyFilename = getModelFilenameFromURL(model.url)
@@ -44,7 +66,7 @@ async function downloadModel(model) {
   }
 
   if (legacyFilename !== model.filename && fs.existsSync(legacyPath)) {
-    await fs.promises.rename(legacyPath, destinationPath)
+    await movePath(legacyPath, destinationPath)
 
     return 'renamed'
   }
