@@ -272,6 +272,14 @@ function getLinuxVulkanAssetName() {
   return `llama-${LLAMACPP_RELEASE_VERSION}-bin-ubuntu-vulkan-x64.tar.gz`
 }
 
+function getLinuxCPUAssetName() {
+  return `llama-${LLAMACPP_RELEASE_VERSION}-bin-ubuntu-x64.tar.gz`
+}
+
+function getWindowsCPUAssetName() {
+  return `llama-${LLAMACPP_RELEASE_VERSION}-bin-win-cpu-x64.zip`
+}
+
 function getPrebuiltAssetName(graphicsComputeAPI, hasGPU) {
   if (SystemHelper.isMacOS()) {
     return CPU_ARCH === CPUArchitectures.ARM64
@@ -280,13 +288,21 @@ function getPrebuiltAssetName(graphicsComputeAPI, hasGPU) {
   }
 
   if (SystemHelper.isWindows()) {
-    return hasGPU && graphicsComputeAPI === 'cuda'
-      ? `llama-${LLAMACPP_RELEASE_VERSION}-bin-win-cuda-12.4-x64.zip`
-      : `llama-${LLAMACPP_RELEASE_VERSION}-bin-win-vulkan-x64.zip`
+    if (hasGPU && graphicsComputeAPI === 'cuda') {
+      return `llama-${LLAMACPP_RELEASE_VERSION}-bin-win-cuda-12.4-x64.zip`
+    }
+
+    if (hasGPU && graphicsComputeAPI === 'vulkan') {
+      return `llama-${LLAMACPP_RELEASE_VERSION}-bin-win-vulkan-x64.zip`
+    }
+
+    return getWindowsCPUAssetName()
   }
 
   if (SystemHelper.isLinux() && CPU_ARCH === CPUArchitectures.X64) {
-    return getLinuxVulkanAssetName()
+    return hasGPU && graphicsComputeAPI === 'vulkan'
+      ? getLinuxVulkanAssetName()
+      : getLinuxCPUAssetName()
   }
 
   throw new Error(

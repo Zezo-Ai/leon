@@ -19,7 +19,7 @@ export default async function inspectLocalAICapability() {
     llama = null
   }
 
-const [hasGPU, gpuDeviceNames, graphicsComputeAPI, totalVRAM, canSupportLLM] =
+  const [hasGPU, gpuDeviceNames, graphicsComputeAPI, totalVRAM, canSupportLLM] =
     await Promise.all([
       SystemHelper.hasGPU(llama || undefined, { allowCoreImport: false }),
       SystemHelper.getGPUDeviceNames(llama || undefined, {
@@ -41,8 +41,7 @@ const [hasGPU, gpuDeviceNames, graphicsComputeAPI, totalVRAM, canSupportLLM] =
     SystemHelper.getInformation().cpuArchitecture === CPUArchitectures.ARM64
 
   const canInstallLocalAI =
-    hasGPU &&
-    (!isLinuxARM64 || graphicsComputeAPI === 'cuda') &&
+    (!isLinuxARM64 || (hasGPU && graphicsComputeAPI === 'cuda')) &&
     canSupportLLM
 
   return {

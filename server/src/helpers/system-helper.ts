@@ -4,6 +4,9 @@ import type { Llama } from 'node-llama-cpp'
 
 import { OSTypes, CPUArchitectures } from '@/types'
 
+const MINIMUM_LOCAL_LLM_VRAM_GB = 6
+const MINIMUM_LOCAL_LLM_RAM_GB = 8
+
 enum OSNames {
   Windows = 'Windows',
   MacOS = 'macOS',
@@ -328,14 +331,17 @@ export class SystemHelper {
   }
 
   /**
-   * Check if the machine can support a local LLM based on total VRAM
+   * Check if the machine can support a local LLM based on VRAM or system RAM
    * @example canSupportLocalLLM() // true
    */
   public static async canSupportLocalLLM(
     llama?: Llama,
     options?: { allowCoreImport?: boolean }
   ): Promise<boolean> {
-    return (await this.getTotalVRAM(llama, options)) >= 6
+    return (
+      (await this.getTotalVRAM(llama, options)) >= MINIMUM_LOCAL_LLM_VRAM_GB ||
+      this.getTotalRAM() >= MINIMUM_LOCAL_LLM_RAM_GB
+    )
   }
 
   /**
