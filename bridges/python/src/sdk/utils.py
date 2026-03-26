@@ -9,6 +9,7 @@ import subprocess
 
 HUGGING_FACE_URL = 'https://huggingface.co'
 HUGGING_FACE_MIRROR_URL = 'https://hf-mirror.com'
+ZIP_ARCHIVE_EXTENSIONS = {'.zip', '.whl'}
 
 
 def can_access_hugging_face() -> bool:
@@ -286,21 +287,23 @@ def extract_archive(
     basename = os.path.basename(archive_path).lower()
     
     try:
-        if ext == '.zip' or ext == '.whl':
-            # Use unzip for .zip files (available on all platforms)
-            # -o: overwrite files without prompting
-            # -q: quiet mode
-            # -d: extract to directory
-            subprocess.run(
-                ['unzip', '-o', '-q', archive_path, '-d', target_path],
-                check=True,
-                capture_output=True
-            )
+        if ext in ZIP_ARCHIVE_EXTENSIONS:
+            if is_windows():
+                subprocess.run(
+                    ['tar', '-xf', archive_path, '-C', target_path],
+                    check=True,
+                    capture_output=True
+                )
+            else:
+                subprocess.run(
+                    ['unzip', '-o', '-q', archive_path, '-d', target_path],
+                    check=True,
+                    capture_output=True
+                )
         elif (basename.endswith('.tar.gz') or 
               basename.endswith('.tar.xz') or 
               basename.endswith('.tgz') or 
               ext == '.tar'):
-            # Use tar for .tar.* files (available on all platforms)
             tar_args = ['tar', '-xf', archive_path, '-C', target_path]
             if strip_components and strip_components > 0:
                 tar_args.append(f'--strip-components={strip_components}')
