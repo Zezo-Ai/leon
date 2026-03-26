@@ -26,7 +26,7 @@ import { LogHelper } from '@/helpers/log-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 
 const LLAMACPP_BASE_URL =
-  process.env['LEON_LLAMACPP_BASE_URL'] || 'http://0.0.0.0:8080/v1'
+  process.env['LEON_LLAMACPP_BASE_URL'] || 'http://127.0.0.1:8080/v1'
 const LLAMACPP_READY_TIMEOUT_MS = 120_000
 const LLAMACPP_READY_POLL_INTERVAL_MS = 250
 const LLAMA_SERVER_LOG_RESET_INTERVAL_MS = 12 * 60 * 60 * 1_000
