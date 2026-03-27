@@ -24,6 +24,7 @@ export default class Client {
     this._ttsAudioContext = null
     this._isLeonGeneratingAnswer = false
     this._isVoiceModeEnabled = false
+    this._hasSentInitMessages = false
     // this._ttsAudioContextes = {}
   }
 
@@ -85,6 +86,34 @@ export default class Client {
     )
   }
 
+  waitForInitUICompletion() {
+    if (this._hasSentInitMessages || this.chatbot.parsedBubbles?.length > 0) {
+      return
+    }
+
+    const trySendInitMessages = () => {
+      const initializedInitElement = document.querySelector('#init .initialized')
+
+      if (!initializedInitElement) {
+        return false
+      }
+
+      this._hasSentInitMessages = true
+      this.sendInitMessages()
+      return true
+    }
+
+    if (trySendInitMessages()) {
+      return
+    }
+
+    const interval = setInterval(() => {
+      if (trySendInitMessages()) {
+        clearInterval(interval)
+      }
+    }, 100)
+  }
+
   asrStartRecording() {
     if (!window.leonConfigInfo.stt.enabled) {
       console.warn('ASR is not enabled')
@@ -131,9 +160,7 @@ export default class Client {
         body.classList.remove('settingup')
       }, 250)
 
-      if (this.chatbot.parsedBubbles?.length === 0) {
-        this.sendInitMessages()
-      }
+      this.waitForInitUICompletion()
     })
 
     this.socket.on('answer', (data) => {
