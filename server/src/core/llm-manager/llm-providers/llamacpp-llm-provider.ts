@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import net from 'node:net'
 import path from 'node:path'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import type { Readable } from 'node:stream'
@@ -25,30 +26,75 @@ import {
 import { LogHelper } from '@/helpers/log-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 
-const LLAMACPP_BASE_URL =
+const DEFAULT_LLAMACPP_BASE_URL =
   process.env['LEON_LLAMACPP_BASE_URL'] || 'http://127.0.0.1:8080/v1'
 const LLAMACPP_READY_TIMEOUT_MS = 120_000
 const LLAMACPP_READY_POLL_INTERVAL_MS = 250
 const LLAMA_SERVER_LOG_RESET_INTERVAL_MS = 12 * 60 * 60 * 1_000
-const LLAMACPP_SERVER_URL = new URL(LLAMACPP_BASE_URL)
-const LLAMACPP_MODELS_URL = new URL(
-  'models',
-  LLAMACPP_BASE_URL.endsWith('/') ? LLAMACPP_BASE_URL : `${LLAMACPP_BASE_URL}/`
-).toString()
-const LLAMACPP_CHAT_COMPLETIONS_URL = new URL(
-  'chat/completions',
-  LLAMACPP_BASE_URL.endsWith('/') ? LLAMACPP_BASE_URL : `${LLAMACPP_BASE_URL}/`
-).toString()
-const LLAMACPP_SERVER_HOST = LLAMACPP_SERVER_URL.hostname
-const LLAMACPP_SERVER_PORT = Number(
-  LLAMACPP_SERVER_URL.port ||
-    (LLAMACPP_SERVER_URL.protocol === 'https:' ? 443 : 80)
-)
+const LLAMACPP_MAX_PORT_CHECKS = 10
 const LLAMA_SERVER_LOG_PATH = path.join(LOGS_PATH, 'llama-server.log')
 
 function wait(delayMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayMs)
+  })
+}
+
+function getURLPort(url: URL): number {
+  return Number(url.port || (url.protocol === 'https:' ? 443 : 80))
+}
+
+function toBaseURL(baseURL: string): string {
+  const url = new URL(baseURL)
+  return url.toString().endsWith('/') ? url.toString().slice(0, -1) : url.toString()
+}
+
+function toModelsURL(baseURL: string): string {
+  const normalizedBaseURL = baseURL.endsWith('/') ? baseURL : `${baseURL}/`
+
+  return new URL('models', normalizedBaseURL).toString()
+}
+
+function toChatCompletionsURL(baseURL: string): string {
+  const normalizedBaseURL = baseURL.endsWith('/') ? baseURL : `${baseURL}/`
+
+  return new URL('chat/completions', normalizedBaseURL).toString()
+}
+
+function withPort(baseURL: string, port: number): string {
+  const url = new URL(baseURL)
+  url.port = String(port)
+
+  return toBaseURL(url.toString())
+}
+
+async function isPortAvailable(host: string, port: number): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer()
+
+    server.once('error', (error: NodeJS.ErrnoException) => {
+      server.close()
+
+      if (error.code === 'EADDRINUSE') {
+        resolve(false)
+        return
+      }
+
+      reject(error)
+    })
+
+    server.once('listening', () => {
+      server.close((error) => {
+        if (error) {
+          reject(error)
+          return
+        }
+
+        resolve(true)
+      })
+    })
+
+    server.listen(port, host)
   })
 }
 
@@ -134,6 +180,7 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
   private static serverLogStream: fs.WriteStream | null = null
   private static nextServerLogResetAt = 0
   private static activeModelPath: string | null = null
+  private static runtimeBaseURL = DEFAULT_LLAMACPP_BASE_URL
   private static serverReady = false
   private static isUsingExternalServer = false
   private static serverReadyPromise: Promise<void> | null = null
@@ -148,7 +195,7 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
         providerName: 'llamacpp',
         apiKeyEnv: 'LEON_LLAMACPP_API_KEY',
         model: target.model,
-        baseURL: LLAMACPP_BASE_URL,
+        baseURL: LlamaCPPLLMProvider.runtimeBaseURL,
         flavor: 'openai-compatible',
         requiresApiKey: false
       }
@@ -226,7 +273,7 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
     completionParams: CompletionParams
   ): Promise<AxiosResponse> {
     const response = await axios.post(
-      LLAMACPP_CHAT_COMPLETIONS_URL,
+      LlamaCPPLLMProvider.getChatCompletionsURL(),
       this.buildDirectPlainTextPayload(prompt, completionParams, false),
       this.buildDirectRequestConfig(completionParams)
     )
@@ -239,7 +286,7 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
     completionParams: CompletionParams
   ): Promise<AxiosResponse> {
     const response = await axios.post(
-      LLAMACPP_CHAT_COMPLETIONS_URL,
+      LlamaCPPLLMProvider.getChatCompletionsURL(),
       this.buildDirectPlainTextPayload(prompt, completionParams, true),
       {
         ...this.buildDirectRequestConfig(completionParams),
@@ -575,9 +622,14 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
   }
 
   private async ensureServerReady(): Promise<void> {
+    this.setBaseURL(LlamaCPPLLMProvider.runtimeBaseURL)
+
     if (LlamaCPPLLMProvider.serverReady) {
       if (LlamaCPPLLMProvider.isUsingExternalServer) {
-        const existingServerProbe = await LlamaCPPLLMProvider.probeServerReady()
+        const existingServerProbe =
+          await LlamaCPPLLMProvider.probeServerReady(
+            LlamaCPPLLMProvider.runtimeBaseURL
+          )
 
         if (existingServerProbe.ready) {
           return
@@ -604,7 +656,9 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
     }
 
     if (LlamaCPPLLMProvider.serverReadyPromise) {
-      return LlamaCPPLLMProvider.serverReadyPromise
+      await LlamaCPPLLMProvider.serverReadyPromise
+      this.setBaseURL(LlamaCPPLLMProvider.runtimeBaseURL)
+      return
     }
 
     const startupPromise = LlamaCPPLLMProvider.startSharedServer(this.modelPath)
@@ -612,6 +666,7 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
 
     try {
       await startupPromise
+      this.setBaseURL(LlamaCPPLLMProvider.runtimeBaseURL)
     } finally {
       if (LlamaCPPLLMProvider.serverReadyPromise === startupPromise) {
         LlamaCPPLLMProvider.serverReadyPromise = null
@@ -620,17 +675,22 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
   }
 
   private static async startSharedServer(modelPath: string): Promise<void> {
-    const existingServerProbe = await this.probeServerReady()
+    const existingServerProbe = await this.probeServerReady(
+      DEFAULT_LLAMACPP_BASE_URL
+    )
 
     if (existingServerProbe.ready) {
       LogHelper.title('llama.cpp LLM Provider')
-      LogHelper.info(`Reusing existing llama-server at "${LLAMACPP_MODELS_URL}"`)
+      LogHelper.info(
+        `Reusing existing llama-server at "${toModelsURL(DEFAULT_LLAMACPP_BASE_URL)}"`
+      )
       this.writeServerLogLine(
-        `Reusing existing llama-server at "${LLAMACPP_MODELS_URL}".`
+        `Reusing existing llama-server at "${toModelsURL(DEFAULT_LLAMACPP_BASE_URL)}".`
       )
 
       this.serverProcess = null
       this.activeModelPath = null
+      this.runtimeBaseURL = DEFAULT_LLAMACPP_BASE_URL
       this.serverReady = true
       this.isUsingExternalServer = true
 
@@ -657,6 +717,8 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
     this.writeServerLogLine(
       `Starting llama-server with model "${modelPath}".`
     )
+    const runtimeBaseURL = await this.resolveRuntimeBaseURL()
+    const runtimeServerURL = new URL(runtimeBaseURL)
 
     const serverProcess = spawn(
       binaryPath,
@@ -664,9 +726,9 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
         '--model',
         modelPath,
         '--host',
-        LLAMACPP_SERVER_HOST,
+        runtimeServerURL.hostname,
         '--port',
-        String(LLAMACPP_SERVER_PORT),
+        String(getURLPort(runtimeServerURL)),
         '--ctx-size',
         '16384',
         '--flash-attn',
@@ -686,6 +748,7 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
 
     this.serverProcess = serverProcess
     this.activeModelPath = modelPath
+    this.runtimeBaseURL = runtimeBaseURL
     this.serverReady = false
     this.isUsingExternalServer = false
 
@@ -761,7 +824,7 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
         )
       }
 
-      const readinessProbe = await this.probeServerReady()
+      const readinessProbe = await this.probeServerReady(this.runtimeBaseURL)
       if (readinessProbe.ready) {
         return
       }
@@ -780,12 +843,12 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
     )
   }
 
-  private static async probeServerReady(): Promise<{
+  private static async probeServerReady(baseURL: string): Promise<{
     ready: boolean
     errorMessage: string
   }> {
     try {
-      await axios.get(LLAMACPP_MODELS_URL, {
+      await axios.get(toModelsURL(baseURL), {
         timeout: 1_000
       })
 
@@ -806,6 +869,7 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
 
     this.serverProcess = null
     this.activeModelPath = null
+    this.runtimeBaseURL = DEFAULT_LLAMACPP_BASE_URL
     this.serverReady = false
     this.isUsingExternalServer = false
     this.serverReadyPromise = null
@@ -826,6 +890,46 @@ export default class LlamaCPPLLMProvider extends AISDKRemoteLLMProvider {
 
     LogHelper.title('llama.cpp LLM Provider')
     LogHelper.info('Stopped llama-server')
+  }
+
+  private static getChatCompletionsURL(): string {
+    return toChatCompletionsURL(this.runtimeBaseURL)
+  }
+
+  private static async resolveRuntimeBaseURL(): Promise<string> {
+    const configuredServerURL = new URL(DEFAULT_LLAMACPP_BASE_URL)
+    const configuredHost = configuredServerURL.hostname
+    const configuredPort = getURLPort(configuredServerURL)
+
+    for (let portOffset = 0; portOffset < LLAMACPP_MAX_PORT_CHECKS; portOffset += 1) {
+      const port = configuredPort + portOffset
+      const isAvailable = await isPortAvailable(configuredHost, port)
+
+      if (!isAvailable) {
+        continue
+      }
+
+      const runtimeBaseURL =
+        portOffset === 0
+          ? toBaseURL(DEFAULT_LLAMACPP_BASE_URL)
+          : withPort(DEFAULT_LLAMACPP_BASE_URL, port)
+
+      if (portOffset > 0) {
+        const warningMessage =
+          `Port ${configuredPort} is unavailable for llama-server. ` +
+          `Using port ${port} instead via "${runtimeBaseURL}".`
+
+        LogHelper.title('llama.cpp LLM Provider')
+        LogHelper.warning(warningMessage)
+        this.writeServerLogLine(warningMessage)
+      }
+
+      return runtimeBaseURL
+    }
+
+    throw new Error(
+      `Unable to find an available port for llama-server starting from ${configuredPort} on host "${configuredHost}".`
+    )
   }
 
   private static writeServerLogChunk(chunk: Buffer): void {

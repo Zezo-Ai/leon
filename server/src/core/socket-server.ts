@@ -83,8 +83,13 @@ export default class SocketServer {
           return
         }
 
-        if (LLM_PROVIDER.isLlamaCPPServerReady) {
-          socket.emit('init-llama-server-boot', 'success')
+        const llamaServerBootStatus = LLM_PROVIDER.llamaCPPServerBootStatus
+
+        if (
+          llamaServerBootStatus === 'success' ||
+          llamaServerBootStatus === 'error'
+        ) {
+          socket.emit('init-llama-server-boot', llamaServerBootStatus)
           clearInterval(llamaServerInterval as NodeJS.Timeout)
           llamaServerInterval = null
         }
@@ -157,10 +162,7 @@ export default class SocketServer {
         )
 
         if (usesLlamaCPP) {
-          socket.emit(
-            'init-llama-server-boot',
-            LLM_PROVIDER.isLlamaCPPServerReady ? 'success' : 'loading'
-          )
+          socket.emit('init-llama-server-boot', LLM_PROVIDER.llamaCPPServerBootStatus)
         }
 
         this.monitorLLMInitialization(socket, {

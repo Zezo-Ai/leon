@@ -64,7 +64,7 @@ export default class AISDKRemoteLLMProvider {
   protected readonly model: string
 
   private readonly config: AISDKRemoteProviderConfig
-  private readonly languageModel: unknown
+  private languageModel: unknown
   private openAIWebSocketFetch:
     | ReturnType<typeof createWebSocketFetch>
     | undefined
@@ -90,6 +90,17 @@ export default class AISDKRemoteLLMProvider {
 
   public dispose(): void {
     this.openAIWebSocketFetch?.close()
+  }
+
+  protected setBaseURL(baseURL: string): void {
+    if (this.config.baseURL === baseURL) {
+      return
+    }
+
+    this.config.baseURL = baseURL
+    this.openAIWebSocketFetch?.close()
+    this.openAIWebSocketFetch = undefined
+    this.languageModel = this.createLanguageModel()
   }
 
   private checkAPIKey(): void {

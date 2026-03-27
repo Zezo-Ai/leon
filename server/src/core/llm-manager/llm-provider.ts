@@ -106,6 +106,7 @@ export default class LLMProvider {
   private workflowLLMProvider: Provider | undefined = undefined
   private agentLLMProvider: Provider | undefined = undefined
   private lastProviderErrorMessage: string | null = null
+  private llamaCPPServerBootErrorMessage: string | null = null
 
   constructor() {
     if (!LLMProvider.instance) {
@@ -173,6 +174,22 @@ export default class LLMProvider {
     return false
   }
 
+  public get llamaCPPServerBootStatus(): 'success' | 'loading' | 'error' {
+    if (this.isLlamaCPPServerReady) {
+      return 'success'
+    }
+
+    if (this.llamaCPPServerBootErrorMessage) {
+      return 'error'
+    }
+
+    return 'loading'
+  }
+
+  public get hasLlamaCPPServerBootError(): boolean {
+    return !!this.llamaCPPServerBootErrorMessage
+  }
+
   public consumeLastProviderErrorMessage(): string | null {
     const message = this.lastProviderErrorMessage
     this.lastProviderErrorMessage = null
@@ -185,6 +202,7 @@ export default class LLMProvider {
   public async init(): Promise<boolean> {
     LogHelper.title('LLM Provider')
     LogHelper.info('Initializing LLM provider...')
+    this.llamaCPPServerBootErrorMessage = null
 
     const workflowTarget = WORKFLOW_LLM_TARGET
     const agentTarget = AGENT_LLM_TARGET
@@ -243,7 +261,19 @@ export default class LLMProvider {
         ? await this.createProvider(agentTarget)
         : undefined
 
-    await this.bootLocalServerProviders()
+    try {
+      await this.bootLocalServerProviders()
+    } catch (error) {
+      if (
+        workflowTarget.provider === LLMProviders.LlamaCPP ||
+        agentTarget.provider === LLMProviders.LlamaCPP
+      ) {
+        this.llamaCPPServerBootErrorMessage =
+          error instanceof Error ? error.message : String(error)
+      }
+
+      throw error
+    }
 
     LogHelper.title('LLM Provider')
     const llmDisplay = getRoutingModeLLMDisplay(
