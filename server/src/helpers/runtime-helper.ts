@@ -103,18 +103,27 @@ export class RuntimeHelper {
    * Resolve the Python binary Leon should use for bridges and skills.
    */
   public static getPythonBinPath(): string {
-    return this.resolveExecutable(
-      'LEON_PYTHON_PATH',
-      [
-        path.join(
-          this.binPath,
-          'python',
-          SystemHelper.isWindows() ? 'python.exe' : 'python'
-        ),
-        path.join(this.binPath, 'python', 'bin', 'python'),
-        path.join(this.binPath, 'python', 'bin', 'python3')
-      ],
-      'python'
+    const envValue = process.env['LEON_PYTHON_PATH']?.trim()
+
+    if (envValue) {
+      return envValue
+    }
+
+    const managedCandidates = [
+      path.join(
+        this.binPath,
+        'python',
+        SystemHelper.isWindows() ? 'python.exe' : 'python'
+      ),
+      path.join(this.binPath, 'python', 'bin', 'python'),
+      path.join(this.binPath, 'python', 'bin', 'python3')
+    ]
+    const expectedManagedPythonBinPath = SystemHelper.isWindows()
+      ? path.join(this.binPath, 'python', 'python.exe')
+      : path.join(this.binPath, 'python', 'bin', 'python')
+
+    return (
+      this.firstExistingPath(managedCandidates) || expectedManagedPythonBinPath
     )
   }
 
