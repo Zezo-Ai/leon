@@ -14,6 +14,36 @@ import { createSetupStatus } from './setup-status'
 const PYPROJECT_FILE_NAME = 'pyproject.toml'
 
 /**
+ * Detect whether a command failed to spawn because the executable was missing.
+ */
+function isExecutableMissingError(error) {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'ENOENT'
+  )
+}
+
+/**
+ * Make Python runtime resolution failures actionable during setup.
+ */
+async function ensurePythonRuntimeAvailable(name) {
+  try {
+    await execa(PYTHON_RUNTIME_BIN_PATH, ['--version'])
+  } catch (error) {
+    if (!isExecutableMissingError(error)) {
+      throw error
+    }
+
+    throw new Error(
+      `${name}: unable to resolve Leon's managed Python runtime at "${PYTHON_RUNTIME_BIN_PATH}". Make sure the managed Python setup completed successfully, or set \`LEON_PYTHON_PATH\` to an explicit Python executable if you intentionally want to override it.`,
+      { cause: error }
+    )
+  }
+}
+
+/**
  * Read the dependency list from a Python project's `pyproject.toml` using the
  * managed Python runtime and the standard-library `tomllib` parser.
  */
@@ -98,6 +128,8 @@ export async function setupPythonProjectEnv({
 
     return
   }
+
+  await ensurePythonRuntimeAvailable(name)
 
   const dependencies = await getPyprojectDependencies(projectPath)
 
