@@ -9,5 +9,5 @@
     "server/dist",
     "bridges/toolkits"
   ],
-  "exec": "tsx server/src/index.ts"
+  "exec": "node scripts/run-with-managed-node.js node_modules/tsx/dist/cli.mjs server/src/index.ts"
 }

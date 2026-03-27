@@ -47,6 +47,7 @@ debug.log
 .env
 .last-skill-deps-sync
 .last-nodejs-bridge-deps-sync
+.last-native-node-modules-rebuild
 bridges/python/src/.last-python-bridge-deps-sync
 tcp_server/src/.last-tcp-server-deps-sync
 skills/**/.runtime/
