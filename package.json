@@ -51,7 +51,7 @@
     "build:app": "cross-env LEON_NODE_ENV=production tsx scripts/app/run-build-app.js",
     "build:server": "tsx scripts/build-server.js",
     "start:tcp-server": "tsx scripts/run-tcp-server.js",
-    "start": "cross-env LEON_NODE_ENV=production node server/dist/pre-check.js && node server/dist/index.js",
+    "start": "cross-env LEON_NODE_ENV=production node scripts/run-with-managed-node.js server/dist/pre-check.js && node scripts/run-with-managed-node.js server/dist/index.js",
     "python-bridge": "tsx scripts/run-python-bridge.js server/src/intent-object.sample.json",
     "train": "tsx scripts/train/run-train.js",
     "prepare-release": "tsx scripts/release/prepare-release.js",
