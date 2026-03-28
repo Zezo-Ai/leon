@@ -131,23 +131,30 @@ export class RuntimeHelper {
    * Resolve the uv binary Leon should use for Python dependency management.
    */
   public static getUVBinPath(): string {
-    return this.resolveExecutable(
-      'LEON_UV_PATH',
-      [
-        path.join(
-          this.binPath,
-          'uv',
-          SystemHelper.isWindows() ? 'uv.exe' : 'uv'
-        ),
-        path.join(
-          this.binPath,
-          'uv',
-          'bin',
-          SystemHelper.isWindows() ? 'uv.exe' : 'uv'
-        )
-      ],
-      'uv'
-    )
+    const envValue = process.env['LEON_UV_PATH']?.trim()
+
+    if (envValue) {
+      return envValue
+    }
+
+    const managedCandidates = [
+      path.join(
+        this.binPath,
+        'uv',
+        SystemHelper.isWindows() ? 'uv.exe' : 'uv'
+      ),
+      path.join(
+        this.binPath,
+        'uv',
+        'bin',
+        SystemHelper.isWindows() ? 'uv.exe' : 'uv'
+      )
+    ]
+    const expectedManagedUVBinPath = SystemHelper.isWindows()
+      ? path.join(this.binPath, 'uv', 'uv.exe')
+      : path.join(this.binPath, 'uv', 'uv')
+
+    return this.firstExistingPath(managedCandidates) || expectedManagedUVBinPath
   }
 
   /**
