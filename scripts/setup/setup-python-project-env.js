@@ -44,6 +44,24 @@ async function ensurePythonRuntimeAvailable(name) {
 }
 
 /**
+ * Make uv runtime resolution failures actionable during setup.
+ */
+async function ensureUVRuntimeAvailable(name) {
+  try {
+    await execa(UV_RUNTIME_BIN_PATH, ['--version'])
+  } catch (error) {
+    if (!isExecutableMissingError(error)) {
+      throw error
+    }
+
+    throw new Error(
+      `${name}: unable to resolve Leon's managed uv runtime at "${UV_RUNTIME_BIN_PATH}". Make sure the managed uv setup completed successfully, or set \`LEON_UV_PATH\` to an explicit uv executable if you intentionally want to override it.`,
+      { cause: error }
+    )
+  }
+}
+
+/**
  * Read the dependency list from a Python project's `pyproject.toml` using the
  * managed Python runtime and the standard-library `tomllib` parser.
  */
@@ -130,6 +148,7 @@ export async function setupPythonProjectEnv({
   }
 
   await ensurePythonRuntimeAvailable(name)
+  await ensureUVRuntimeAvailable(name)
 
   const dependencies = await getPyprojectDependencies(projectPath)
 
