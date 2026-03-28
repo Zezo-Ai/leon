@@ -1,4 +1,6 @@
-import { join } from 'node:path'
+import fs from 'node:fs'
+import path, { join } from 'node:path'
+import { spawn } from 'node:child_process'
 
 import Fastify from 'fastify'
 import fastifyStatic from '@fastify/static'
@@ -11,6 +13,7 @@ import {
   HAS_OVER_HTTP,
   IS_TELEMETRY_ENABLED,
   LEON_ROUTING_MODE,
+  TMP_PATH,
   WORKFLOW_LLM_TARGET
 } from '@/constants'
 import { LogHelper } from '@/helpers/log-helper'
@@ -27,6 +30,8 @@ import { openPathPlugin } from '@/core/http-server/api/open-path'
 import { PERSONA } from '@/core'
 import { SystemHelper } from '@/helpers/system-helper'
 import { getRoutingModeLLMDisplay } from '@/core/llm-manager/llm-routing'
+
+const LEON_OPEN_BROWSER_GUARD_PREFIX = 'open-browser'
 
 export interface APIOptions {
   apiVersion: string
@@ -52,6 +57,68 @@ export default class HTTPServer {
 
     this.host = host
     this.port = port
+  }
+
+  /**
+   * Open Leon in the default browser once per runtime launcher.
+   */
+  private async openBrowserOnStartup(): Promise<void> {
+    if (
+      process.env['IS_DOCKER'] === 'true' ||
+      process.env['CI'] === 'true' ||
+      process.env['LEON_OPEN_BROWSER'] !== 'true'
+    ) {
+      return
+    }
+
+    const guardPath = path.join(
+      TMP_PATH,
+      `${LEON_OPEN_BROWSER_GUARD_PREFIX}-${process.ppid}`
+    )
+
+    await fs.promises.mkdir(TMP_PATH, { recursive: true })
+
+    try {
+      const fileHandle = await fs.promises.open(guardPath, 'wx')
+
+      await fileHandle.close()
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        return
+      }
+
+      throw error
+    }
+
+    const leonURL = `${this.host}:${this.port}`
+    const browserCommand = SystemHelper.isWindows()
+      ? {
+          command: 'cmd.exe',
+          args: ['/c', 'start', '""', leonURL]
+        }
+      : SystemHelper.isMacOS()
+        ? {
+            command: 'open',
+            args: [leonURL]
+          }
+        : {
+            command: 'xdg-open',
+            args: [leonURL]
+          }
+
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(browserCommand.command, browserCommand.args, {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      })
+
+      child.once('error', reject)
+      child.once('spawn', () => {
+        child.unref()
+        resolve()
+      })
+    })
   }
 
   /**
@@ -138,6 +205,12 @@ export default class HTTPServer {
       () => {
         LogHelper.title('Initialization')
         LogHelper.success(`Server is available at ${this.host}:${this.port}`)
+
+        void this.openBrowserOnStartup().catch((error: Error) => {
+          LogHelper.warning(
+            `Could not open Leon in the browser automatically: ${error.message}`
+          )
+        })
       }
     )
   }

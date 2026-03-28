@@ -32,6 +32,7 @@ import setupPyTorch from './setup-pytorch.js'
 import setupTCPServerModels from './setup-tcp-server-models'
 import inspectLocalAICapability from './local-ai-capability'
 import inspectVoiceSetupState from './inspect-voice-setup-state'
+import postSetup from './post-setup'
 import { printSetupBanner } from './setup-banner'
 import { tellSetupCompletionJoke } from './setup-jokes'
 import setupPreferences from './setup-preferences'
@@ -140,7 +141,6 @@ async function syncLLMSetupChoice(preferences) {
 
   await updateDotEnvVariable('LEON_LLM', DISABLED_LLM_TARGET_VALUE)
 }
-
 // Do not load ".env" file because it is not created yet
 
 /**
@@ -365,6 +365,8 @@ async function syncLLMSetupChoice(preferences) {
       )}`
     )
     console.log('')
+    currentStep = 'postSetup'
+    await postSetup()
   } catch (e) {
     // Exit with the original signal code when setup was intentionally interrupted.
     if (shutdownSignal) {

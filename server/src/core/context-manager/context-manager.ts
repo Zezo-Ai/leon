@@ -24,8 +24,16 @@ interface ContextFileMetadata {
   lastGeneratedAt: number
 }
 
-const CONTEXT_FILES_SOURCE_DIR = path.join(
+const CONTEXT_FILES_RUNTIME_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
+  'context-files'
+)
+const CONTEXT_FILES_SOURCE_DIR = path.join(
+  process.cwd(),
+  'server',
+  'src',
+  'core',
+  'context-manager',
   'context-files'
 )
 const CONTEXT_MANAGER_DIR = path.dirname(fileURLToPath(import.meta.url))
@@ -358,14 +366,21 @@ export default class ContextManager {
 
   private resolveContextSourcePath(definition: ContextFile): string | null {
     const sourceBasename = this.getContextSourceBasename(definition.filename)
-    const tsPath = path.join(CONTEXT_FILES_SOURCE_DIR, `${sourceBasename}.ts`)
-    if (fs.existsSync(tsPath)) {
-      return tsPath
-    }
+    const sourceDirectories = [
+      CONTEXT_FILES_SOURCE_DIR,
+      CONTEXT_FILES_RUNTIME_DIR
+    ]
 
-    const jsPath = path.join(CONTEXT_FILES_SOURCE_DIR, `${sourceBasename}.js`)
-    if (fs.existsSync(jsPath)) {
-      return jsPath
+    for (const sourceDirectory of sourceDirectories) {
+      const tsPath = path.join(sourceDirectory, `${sourceBasename}.ts`)
+      if (fs.existsSync(tsPath)) {
+        return tsPath
+      }
+
+      const jsPath = path.join(sourceDirectory, `${sourceBasename}.js`)
+      if (fs.existsSync(jsPath)) {
+        return jsPath
+      }
     }
 
     return null
