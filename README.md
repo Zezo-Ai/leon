@@ -7,7 +7,7 @@
   Leon
 </h1>
 
-_<p align="center">Your open-source personal assistant.</p>_
+_<p align="center">Your open-source personal AI assistant.</p>_
 
 <p align="center">
   <a href="https://github.com/leon-ai/leon/blob/develop/LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg?label=License&style=flat" /></a>
@@ -21,8 +21,12 @@ _<p align="center">Your open-source personal assistant.</p>_
 </p>
 
 <p align="center">
+  Follow development updates on <a href="https://x.com/grenlouis"><strong>X / @grenlouis</strong></a>
+</p>
+
+<p align="center">
   <a href="https://getleon.ai">Website</a> ::
-  <a href="https://docs.getleon.ai">Documentation</a> ::
+  <a href="https://docs.getleon.ai">Legacy Docs</a> ::
   <a href="http://roadmap.getleon.ai">Roadmap</a> ::
   <a href="https://github.com/leon-ai/leon/blob/develop/.github/CONTRIBUTING.md">Contributing</a> ::
   <a href="https://blog.getleon.ai/the-story-behind-leon/">Story</a>
@@ -30,129 +34,57 @@ _<p align="center">Your open-source personal assistant.</p>_
 
 ---
 
-## Important Notice (as of 2026-01-11)
+## ⚠️ Important Notice (as of 2026-03-29)
 
 > [!IMPORTANT]
-> **Leon is currently undergoing a massive architectural rewrite.**
+> Leon is currently focused on the **2.0 Developer Preview** on the `develop` branch.
 >
-> The `develop` branch is highly experimental and may be unstable as I implement the new agentic core.
-> 
-> - If you are looking for the legacy, stable version (pre-LLM), please use the `master` branch.
-> - If you want to contribute to the future of Leon (LLMs, Agents, Automation), you are in the right place.
+> - The new documentation is **not ready yet**.
+> - The current docs site and older guides mostly reflect the legacy architecture.
+> - If you want the legacy, more stable pre-agentic version of Leon, use the `master` branch.
+> - If you want to explore or contribute to Leon's new core, `develop` is the right place.
 
-### Outdated Documentation
+The most accurate high-level references for Leon's current state are:
 
-Please note that the current documentation and this README are outdated regarding the technical architecture. We are moving away from simple classification toward a hybrid approach involving Local LLMs, Transformers, and Atomic Tools. Updated documentation will be released alongside the new core stability.
-
-### Project Evolution and Future Plans
-
-**I have been working on Leon since 2017**. While development has been inconsistent in the past, the current era of AI unlocks capabilities that were previously impossible. I'm now transitioning Leon from a standard assistant to a fully **autonomous personal AI assistant** designed to be used by technical hobbyists to non-tech users.
-
-I'm currently building the foundation for the next generation of Leon, focusing on 3 key milestones:
-
-**1. Workflow Architecture and Atomic Tools**
-
-We are restructuring Leon around a robust flow: `Skills > Actions > Tools > Functions (> Binaries)`.
-Instead of monolithic scripts, Leon will use atomic components (e.g. compiled binaries using ONNX runtime) to execute complex workflows.
-
-- Example: a "Video Translator" skill won't just be a script; it will be a workflow where Leon orchestrates tools like vocal isolation, zero-shot voice cloning, ASR, audio gender recognition, etc. to achieve the result.
-
-**2. Autonomous Skill Generation (self-coding)**
-
-We are developing a meta-skill capable of writing code for new skills automatically.
-
-- Leon will analyze a request, check if a skill exists, and if not, write the code itself following our strict architectural standards.
-- It will leverage existing tools and inject the new skill directly into its memory for future reuse.
-
-**3. Agentic Behavior (ReAct) and Local LLM Optimization**
-
-The ultimate phase will be to adopt the ReAct (Reason + Act) approach.
-
-- Leon will be provided with low-level **tools** (organized in toolkits, e.g., `music_audio` containing FFmpeg).
-- Using Local LLMs, Leon will loop through thoughts and actions to solve problems dynamically.
-- Optimization: we are implementing strict context filtering to save tokens, reduce hallucinations, and ensure high performance on local hardware.
-
-**Get Involved**
-
-[Join us on Discord](https://discord.gg/MNQqqKg) to ask questions, or express interest in becoming an active contributor.
-
-- Check out [the roadmap](http://roadmap.getleon.ai/) for more information on our upcoming plans.
-- Watch a [preview of our last progress](https://www.youtube.com/watch?v=6CInSt6pTVA) to see what we've been working on.
-
----
-
-### Why is there a small amount of contributors?
-
-I'm taking a lot of time to work on the new core of Leon due to personal reasons. I can only work on it during my spare time. Hence, I'm blocking any contribution as the whole core of Leon is coming with many breaking changes. Many of you are willing to contribute in Leon (create new skills, help to improve the core, translations and so on...), a big thanks to every one of you!
-
-While I would love to devote more time to Leon, I'm currently unable to do so because I have bills to pay. I have some ideas about how to monetize Leon in the future (Leon's core will always remain open source), but before to get there there is still a long way to go.
-
-Until then, any financial support by [sponsoring Leon](http://sponsor.getleon.ai) is much appreciated 🙂
-
----
-
-## Latest Release
-
-Check out the [latest release blog post](https://blog.getleon.ai/binaries-and-typescript-rewrite-1-0-0-beta-8/).
-
-<a href="https://blog.getleon.ai/binaries-and-typescript-rewrite-1-0-0-beta-8/"><img width="400" src="https://blog.getleon.ai/static/a0d1cbafd1968e7531dc17e229f8cc61/aa440/beta-8.png" /></a>
-
----
+- [`core/context/LEON.md`](./core/context/LEON.md)
+- [`core/context/ARCHITECTURE.md`](./core/context/ARCHITECTURE.md)
 
 ## 👋 Introduction
 
-**Leon** is an **open-source personal assistant** who can live **on your server**.
+**Leon** is **your open-source personal AI assistant** built around **tools, context, memory, and agentic execution**.
 
-He **does stuff** when you **ask him to**.
+Leon is designed to stay practical, privacy-aware, and grounded in your real environment. It can operate locally, use dedicated tools instead of relying on free-form guessing, and complete tasks from start to finish across deterministic workflows and agent-style execution.
 
-You can **talk to him** and he can **talk to you**.
-You can also **text him** and he can also **text you**.
-If you want to, Leon can communicate with you by being **offline to protect your privacy**.
+## 🧠 What Leon Is Today
 
-### Why?
+Leon is no longer just a classic intent-classification assistant like it was for its first release in 2019.
 
-> 1. If you are a developer (or not), you may want to build many things that could help in your daily life.
->    Instead of building a dedicated project for each of those ideas, Leon can help you with his
->    Skills structure.
-> 2. With this generic structure, everyone can create their own skills and share them with others.
->    Therefore there is only one core (to rule them all).
-> 3. Leon uses AI concepts, which is cool.
-> 4. Privacy matters, you can configure Leon to talk with him offline. You can already text with him without any third party services.
-> 5. Open source is great.
+Today, Leon is being built as a more capable assistant that can understand a goal, choose how to handle it, use tools, remember useful information, and recover when something goes wrong.
 
-### What is this repository for?
+- Leon can run in different ways depending on the task: `smart` mode chooses for you, `workflow` mode follows a fixed path, and `agent` mode can plan step by step.
+- Leon can use real tools to get work done instead of only replying with plain text.
+- Leon can use context about your environment so answers stay grounded in what is actually happening on your machine and setup.
+- Leon keeps layered memory so it can remember durable preferences, day-to-day context, and recent discussion context.
+- Leon supports both local and remote AI providers, which helps balance privacy, control, and capability.
+- Under the hood, the core is organized as `Skills -> Actions -> Tools -> Functions (-> Binaries)`.
 
-> This repository contains the following nodes of Leon:
->
-> - The server
-> - Skills
-> - The web app
-> - The hotword node
-> - The TCP server (for inter-process communication between Leon and third-party nodes such as spaCy)
-> - The Python bridge (the connector between the core and skills made with Python)
+Leon also keeps a compact self-model and a bounded proactive pulse system so it can stay more consistent over time without flooding itself with unnecessary context.
 
-### What is Leon able to do?
+## Why?
 
-> Today, the most interesting part is about his core and the way he can scale up. He is pretty young but can easily scale to have new features (skills).
-> You can find what he is able to do by browsing the [skills list](https://github.com/leon-ai/leon/tree/develop/skills).<br>
-> Please do know that after the official release, we will build many skills along with the community. Feel free to [join us on Discord](https://discord.gg/MNQqqKg) to be part of the journey.
-
-Sounds good to you? Then let's get started!
-
-## ☁️ Try with a Single-Click
-
-Gitpod will automatically set up an environment and run an instance for you.
-
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/leon-ai/leon)
+- **Privacy matters**: Leon can work with local models and local context instead of forcing everything through third-party services.
+- **Grounded behavior matters**: Leon prefers explicit tools, context, and memory over vague model-only responses.
+- **Extensibility matters**: skills, toolkits, bridges, and binaries make it possible to keep Leon modular.
+- **Open source matters**: anyone can inspect the architecture, build on top of it, and help shape where it goes next.
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) >= 24.0.0
-- Supported OSes: Linux, macOS and Windows
+- Supported OSes: Linux, macOS, and Windows
 
-Recommended: manage Node.js and pnpm with [Volta](https://volta.sh/).
+Recommended: manage Node.js with [Volta](https://volta.sh/).
 
 ### Installation
 
@@ -168,55 +100,77 @@ npm install --global pnpm@latest
 
 # Install dependencies
 pnpm install
+```
 
+### Run Leon
+
+```sh
 # Run Leon
 pnpm start
 ```
 
-### Usage
+### Check Your Setup
 
 ```sh
 # Check the setup went well
 pnpm run check
-
-# Go to http://localhost:1337
-# Hooray! Leon is running
 ```
 
-## 📚 Documentation
+By default, Leon runs locally and the app is available on `http://localhost:1337`.
 
-For full documentation, visit [docs.getleon.ai](https://docs.getleon.ai).
+## 🏗️ Architecture Snapshot
 
-## 🇫🇷 Documenting the Journey on YouTube
+At a high level, Leon currently consists of:
 
-[I'm documenting the journey on YouTube](https://www.youtube.com/@louisgyt) in developing our dear Leon. I also take you along in my daily life here in China.
+- `server/`: the main runtime, routing, memory, context management, HTTP API, and agent/workflow execution
+- `app/`: the web application
+- `aurora/`: UI components and preview environment
+- `skills/`: user-facing capabilities built on top of the core
+- `bridges/`: Node.js and Python bridges plus toolkit definitions and tool runtimes
+- `tcp_server/`: Python services used by parts of the runtime stack
+- `core/context/`: generated identity and architecture context documents that describe Leon's current behavior
 
-For non-French speakers, translated English subtitles are available.
+This repository already includes skills and toolkits for areas such as search, productivity, system utilities, media workflows, coding assistance, memory-backed interactions, and voice/audio features.
 
-## 📺 Video
+## 📚 Documentation Status
 
-[Watch a demo](https://www.youtube.com/watch?v=p7GRGiicO1c).
+The new docs for Leon 2.0 are not ready yet.
 
-## 🧭 Roadmap
+For now:
 
-To know what is going on, follow [roadmap.getleon.ai](http://roadmap.getleon.ai).
+- treat this repository as the source of truth for the **2.0 Developer Preview**
+- use [`core/context/LEON.md`](./core/context/LEON.md) for Leon's current identity and behavior
+- use [`core/context/ARCHITECTURE.md`](./core/context/ARCHITECTURE.md) for the current architecture overview
+- expect the public docs site to lag behind the new core until the updated documentation is published
 
 ## ❤️ Contributing
 
-If you have an idea for improving Leon, do not hesitate.
+We are starting to progressively onboard contributors for the **2.0 Developer Preview**.
 
-**Leon needs open source to live**, the more skills he has, the more skillful he becomes.
+If you want to follow the project or express interest in joining that onboarding:
+
+- [2.0 Developer Preview contributor form](https://forms.gle/6PCG2D5rYo1q8tKMA)
+- [Roadmap](http://roadmap.getleon.ai)
+- [Discord](https://discord.gg/MNQqqKg)
+- [GitHub issues](https://github.com/leon-ai/leon/issues)
+
+### Why is there a small amount of contributors?
+
+Leon has been evolving for a long time, but the current 2.0 work is a major transition period.
+
+For a long time, Leon was a smaller assistant project with a simpler architecture. Today, the core is being rebuilt into a much more capable system around tools, memory, context, and agent-style execution. That means a lot of things are still moving, and it makes contribution harder than it will be once the new docs and architecture settle down.
+
+Another important reason is simply time: Leon is still developed largely during spare time. So progress can be uneven, and opening the project more broadly has to be balanced with keeping the direction coherent while the 2.0 Developer Preview is still taking shape.
 
 ## 📖 The Story Behind Leon
 
-You'll find a write-up on this [blog post](https://blog.getleon.ai/the-story-behind-leon/).
+Leon started in 2017 and has been active since 2019. If you want the longer backstory, read [the story behind Leon](https://blog.getleon.ai/the-story-behind-leon/).
 
 ## 🔔 Stay Tuned
 
 - [X / Twitter](https://x.com/grenlouis)
 - [Newsletter](https://leonai.substack.com/subscribe)
 - [Blog](https://blog.getleon.ai)
-- [GitHub issues](https://github.com/leon-ai/leon/issues)
 - [YouTube](https://www.youtube.com/channel/UCW6mk6j6nQUzFYY97r47emQ)
 
 ## 👨 Author
@@ -258,33 +212,3 @@ You'll find a write-up on this [blog post](https://blog.getleon.ai/the-story-beh
 </table>
 
 You can also contribute by [sponsoring Leon](http://sponsor.getleon.ai).
-
-Please note that I dedicate most of my free time to Leon.
-
-By sponsoring the project you make the project sustainable and faster to develop features.
-
-The focus is not only limited to the activity you see on GitHub but also a lot of thinking about the direction of the project. Which is naturally related to the overall design, architecture, vision, learning process and so on...
-
-### Special Thanks
-
-<a href="https://vercel.com/?utm_source=leon-ai&utm_campaign=oss">
-  <img src="https://i.imgur.com/S5olXWh.png" alt="Vercel" width="128" />
-</a>
-&nbsp; &nbsp; &nbsp;
-<a href="https://www.macstadium.com/">
-  <img src="https://getleon.ai/img/thanks/mac-stadium.svg" alt="MacStadium" width="128" />
-</a>
-&nbsp; &nbsp; &nbsp;
-<a href="https://www.aoz.studio">
-  <img src="https://getleon.ai/_next/image?url=%2Fimg%2Fthanks%2Faoz-studio.png&w=384&q=75" alt="AOZ Studio" width="128" />
-</a>
-
-## 📝 License
-
-[MIT License](https://github.com/leon-ai/leon/blob/develop/LICENSE.md)
-
-Copyright (c) 2019-present, Louis Grenard <louis@getleon.ai>
-
-## Cheers!
-
-![Cheers!](https://github.githubassets.com/images/icons/emoji/unicode/1f379.png 'Cheers!')
