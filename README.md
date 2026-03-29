@@ -150,10 +150,9 @@ Gitpod will automatically set up an environment and run an instance for you.
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) >= 24.0.0
-- [npm](https://npmjs.com/) >= 11.3.0
 - Supported OSes: Linux, macOS and Windows
 
-To install these prerequisites, you can follow the [How To section](https://docs.getleon.ai/how-to/) of the documentation.
+Recommended: manage Node.js and pnpm with [Volta](https://volta.sh/).
 
 ### Installation
 
@@ -164,8 +163,11 @@ git clone https://github.com/leon-ai/leon.git
 # Go to the project root
 cd leon
 
-# Install
-node install.mjs
+# Install pnpm
+npm install --global pnpm@latest
+
+# Install dependencies
+pnpm install
 
 # Run Leon
 pnpm start
