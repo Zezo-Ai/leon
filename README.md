@@ -10,25 +10,16 @@
 _<p align="center">Your open-source personal AI assistant.</p>_
 
 <p align="center">
-  <a href="https://github.com/leon-ai/leon/blob/develop/LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg?label=License&style=flat" /></a>
-  <a href="https://github.com/leon-ai/leon/blob/develop/.github/CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat" /></a>
-  <br>
-  <a href="https://github.com/leon-ai/leon/actions/workflows/build.yml"><img src="https://github.com/leon-ai/leon/actions/workflows/build.yml/badge.svg?branch=develop" /></a>
-  <a href="https://github.com/leon-ai/leon/actions/workflows/tests.yml"><img src="https://github.com/leon-ai/leon/actions/workflows/tests.yml/badge.svg?branch=develop" /></a>
-  <a href="https://github.com/leon-ai/leon/actions/workflows/lint.yml"><img src="https://github.com/leon-ai/leon/actions/workflows/lint.yml/badge.svg?branch=develop" /></a>
-  <br>
   <a href="https://discord.gg/MNQqqKg"><img src="https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white" /></a>
+  <a href="https://x.com/grenlouis"><img src="https://img.shields.io/badge/X-%40grenlouis-000000?style=for-the-badge&logo=x&logoColor=white" /></a>
+  <a href="https://github.com/leon-ai/leon/blob/develop/LICENSE.md"><img src="https://img.shields.io/badge/License-MIT-1c75db?style=for-the-badge" /></a>
 </p>
 
 <p align="center">
-  Follow development updates on <a href="https://x.com/grenlouis"><strong>X / @grenlouis</strong></a>
-</p>
-
-<p align="center">
-  <a href="https://getleon.ai">Website</a> ::
-  <a href="https://docs.getleon.ai">Legacy Docs</a> ::
-  <a href="http://roadmap.getleon.ai">Roadmap</a> ::
-  <a href="https://github.com/leon-ai/leon/blob/develop/.github/CONTRIBUTING.md">Contributing</a> ::
+  <a href="https://x.com/grenlouis">@grenlouis</a> ·
+  <a href="https://getleon.ai">Website</a> ·
+  <a href="https://leonai.substack.com/subscribe">Newsletter</a> ·
+  <a href="http://roadmap.getleon.ai">Roadmap</a> ·
   <a href="https://blog.getleon.ai/the-story-behind-leon/">Story</a>
 </p>
 
