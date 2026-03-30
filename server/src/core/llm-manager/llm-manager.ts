@@ -7,14 +7,11 @@ import {
   WORKFLOW_LLM_TARGET
 } from '@/constants'
 import { ConversationLogger } from '@/conversation-logger'
-import { SYSTEM_PROMPT as SKILL_ROUTER_SYSTEM_PROMPT } from '@/core/llm-manager/llm-duties/skill-router-llm-duty'
 import { LLMDuties } from '@/core/llm-manager/types'
 import { LogHelper } from '@/helpers/log-helper'
-import { StringHelper } from '@/helpers/string-helper'
 import { getRoutingModeLLMDisplay } from '@/core/llm-manager/llm-routing'
 
 interface CoreLLMDutyConfig {
-  contextSize: number
   maxTokens?: number
   temperature?: number
   thoughtTokensBudget?: number
@@ -29,32 +26,31 @@ interface CoreLLMDuties {
 
 type SkillListContent = string | null
 
-const DEFAULT_CORE_LLM_DUTIES_CONTEXT_SIZE = 2_048
+const WORKFLOW_SKILL_ROUTER_MAX_TOKENS = 72
+const WORKFLOW_ACTION_CALLING_MAX_TOKENS = 256
+const WORKFLOW_SLOT_FILLING_MAX_TOKENS = 128
+const WORKFLOW_PARAPHRASE_MAX_TOKENS = 1_024
 
 // Workflow duties should stay fast and deterministic. The provider layer maps
 // disableThinking to the strongest supported non-thinking / low-reasoning mode.
 const CORE_LLM_DUTIES: CoreLLMDuties = {
   [LLMDuties.SkillRouter]: {
-    contextSize: 0,
-    maxTokens: 12,
+    maxTokens: WORKFLOW_SKILL_ROUTER_MAX_TOKENS,
     thoughtTokensBudget: 0,
     temperature: 0
   },
   [LLMDuties.ActionCalling]: {
-    contextSize: 4_096,
-    maxTokens: 384,
+    maxTokens: WORKFLOW_ACTION_CALLING_MAX_TOKENS,
     thoughtTokensBudget: 0,
     temperature: 0.1
   },
   [LLMDuties.SlotFilling]: {
-    contextSize: 1_024,
-    maxTokens: 96,
+    maxTokens: WORKFLOW_SLOT_FILLING_MAX_TOKENS,
     thoughtTokensBudget: 0,
     temperature: 0
   },
   [LLMDuties.Paraphrase]: {
-    contextSize: DEFAULT_CORE_LLM_DUTIES_CONTEXT_SIZE,
-    maxTokens: 192,
+    maxTokens: WORKFLOW_PARAPHRASE_MAX_TOKENS,
     thoughtTokensBudget: 0,
     temperature: 0.6
   }
@@ -142,28 +138,6 @@ export default class LLMManager {
     } catch (e) {
       throw new Error(`Failed to load the skill router skill list: ${e}`)
     }
-
-    const completeSkillRouterSystemPrompt = StringHelper.findAndMap(
-      SKILL_ROUTER_SYSTEM_PROMPT,
-      {
-        '{{ SKILL_LIST }}': this._skillListContent || ''
-      }
-    )
-    const estimatedPromptTokens = Math.ceil(
-      completeSkillRouterSystemPrompt.length / 4
-    )
-    const skillRouterContextSize =
-      estimatedPromptTokens +
-      (this._coreLLMDuties[LLMDuties.SkillRouter].maxTokens ?? 0) +
-      256
-
-    this._coreLLMDuties[LLMDuties.SkillRouter].contextSize =
-      skillRouterContextSize
-
-    LogHelper.title('LLM Manager')
-    LogHelper.info(
-      `Allocated ${skillRouterContextSize} context size for ${LLMDuties.SkillRouter} duty`
-    )
   }
 
   public async init(): Promise<void> {

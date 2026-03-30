@@ -11,7 +11,7 @@ const coreMocks = vi.hoisted(() => ({
     coreLLMDuties: {
       'slot-filling': {
         maxTokens: 96,
-        thoughtTokensBudget: 32,
+        thoughtTokensBudget: 0,
         temperature: 0
       }
     }

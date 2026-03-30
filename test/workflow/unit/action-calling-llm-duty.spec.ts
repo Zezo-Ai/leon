@@ -11,7 +11,7 @@ const coreMocks = vi.hoisted(() => ({
     coreLLMDuties: {
       'action-calling': {
         maxTokens: 384,
-        thoughtTokensBudget: 64,
+        thoughtTokensBudget: 0,
         temperature: 0.1
       }
     }

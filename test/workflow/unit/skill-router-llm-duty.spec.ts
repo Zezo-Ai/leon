@@ -11,7 +11,7 @@ const coreMocks = vi.hoisted(() => ({
     skillListContent: 'timer_skill: Set timers',
     coreLLMDuties: {
       'skill-router': {
-        maxTokens: 12,
+        maxTokens: 128,
         thoughtTokensBudget: 0,
         temperature: 0
       }
@@ -75,7 +75,7 @@ describe('SkillRouterLLMDuty', () => {
       expect.objectContaining({
         dutyType: 'skill-router',
         history,
-        maxTokens: 12,
+        maxTokens: 128,
         temperature: 0,
         disableThinking: true
       })
