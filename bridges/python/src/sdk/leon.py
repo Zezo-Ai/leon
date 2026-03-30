@@ -36,6 +36,17 @@ class Leon:
             Leon.global_answers = {}
 
     @staticmethod
+    def _get_answer_text(answer: Union[str, AnswerConfig, None]) -> str:
+        """Convert an answer config to a text-only value."""
+        if not answer:
+            return ''
+
+        if isinstance(answer, str):
+            return answer
+
+        return answer.get('text') or answer.get('speech') or ''
+
+    @staticmethod
     def _inject_variables(answer: AnswerConfig, data_to_inject: Union[Dict[str, Any], None]) -> AnswerConfig:
         """A private helper to inject variables into an answer string or object"""
         if not data_to_inject:
@@ -90,10 +101,18 @@ class Leon:
         """
         try:
             key = answer_input.get('key')
+            resolved_answer = self.set_answer_data(key, answer_input.get('data')) if key is not None else ''
+            fallback_text = self._get_answer_text(resolved_answer)
+
+            if answer_input.get('widget') is not None and not fallback_text:
+                raise ValueError(
+                    'Widget answers must include a text fallback via `key`.'
+                )
+
             output = {
                 'output': {
                     'codes': 'widget' if answer_input.get('widget') and not answer_input.get('key') else answer_input.get('key'),
-                    'answer': self.set_answer_data(key, answer_input.get('data')) if key is not None else '',
+                    'answer': resolved_answer,
                     'core': answer_input.get('core'),
                     'replaceMessageId': answer_input.get('replaceMessageId')
                 }
@@ -107,6 +126,8 @@ class Leon:
                     'widget': widget.widget,
                     'id': widget.id,
                     'onFetch': widget.on_fetch if hasattr(widget, 'on_fetch') else None,
+                    'fallbackText': fallback_text,
+                    'historyMode': answer_input.get('widgetHistoryMode') or 'persisted',
                     'componentTree': WidgetWrapper({
                         **wrapper_props,
                         'children': [widget.render()]

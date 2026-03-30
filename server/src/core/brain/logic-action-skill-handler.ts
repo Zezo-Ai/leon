@@ -17,10 +17,11 @@ import {
   PYTHON_BRIDGE_RUNTIME_BIN_PATH,
   TSX_CLI_PATH
 } from '@/constants'
-import { BRAIN, SOCKET_SERVER, NLU } from '@/core'
+import { BRAIN, SOCKET_SERVER, NLU, CONVERSATION_LOGGER } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { DateHelper } from '@/helpers/date-helper'
 import { RuntimeHelper } from '@/helpers/runtime-helper'
+import { ConversationHistoryHelper } from '@/helpers/conversation-history-helper'
 
 export class LogicActionSkillHandler {
   public static async handle(
@@ -65,7 +66,7 @@ export class LogicActionSkillHandler {
 
       // Read skill output
       BRAIN.skillProcess?.stdout.on('data', (data: Buffer) => {
-        SOCKET_SERVER.socket?.emit('is-typing', true)
+        SOCKET_SERVER.emitToChatClients('is-typing', true)
         buffer += data.toString()
 
         let newlineIndex
@@ -141,7 +142,7 @@ export class LogicActionSkillHandler {
           lastOutputFromSkill: lastSkillResult?.output
         })
 
-        SOCKET_SERVER.socket?.emit('is-typing', false)
+        SOCKET_SERVER.emitToChatClients('is-typing', false)
         BRAIN.skillProcess = undefined
       })
     })
@@ -172,24 +173,46 @@ export class LogicActionSkillHandler {
     LogHelper.title(`${BRAIN.skillFriendlyName} skill (on data)`)
     LogHelper.info(JSON.stringify(skillAnswer))
 
+    const answerText = ConversationHistoryHelper.getAnswerText(
+      skillAnswer.output.answer
+    )
+    const replaceMessageId = skillAnswer.output.replaceMessageId || null
+
     /**
      * Handle widget answers
-     *
-     * Verify the brain is not muted since when we fetch widgets we should
-     * not speak the answers
      */
-    if (skillAnswer.output.widget && !BRAIN.isMuted) {
+    if (skillAnswer.output.widget) {
+      const widget = skillAnswer.output.widget
+
+      if (ConversationHistoryHelper.isWidgetPersisted(widget)) {
+        void CONVERSATION_LOGGER.upsert(
+          {
+            who: 'leon',
+            message: widget.fallbackText || answerText,
+            messageId: replaceMessageId || widget.id,
+            widget
+          },
+          {
+            replaceMessageId
+          }
+        )
+      }
+
+      if (BRAIN.isMuted) {
+        return
+      }
+
       try {
         /**
          * Send widget data with replaceMessageId (to target the same message id for the client).
          * Useful for a progress report, etc.
          */
         const answerData = {
-          ...skillAnswer.output.widget,
-          replaceMessageId: skillAnswer.output.replaceMessageId || null
+          ...widget,
+          replaceMessageId
         }
 
-        SOCKET_SERVER.socket?.emit('answer', answerData)
+        SOCKET_SERVER.emitAnswerToChatClients(answerData)
       } catch (e) {
         LogHelper.title('Brain')
         LogHelper.error(
@@ -201,7 +224,24 @@ export class LogicActionSkillHandler {
        * Handle non-widget answers
        */
       const { answer } = skillAnswer.output
-      if (answer && !BRAIN.isMuted) {
+      if (answer) {
+        if (replaceMessageId) {
+          void CONVERSATION_LOGGER.upsert(
+            {
+              who: 'leon',
+              message: answerText,
+              messageId: replaceMessageId
+            },
+            {
+              replaceMessageId
+            }
+          )
+        }
+
+        if (BRAIN.isMuted) {
+          return
+        }
+
         // Check if this is a tool output
         const isToolOutput = skillAnswer.output.core?.isToolOutput === true
 
@@ -217,16 +257,16 @@ export class LogicActionSkillHandler {
             replaceMessageId: skillAnswer.output.replaceMessageId || null
           }
 
-          SOCKET_SERVER.socket?.emit('answer', toolData)
+          SOCKET_SERVER.emitAnswerToChatClients(toolData)
         } else {
           // Handle regular skill answers
-          if (skillAnswer.output.replaceMessageId) {
+          if (replaceMessageId) {
             const answerData = {
-              answer,
-              replaceMessageId: skillAnswer.output.replaceMessageId
+              answer: answerText,
+              replaceMessageId
             }
 
-            SOCKET_SERVER.socket?.emit('answer', answerData)
+            SOCKET_SERVER.emitAnswerToChatClients(answerData)
           } else {
             // For regular answers without replacement, use BRAIN.talk which handles the answer event
             BRAIN.talk(answer, true)

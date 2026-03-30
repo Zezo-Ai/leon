@@ -507,7 +507,7 @@ export default class Persona {
     this.applyWeatherMoodOverride(random)
 
     if (SOCKET_SERVER) {
-      SOCKET_SERVER.socket?.emit('new-mood', {
+      SOCKET_SERVER.emitToChatClients('new-mood', {
         type: this._mood.type,
         emoji: this._mood.emoji
       })

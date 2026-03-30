@@ -24,4 +24,10 @@ def run(params: ActionParams) -> None:
     )
     list_of_lists_widget = ListOfListsWidget(list_of_lists_options)
 
-    leon.answer({'widget': list_of_lists_widget})
+    leon.answer({
+        'widget': list_of_lists_widget,
+        'key': 'lists_shown',
+        'data': {
+            'lists': ', '.join(list_names)
+        }
+    })

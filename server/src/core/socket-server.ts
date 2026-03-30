@@ -26,10 +26,27 @@ import { LogHelper } from '@/helpers/log-helper'
 import { LangHelper } from '@/helpers/lang-helper'
 import { Telemetry } from '@/telemetry'
 import { LLMProviders } from '@/core/llm-manager/types'
+import { StringHelper } from '@/helpers/string-helper'
+import { LIVE_WIDGET_REGISTRY } from '@/live-widget-registry'
+
+const DEFAULT_CLIENT_CAPABILITIES = {
+  supportsWidgets: true
+}
+const HOTWORD_NODE_CLIENT = 'hotword-node'
+const LIVE_ONLY_WIDGET_HISTORY_MODE = 'live_only'
 
 interface HotwordDataEvent {
   hotword: string
   buffer: Buffer
+}
+
+interface ClientCapabilities {
+  supportsWidgets: boolean
+}
+
+interface InitDataEvent {
+  client: string
+  capabilities?: Partial<ClientCapabilities>
 }
 
 interface UtteranceDataEvent {
@@ -46,8 +63,15 @@ interface WidgetDataEvent {
   data: Record<string, string | number | undefined | unknown[]>
 }
 
+interface ConnectedChatClient {
+  client: string
+  capabilities: ClientCapabilities
+  socket: Socket<DefaultEventsMap, DefaultEventsMap>
+}
+
 export default class SocketServer {
   private static instance: SocketServer
+  private readonly chatClients = new Map<string, ConnectedChatClient>()
 
   public socket: Socket<DefaultEventsMap, DefaultEventsMap> | undefined =
     undefined
@@ -59,6 +83,162 @@ export default class SocketServer {
 
       SocketServer.instance = this
     }
+  }
+
+  private setActiveSocket(
+    socket: Socket<DefaultEventsMap, DefaultEventsMap>
+  ): void {
+    this.socket = socket
+  }
+
+  private normalizeInitData(data: string | InitDataEvent): InitDataEvent {
+    if (typeof data === 'string') {
+      return {
+        client: data,
+        capabilities: { ...DEFAULT_CLIENT_CAPABILITIES }
+      }
+    }
+
+    return {
+      client: data.client,
+      capabilities: {
+        ...DEFAULT_CLIENT_CAPABILITIES,
+        ...(data.capabilities || {})
+      }
+    }
+  }
+
+  private registerChatClient(
+    socket: Socket<DefaultEventsMap, DefaultEventsMap>,
+    initData: InitDataEvent
+  ): void {
+    if (initData.client === HOTWORD_NODE_CLIENT) {
+      return
+    }
+
+    this.chatClients.set(socket.id, {
+      client: initData.client,
+      capabilities: {
+        ...DEFAULT_CLIENT_CAPABILITIES,
+        ...(initData.capabilities || {})
+      },
+      socket
+    })
+  }
+
+  private unregisterChatClient(socketId: string): void {
+    this.chatClients.delete(socketId)
+
+    if (this.socket?.id === socketId) {
+      this.socket = undefined
+    }
+  }
+
+  public emitToChatClients(eventName: string, payload?: unknown): void {
+    for (const chatClient of this.chatClients.values()) {
+      if (typeof payload === 'undefined') {
+        chatClient.socket.emit(eventName)
+      } else {
+        chatClient.socket.emit(eventName, payload)
+      }
+    }
+  }
+
+  public emitToOtherChatClients(
+    sourceSocketId: string,
+    eventName: string,
+    payload?: unknown
+  ): void {
+    for (const [socketId, chatClient] of this.chatClients.entries()) {
+      if (socketId === sourceSocketId) {
+        continue
+      }
+
+      if (typeof payload === 'undefined') {
+        chatClient.socket.emit(eventName)
+      } else {
+        chatClient.socket.emit(eventName, payload)
+      }
+    }
+  }
+
+  private transformAnswerForClient(
+    answerData: unknown,
+    capabilities: ClientCapabilities
+  ): Record<string, unknown> | string | null {
+    if (typeof answerData === 'string') {
+      return answerData
+    }
+
+    if (!answerData || typeof answerData !== 'object') {
+      return null
+    }
+
+    const answerDataRecord = answerData as Record<string, unknown>
+
+    const hasWidgetPayload =
+      'componentTree' in answerDataRecord &&
+      'id' in answerDataRecord &&
+      'widget' in answerDataRecord
+
+    if (!hasWidgetPayload || capabilities.supportsWidgets) {
+      return answerDataRecord
+    }
+
+    const fallbackText =
+      typeof answerDataRecord['fallbackText'] === 'string'
+        ? answerDataRecord['fallbackText']
+        : typeof answerDataRecord['answer'] === 'string'
+          ? answerDataRecord['answer']
+          : ''
+
+    if (!fallbackText) {
+      return null
+    }
+
+    return {
+      answer: fallbackText,
+      ...(typeof answerDataRecord['historyMode'] === 'string'
+        ? { historyMode: answerDataRecord['historyMode'] }
+        : {}),
+      ...(typeof answerDataRecord['replaceMessageId'] === 'string'
+        ? { replaceMessageId: answerDataRecord['replaceMessageId'] }
+        : {}),
+      ...(typeof answerDataRecord['id'] === 'string'
+        ? { messageId: answerDataRecord['id'] }
+        : {})
+    }
+  }
+
+  public emitAnswerToChatClients(answerData: unknown): void {
+    const answerDataRecord =
+      answerData && typeof answerData === 'object'
+        ? (answerData as Record<string, unknown>)
+        : null
+
+    if (
+      answerDataRecord &&
+      answerDataRecord['historyMode'] === LIVE_ONLY_WIDGET_HISTORY_MODE
+    ) {
+      LIVE_WIDGET_REGISTRY.upsert(answerDataRecord)
+    }
+
+    for (const chatClient of this.chatClients.values()) {
+      const transformedAnswerData = this.transformAnswerForClient(
+        answerData,
+        chatClient.capabilities
+      )
+
+      if (transformedAnswerData === null) {
+        continue
+      }
+
+      chatClient.socket.emit('answer', transformedAnswerData)
+    }
+  }
+
+  public clearLiveWidgets(): void {
+    LIVE_WIDGET_REGISTRY.clear()
   }
 
   private monitorLLMInitialization(
@@ -128,29 +308,35 @@ export default class SocketServer {
       LogHelper.title('Client')
       LogHelper.success('Connected')
 
-      this.socket = socket
+      this.setActiveSocket(socket)
 
       // Init
-      this.socket.on('init', async (data: string) => {
-        LogHelper.info(`Type: ${data}`)
-        LogHelper.info(`Socket ID: ${this.socket?.id}`)
+      socket.on('init', async (data: string | InitDataEvent) => {
+        this.setActiveSocket(socket)
 
-        this.socket?.emit('init-client-core-server-handshake', 'success')
+        const initData = this.normalizeInitData(data)
+
+        this.registerChatClient(socket, initData)
+
+        LogHelper.info(`Type: ${initData.client}`)
+        LogHelper.info(`Socket ID: ${socket.id}`)
+
+        socket.emit('init-client-core-server-handshake', 'success')
 
         // TODO
         // const provider = await addProvider(socket.id)
 
         // Check whether the Python TCP client is connected to the Python TCP server
         if (!SHOULD_START_PYTHON_TCP_SERVER) {
-          this.socket?.emit('ready')
-          this.socket?.emit('init-tcp-server-boot', 'success')
+          socket.emit('ready')
+          socket.emit('init-tcp-server-boot', 'success')
         } else if (PYTHON_TCP_CLIENT.isConnected) {
-          this.socket?.emit('ready')
-          this.socket?.emit('init-tcp-server-boot', 'success')
+          socket.emit('ready')
+          socket.emit('init-tcp-server-boot', 'success')
         } else {
           PYTHON_TCP_CLIENT.ee.on('connected', () => {
-            this.socket?.emit('ready')
-            this.socket?.emit('init-tcp-server-boot', 'success')
+            socket.emit('ready')
+            socket.emit('init-tcp-server-boot', 'success')
           })
         }
 
@@ -169,23 +355,36 @@ export default class SocketServer {
           usesLlamaCPP
         })
 
-        if (data === 'hotword-node') {
+        if (initData.client === HOTWORD_NODE_CLIENT) {
           // Hotword triggered
-          this.socket?.on('hotword-detected', (data: HotwordDataEvent) => {
-            LogHelper.title('Socket')
-            LogHelper.success(`Hotword ${data.hotword} detected`)
+          socket.on('hotword-detected', (hotwordData: HotwordDataEvent) => {
+            this.setActiveSocket(socket)
 
-            this.socket?.broadcast.emit('enable-record')
+            LogHelper.title('Socket')
+            LogHelper.success(`Hotword ${hotwordData.hotword} detected`)
+
+            socket.broadcast.emit('enable-record')
           })
         } else {
           // Listen for new utterance
-          this.socket?.on('utterance', async (data: UtteranceDataEvent) => {
+          socket.on('utterance', async (utteranceData: UtteranceDataEvent) => {
+            this.setActiveSocket(socket)
+
             LogHelper.title('Socket')
-            LogHelper.info(`${data.client} emitted: ${data.value}`)
+            LogHelper.info(
+              `${utteranceData.client} emitted: ${utteranceData.value}`
+            )
 
-            this.socket?.emit('is-typing', true)
+            this.emitToChatClients('is-typing', true)
 
-            const { value: utterance } = data
+            const { value: utterance } = utteranceData
+            const ownerMessageId = `owner-${Date.now()}-${StringHelper.random(6)}`
+
+            this.emitToOtherChatClients(socket.id, 'owner-utterance', {
+              utterance,
+              messageId: ownerMessageId
+            })
+
             try {
               LogHelper.time('Utterance processed in')
 
@@ -193,7 +392,9 @@ export default class SocketServer {
               BRAIN.setIsTalkingWithVoice(false, { shouldInterrupt: true })
 
               BRAIN.isMuted = false
-              const processedData = await NLU.process(utterance)
+              const processedData = await NLU.process(utterance, {
+                ownerMessageId
+              })
 
               if (processedData) {
                 Telemetry.utterance(processedData)
@@ -207,14 +408,17 @@ export default class SocketServer {
           })
 
           // Handle new local ASR engine recording
-          this.socket?.on('asr-start-record', () => {
+          socket.on('asr-start-record', () => {
+            this.setActiveSocket(socket)
             PYTHON_TCP_CLIENT.emit('asr_start_recording', null)
           })
 
           // Handle automatic speech recognition
-          this.socket?.on('recognize', async (data: Buffer) => {
+          socket.on('recognize', async (buffer: Buffer) => {
+            this.setActiveSocket(socket)
+
             try {
-              await ASR.encode(data)
+              await ASR.encode(buffer)
             } catch (e) {
               LogHelper.error(
                 `ASR - Failed to encode audio blob to WAVE file: ${e}`
@@ -223,11 +427,13 @@ export default class SocketServer {
           })
 
           // Listen for widget events
-          this.socket?.on('widget-event', async (event: WidgetDataEvent) => {
+          socket.on('widget-event', async (event: WidgetDataEvent) => {
+            this.setActiveSocket(socket)
+
             LogHelper.title('Socket')
             LogHelper.info(`Widget event: ${JSON.stringify(event)}`)
 
-            this.socket?.emit('is-typing', true)
+            this.emitToChatClients('is-typing', true)
 
             try {
               const { method } = event
@@ -238,7 +444,7 @@ export default class SocketServer {
                 if (method.methodParams['from'] === 'leon') {
                   await BRAIN.talk(utterance as string, true)
                 } else {
-                  this.socket?.emit('widget-send-utterance', utterance)
+                  socket.emit('widget-send-utterance', utterance)
                 }
               } else if (method.methodName === 'run_skill_action') {
                 const { actionName, params } = method.methodParams
@@ -256,13 +462,14 @@ export default class SocketServer {
               // @ts-expect-error
               LogHelper.error(`Failed to handle widget event: ${e.errors || e}`)
             } finally {
-              this.socket?.emit('is-typing', false)
+              this.emitToChatClients('is-typing', false)
             }
           })
         }
       })
 
       socket.once('disconnect', () => {
+        this.unregisterChatClient(socket.id)
         // TODO
         // deleteProvider(this.socket.id)
       })

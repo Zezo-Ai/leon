@@ -30,6 +30,7 @@ export interface Answer {
   data?: AnswerData
   core?: SkillAnswerCoreData
   replaceMessageId?: string | null
+  widgetHistoryMode?: 'persisted' | 'live_only'
 }
 export interface TextAnswer extends Answer {
   key: string

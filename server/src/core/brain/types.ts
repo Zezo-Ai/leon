@@ -11,9 +11,7 @@ import type {
   SkillConfigSchema,
   SkillAnswerConfigSchema
 } from '@/schemas/skill-schemas'
-import type { ShortLanguageCode } from '@/types'
-import type { WidgetWrapper } from '@sdk/aurora'
-import type { SUPPORTED_WIDGET_EVENTS } from '@sdk/widget-component'
+import type { ConversationWidgetData, ShortLanguageCode } from '@/types'
 
 export interface SkillResult {
   domain: NLPDomain
@@ -25,15 +23,12 @@ export interface SkillResult {
   slots: NLUSlots
   output: {
     codes: string[]
-    answer: string
+    answer: SkillAnswerConfigSchema
     core: SkillAnswerCoreData | undefined
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     options: Record<string, any>
     replaceMessageId?: string | null
-    widget?: {
-      componentTree: WidgetWrapper
-      supportedEvents: typeof SUPPORTED_WIDGET_EVENTS
-    }
+    widget?: ConversationWidgetData
   }
 }
 
@@ -137,17 +132,7 @@ export interface SkillAnswerOutput extends IntentObject {
     answer: SkillAnswerConfigSchema
     core?: SkillAnswerCoreData
     replaceMessageId?: string | null
-    widget?: {
-      actionName: string
-      widget: string
-      id: string
-      componentTree: WidgetWrapper
-      supportedEvents: typeof SUPPORTED_WIDGET_EVENTS
-      onFetch: {
-        widgetId?: string
-        actionName: string
-      } | null
-    }
+    widget?: ConversationWidgetData
   }
 }
 

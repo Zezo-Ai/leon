@@ -18,8 +18,8 @@
           "Starting video download for {{ target_language }} translation..."
         ],
         "download_progress": [
-          "📥 Downloading... {{ percentage }}% complete{{ speed ? ' (' + speed + ')' : '' }}{{ eta ? ' - ETA: ' + eta : '' }}",
-          "⬇️ Download progress: {{ percentage }}%{{ size ? ' of ' + size : '' }}{{ speed ? ' at ' + speed : '' }}"
+          "Downloading... {{ percentage }}% complete. Speed: {{ speed }}. ETA: {{ eta }}. Size: {{ size }}.",
+          "Download progress: {{ percentage }}% complete. Speed: {{ speed }}. ETA: {{ eta }}. Size: {{ size }}."
         ],
         "download_completed": [
           "✅ Video downloaded successfully! File size: {{ file_size }}. Ready to process for {{ target_language }} translation. Saved folder path: {{ file_path }}.",

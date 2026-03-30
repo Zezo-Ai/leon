@@ -25,7 +25,11 @@
     },
     "check_timer": {
       "answers": {
-        "no_timer_set": ["No timer is set.", "There is no timer set."]
+        "no_timer_set": ["No timer is set.", "There is no timer set."],
+        "timer_status": [
+          "The timer has {{ remaining_time }} seconds remaining.",
+          "Timer in progress. {{ remaining_time }} seconds left."
+        ]
       }
     },
     "cancel_timer": {

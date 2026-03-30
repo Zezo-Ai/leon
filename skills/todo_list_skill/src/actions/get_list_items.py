@@ -62,4 +62,11 @@ def run(params: ActionParams, params_helper: ParamsHelper) -> None:
         )
     )
 
-    leon.answer({'widget': todos_list_widget})
+    leon.answer({
+        'widget': todos_list_widget,
+        'key': 'list_items_shown',
+        'data': {
+            'list': list_name,
+            'items': ', '.join(todo['name'] for todo in todos)
+        }
+    })

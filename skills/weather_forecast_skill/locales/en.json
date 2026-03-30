@@ -9,6 +9,10 @@
         ]
       },
       "answers": {
+        "forecast_summary": [
+          "Current weather for {{ location }}: {{ description }}, {{ temperature }}, feels like {{ feels_like }}, humidity {{ humidity }}, wind {{ wind }}.",
+          "Weather for {{ location }} right now: {{ description }}, {{ temperature }}, feels like {{ feels_like }}, humidity {{ humidity }}, wind {{ wind }}."
+        ],
         "forecast_error": [
           "Sorry, I couldn't get the weather for {{ location }}. {{ error }}",
           "I couldn't retrieve the weather for {{ location }}. {{ error }}"

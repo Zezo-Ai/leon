@@ -1149,7 +1149,7 @@ export default class PulseManager {
     output: string
   ): Promise<void> {
     const core = await this.loadCoreNodes()
-    core.SOCKET_SERVER.socket?.emit('answer', output)
+    core.SOCKET_SERVER.emitAnswerToChatClients(output)
     await core.CONVERSATION_LOGGER.push({
       who: 'leon',
       message: output
@@ -1447,6 +1447,7 @@ export default class PulseManager {
       ): Promise<void>
     }
     SOCKET_SERVER: {
+      emitAnswerToChatClients(answerData: unknown): void
       socket?: {
         emit(eventName: string, ...args: unknown[]): void
       } | null

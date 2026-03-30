@@ -1801,7 +1801,7 @@ export class ReActLLMDuty extends LLMDuty {
               }
 
               this.hasStreamedTokenEmission = true
-              SOCKET_SERVER.socket?.emit('llm-token', {
+              SOCKET_SERVER.emitToChatClients('llm-token', {
                 token,
                 generationId
               })
@@ -2042,7 +2042,7 @@ export class ReActLLMDuty extends LLMDuty {
                 }
 
                 this.hasStreamedTokenEmission = true
-                SOCKET_SERVER.socket?.emit('llm-token', {
+                SOCKET_SERVER.emitToChatClients('llm-token', {
                   token,
                   generationId
                 })
@@ -2777,7 +2777,7 @@ export class ReActLLMDuty extends LLMDuty {
 
     const chunks = token.match(/(\s+|[^\s]+)/g) || [token]
     for (const chunk of chunks) {
-      SOCKET_SERVER.socket?.emit('llm-reasoning-token', {
+      SOCKET_SERVER.emitToChatClients('llm-reasoning-token', {
         token: chunk,
         generationId,
         phase
@@ -2792,7 +2792,7 @@ export class ReActLLMDuty extends LLMDuty {
     this.hasStreamedTokenEmission = chunks.length > 0
 
     for (const token of chunks) {
-      SOCKET_SERVER.socket?.emit('llm-token', {
+      SOCKET_SERVER.emitToChatClients('llm-token', {
         token,
         generationId
       })

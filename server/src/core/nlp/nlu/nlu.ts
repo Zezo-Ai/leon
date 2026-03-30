@@ -1136,7 +1136,10 @@ export default class NLU {
    * and extract entities
    */
   public process(
-    utterance: NLPUtterance
+    utterance: NLPUtterance,
+    options?: {
+      ownerMessageId?: string
+    }
   ): Promise<NLUPartialProcessResult | null> {
     // TODO: core rewrite
     // const processingTimeStart = Date.now()
@@ -1152,7 +1155,10 @@ export default class NLU {
 
             await CONVERSATION_LOGGER.push({
               who: 'owner',
-              message: utterance
+              message: utterance,
+              ...(options?.ownerMessageId
+                ? { messageId: options.ownerMessageId }
+                : {})
             })
             void PULSE_MANAGER.observeOwnerUtterance(utterance).catch(
               (error: unknown) => {
@@ -1274,7 +1280,7 @@ export default class NLU {
               LogHelper.error(errorMessage)
 
               if (!BRAIN.isMuted) {
-                SOCKET_SERVER.socket?.emit('is-typing', false)
+                SOCKET_SERVER.emitToChatClients('is-typing', false)
               }
 
               return reject(new Error(errorMessage))

@@ -34,5 +34,11 @@ export const run: ActionFunction = async function (_params, paramsHelper) {
     }
   })
 
-  await leon.answer({ widget: timerWidget })
+  await leon.answer({
+    widget: timerWidget,
+    key: 'timer_status',
+    data: {
+      remaining_time: remainingTime
+    }
+  })
 }

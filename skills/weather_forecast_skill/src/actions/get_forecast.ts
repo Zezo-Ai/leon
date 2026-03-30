@@ -97,7 +97,18 @@ export const run: ActionFunction = async function (
       }
     })
 
-    await leon.answer({ widget })
+    await leon.answer({
+      widget,
+      key: 'forecast_summary',
+      data: {
+        location: result.data.location || location,
+        description: result.data.description,
+        temperature,
+        feels_like: feelsLike,
+        humidity,
+        wind: windSpeed
+      }
+    })
   } catch (error: unknown) {
     if (isMissingToolSettingsError(error)) {
       return

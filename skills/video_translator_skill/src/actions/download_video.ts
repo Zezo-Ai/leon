@@ -100,7 +100,15 @@ export const run: ActionFunction = async function (
 
     // Show initial progress widget and capture the message ID
     const progressMessageId = await leon.answer({
-      widget: progressWidget
+      widget: progressWidget,
+      key: 'download_progress',
+      data: {
+        percentage: 0,
+        speed: '',
+        eta: '',
+        size: ''
+      },
+      widgetHistoryMode: 'live_only'
     })
 
     // Track last progress update to avoid too many messages
@@ -141,7 +149,15 @@ export const run: ActionFunction = async function (
           // Replace the previous progress message using the captured message ID
           await leon.answer({
             widget: updatedProgressWidget,
-            replaceMessageId: progressMessageId
+            key: 'download_progress',
+            data: {
+              percentage: currentPercentage,
+              speed: progress.speed || '',
+              eta: progress.eta || '',
+              size: progress.size || ''
+            },
+            replaceMessageId: progressMessageId,
+            widgetHistoryMode: 'live_only'
           })
 
           lastProgressUpdate = now
@@ -168,7 +184,15 @@ export const run: ActionFunction = async function (
     // Replace with final completed state
     await leon.answer({
       widget: completedProgressWidget,
-      replaceMessageId: progressMessageId
+      key: 'download_progress',
+      data: {
+        percentage: 100,
+        speed: '',
+        eta: '',
+        size: ''
+      },
+      replaceMessageId: progressMessageId,
+      widgetHistoryMode: 'live_only'
     })
 
     // Verify the downloaded file exists

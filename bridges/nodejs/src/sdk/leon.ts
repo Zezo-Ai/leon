@@ -77,6 +77,22 @@ class Leon {
   }
 
   /**
+   * Convert an answer config to a text-only value for widget fallback
+   * delivery and synchronized history.
+   */
+  private getAnswerText(answer: AnswerConfig | ''): string {
+    if (!answer) {
+      return ''
+    }
+
+    if (typeof answer === 'string') {
+      return answer
+    }
+
+    return answer.text || answer.speech || ''
+  }
+
+  /**
    * Apply data to the answer
    * @param answerKey The answer key
    * @param data The data to apply
@@ -123,6 +139,18 @@ class Leon {
    */
   public async answer(answerInput: AnswerInput): Promise<string | null> {
     try {
+      const resolvedAnswer =
+        answerInput.key != null
+          ? this.setAnswerData(answerInput.key, answerInput.data)
+          : ''
+      const fallbackText = this.getAnswerText(resolvedAnswer)
+
+      if (answerInput.widget && !fallbackText) {
+        throw new Error(
+          'Widget answers must include a text fallback via `key`.'
+        )
+      }
+
       const answerObject: AnswerOutput = {
         ...INTENT_OBJECT,
         output: {
@@ -130,10 +158,7 @@ class Leon {
             answerInput.widget && !answerInput.key
               ? 'widget'
               : (answerInput.key as string),
-          answer:
-            answerInput.key != null
-              ? this.setAnswerData(answerInput.key, answerInput.data)
-              : '',
+          answer: resolvedAnswer,
           core: answerInput.core,
           replaceMessageId: answerInput.replaceMessageId || null
         }
@@ -145,11 +170,13 @@ class Leon {
           widget: answerInput.widget.widget,
           id: answerInput.widget.id,
           onFetch: answerInput.widget.onFetch ?? null,
+          fallbackText,
+          historyMode: answerInput.widgetHistoryMode || 'persisted',
           componentTree: new WidgetWrapper({
             ...answerInput.widget.wrapperProps,
             children: [answerInput.widget.render()]
           }),
-          supportedEvents: SUPPORTED_WIDGET_EVENTS
+          supportedEvents: SUPPORTED_WIDGET_EVENTS as string[]
         }
       }
 

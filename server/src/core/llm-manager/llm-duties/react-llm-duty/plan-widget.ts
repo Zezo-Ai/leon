@@ -237,6 +237,10 @@ export function emitPlanWidget(
   isUpdate: boolean,
   currentExecutingFunction: string | null = null
 ): void {
+  const activeStep =
+    steps.find((step) => step.status === 'in_progress') ||
+    steps[steps.length - 1] ||
+    null
   const componentTree = buildPlanComponentTree(
     steps,
     justCompletedIndex,
@@ -246,12 +250,16 @@ export function emitPlanWidget(
     id: planWidgetId,
     widget: 'PlanWidget',
     componentTree,
-    supportedEvents: []
+    supportedEvents: [],
+    fallbackText: activeStep
+      ? activeStep.label
+      : 'Working on the current workflow...',
+    historyMode: 'live_only'
   }
 
   if (isUpdate) {
     widgetData['replaceMessageId'] = planWidgetId
   }
 
-  SOCKET_SERVER.socket?.emit('answer', widgetData)
+  SOCKET_SERVER.emitAnswerToChatClients(widgetData)
 }

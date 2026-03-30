@@ -16,6 +16,10 @@ interface LoadParams {
   nbOfLogsToLoad?: number
 }
 
+interface UpsertParams {
+  replaceMessageId?: string | null
+}
+
 /**
  * The goal of this class is to log the conversation data between the
  * owner and Leon.
@@ -26,6 +30,9 @@ interface LoadParams {
 export class ConversationLogger {
   private readonly settings: ConversationLoggerSettings
   private readonly conversationLogPath: string
+  private operations = Promise.resolve()
+  private static readonly WIDGET_PLACEHOLDER_PREFIX =
+    '__LEON_INLINE_WIDGET__'
 
   get loggerName(): string {
     return this.settings.loggerName
@@ -37,6 +44,17 @@ export class ConversationLogger {
 
     this.settings = settings
     this.conversationLogPath = path.join(LOGS_PATH, this.settings.fileName)
+  }
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const nextOperation = this.operations.then(operation, operation)
+
+    this.operations = nextOperation.then(
+      () => undefined,
+      () => undefined
+    )
+
+    return nextOperation
   }
 
   private async createConversationLogFile(): Promise<void> {
@@ -71,62 +89,144 @@ export class ConversationLogger {
     return []
   }
 
-  public async push(newRecord: Omit<MessageLog, 'sentAt'>): Promise<void> {
-    try {
-      const conversationLogs = await this.getAllLogs()
-
-      if (conversationLogs.length >= this.settings.nbOfLogsToKeep) {
-        conversationLogs.shift()
+  /**
+   * Keep the conversation log readable while forcing widget payloads to stay
+   * on one line in the JSON file.
+   */
+  private serializeLogs(conversationLogs: MessageLog[]): string {
+    const serializedWidgets = new Map<string, string>()
+    const preparedLogs = conversationLogs.map((conversationLog, index) => {
+      if (!conversationLog.widget) {
+        return conversationLog
       }
 
-      conversationLogs.push({
-        ...newRecord,
-        sentAt: Date.now()
-      })
+      const placeholder = `${ConversationLogger.WIDGET_PLACEHOLDER_PREFIX}_${index}`
+      serializedWidgets.set(placeholder, JSON.stringify(conversationLog.widget))
 
-      await fs.promises.writeFile(
-        this.conversationLogPath,
-        JSON.stringify(conversationLogs, null, 2),
-        'utf-8'
+      return {
+        ...conversationLog,
+        widget: placeholder as unknown as MessageLog['widget']
+      }
+    })
+
+    let serializedLogs = JSON.stringify(preparedLogs, null, 2)
+
+    for (const [placeholder, serializedWidget] of serializedWidgets.entries()) {
+      serializedLogs = serializedLogs.replace(
+        `"${placeholder}"`,
+        serializedWidget
       )
-    } catch (e) {
-      LogHelper.title(this.settings.loggerName)
-      LogHelper.error(`Failed to push new record: ${e})`)
     }
+
+    return serializedLogs
+  }
+
+  public async push(newRecord: Omit<MessageLog, 'sentAt'>): Promise<void> {
+    await this.upsert(newRecord)
+  }
+
+  public async upsert(
+    newRecord: Omit<MessageLog, 'sentAt'>,
+    params?: UpsertParams
+  ): Promise<void> {
+    await this.enqueue(async () => {
+      try {
+        const conversationLogs = await this.getAllLogs()
+        const targetMessageId =
+          params?.replaceMessageId || newRecord.messageId || null
+
+        if (targetMessageId) {
+          const existingConversationLogIndex = conversationLogs.findIndex(
+            (conversationLog) => conversationLog.messageId === targetMessageId
+          )
+
+          if (existingConversationLogIndex !== -1) {
+            const existingConversationLog =
+              conversationLogs[existingConversationLogIndex]
+
+            if (existingConversationLog) {
+              conversationLogs[existingConversationLogIndex] = {
+                ...existingConversationLog,
+                ...newRecord,
+                messageId: targetMessageId,
+                sentAt: existingConversationLog.sentAt
+              }
+            }
+          } else {
+            conversationLogs.push({
+              ...newRecord,
+              messageId: targetMessageId,
+              sentAt: Date.now()
+            })
+          }
+        } else {
+          if (conversationLogs.length >= this.settings.nbOfLogsToKeep) {
+            conversationLogs.shift()
+          }
+
+          conversationLogs.push({
+            ...newRecord,
+            sentAt: Date.now()
+          })
+        }
+
+        if (conversationLogs.length > this.settings.nbOfLogsToKeep) {
+          conversationLogs.splice(
+            0,
+            conversationLogs.length - this.settings.nbOfLogsToKeep
+          )
+        }
+
+        await fs.promises.writeFile(
+          this.conversationLogPath,
+          this.serializeLogs(conversationLogs),
+          'utf-8'
+        )
+      } catch (e) {
+        LogHelper.title(this.settings.loggerName)
+        LogHelper.error(`Failed to upsert record: ${e})`)
+      }
+    })
   }
 
   public async load(params?: LoadParams): Promise<MessageLog[]> {
-    try {
-      const conversationLog = await this.getAllLogs()
-      const nbOfLogsToLoad =
-        params?.nbOfLogsToLoad || this.settings.nbOfLogsToLoad
+    return this.enqueue(async () => {
+      try {
+        const conversationLog = await this.getAllLogs()
+        const nbOfLogsToLoad =
+          params?.nbOfLogsToLoad || this.settings.nbOfLogsToLoad
 
-      return conversationLog.slice(-nbOfLogsToLoad)
-    } catch (e) {
-      LogHelper.title(this.settings.loggerName)
-      LogHelper.error(`Failed to load conversation log: ${e})`)
-    }
+        return conversationLog.slice(-nbOfLogsToLoad)
+      } catch (e) {
+        LogHelper.title(this.settings.loggerName)
+        LogHelper.error(`Failed to load conversation log: ${e})`)
+      }
 
-    return []
+      return []
+    })
   }
 
   public async loadAll(): Promise<MessageLog[]> {
-    try {
-      return await this.getAllLogs()
-    } catch (e) {
-      LogHelper.title(this.settings.loggerName)
-      LogHelper.error(`Failed to load all conversation logs: ${e})`)
-    }
+    return this.enqueue(async () => {
+      try {
+        return await this.getAllLogs()
+      } catch (e) {
+        LogHelper.title(this.settings.loggerName)
+        LogHelper.error(`Failed to load all conversation logs: ${e})`)
+      }
 
-    return []
+      return []
+    })
   }
 
   public async clear(): Promise<void> {
-    try {
-      await fs.promises.writeFile(this.conversationLogPath, '[]', 'utf-8')
-    } catch (e) {
-      LogHelper.title(this.settings.loggerName)
-      LogHelper.error(`Failed to clear conversation log: ${e})`)
-    }
+    await this.enqueue(async () => {
+      try {
+        await fs.promises.writeFile(this.conversationLogPath, '[]', 'utf-8')
+      } catch (e) {
+        LogHelper.title(this.settings.loggerName)
+        LogHelper.error(`Failed to clear conversation log: ${e})`)
+      }
+    })
   }
 }

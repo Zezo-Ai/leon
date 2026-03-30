@@ -220,5 +220,5 @@ export const run: ActionFunction = async function () {
     }
   })
 
-  await leon.answer({ widget: playgroundTestWidget })
+  await leon.answer({ widget: playgroundTestWidget, key: 'default' })
 }

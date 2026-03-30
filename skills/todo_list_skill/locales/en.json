@@ -99,6 +99,14 @@
     }
   },
   "common_answers": {
+    "lists_shown": [
+      "Here are your to-do lists: {{ lists }}.",
+      "Your to-do lists are: {{ lists }}."
+    ],
+    "list_items_shown": [
+      "Here is your \"{{ list }}\" list: {{ items }}.",
+      "Current items in \"{{ list }}\": {{ items }}."
+    ],
     "list_already_exists": ["You already have a list named \"{{ list }}\"."],
     "list_does_not_exist": [
       "Sorry I can't because the \"{{ list }}\" list does not exist.",

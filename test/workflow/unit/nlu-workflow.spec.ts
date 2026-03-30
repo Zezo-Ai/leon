@@ -249,7 +249,10 @@ vi.mock('@/core', () => ({
   BRAIN: coreMocks.brain,
   CONVERSATION_LOGGER: coreMocks.conversationLogger,
   SOCKET_SERVER: {
-    socket: coreMocks.socket
+    socket: coreMocks.socket,
+    emitToChatClients: coreMocks.socket.emit,
+    emitAnswerToChatClients: coreMocks.socket.emit,
+    clearLiveWidgets: vi.fn()
   },
   MEMORY_MANAGER: coreMocks.memoryManager,
   PERSONA: coreMocks.persona,

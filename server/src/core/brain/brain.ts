@@ -216,13 +216,13 @@ export default class Brain {
        * Leon is starting to type another message just after sending the previous one
        */
       setTimeout(() => {
-        SOCKET_SERVER.socket?.emit('is-typing', true)
+        SOCKET_SERVER.emitToChatClients('is-typing', true)
       }, naturalStartTypingDelay)
       // Next answer to handle
       const answer = this.answerQueue.pop()
       if (answer && typeof answer === 'object' && 'type' in answer) {
         if (answer.type === 'suggest') {
-          SOCKET_SERVER.socket?.emit('suggest', answer.suggestions)
+          SOCKET_SERVER.emitToChatClients('suggest', answer.suggestions)
         }
 
         continue
@@ -319,8 +319,7 @@ export default class Brain {
             ''
           const sentAt = Date.now()
 
-          SOCKET_SERVER.socket?.emit(
-            'answer',
+          SOCKET_SERVER.emitAnswerToChatClients(
             llmMetrics
               ? {
                   answer: textAnswer,
@@ -366,7 +365,7 @@ export default class Brain {
 
     this.answerQueue.isProcessing = false
     setTimeout(() => {
-      SOCKET_SERVER.socket?.emit('is-typing', false)
+      SOCKET_SERVER.emitToChatClients('is-typing', false)
     }, naturalStartTypingDelay)
   }
 
@@ -478,7 +477,7 @@ export default class Brain {
       const speech = `${this.wernicke('random_not_sure')}.`
 
       this.talk(speech, true)
-      SOCKET_SERVER.socket?.emit('ask-to-repeat', nluResult)
+      SOCKET_SERVER.emitToChatClients('ask-to-repeat', nluResult)
     }
   }*/
 

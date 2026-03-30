@@ -30,7 +30,7 @@ export class Updater {
           `Run the following command to update Leon and benefit from the latest features: "pnpm add @leon-ai/leon@${latestVersion}"`
         )
 
-        SOCKET_SERVER.socket?.emit('new-update', latestVersion)
+        SOCKET_SERVER.emitToChatClients('new-update', latestVersion)
       } else {
         const releaseMode = this.isDevelopment ? 'development' : 'stable'
 

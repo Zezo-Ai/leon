@@ -17,6 +17,9 @@ const coreMocks = vi.hoisted(() => ({
   socket: {
     emit: vi.fn()
   },
+  conversationLogger: {
+    upsert: vi.fn(async () => undefined)
+  },
   nlu: {
     nluProcessResult: {
       context: {
@@ -39,8 +42,12 @@ vi.mock('@/helpers/log-helper', () => ({
 vi.mock('@/core', () => ({
   BRAIN: coreMocks.brain,
   SOCKET_SERVER: {
-    socket: coreMocks.socket
+    socket: coreMocks.socket,
+    emitToChatClients: coreMocks.socket.emit,
+    emitAnswerToChatClients: coreMocks.socket.emit,
+    clearLiveWidgets: vi.fn()
   },
+  CONVERSATION_LOGGER: coreMocks.conversationLogger,
   NLU: coreMocks.nlu
 }))
 

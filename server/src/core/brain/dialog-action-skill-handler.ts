@@ -56,7 +56,7 @@ export class DialogActionSkillHandler {
       // TODO: core rewrite suggestion after dialog skill
       // Send suggestions to the client
       /*if (nextAction?.suggestions) {
-        SOCKET_SERVER.socket?.emit('suggest', nextAction.suggestions)
+        SOCKET_SERVER.emitToChatClients('suggest', nextAction.suggestions)
       }*/
 
       resolve({

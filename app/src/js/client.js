@@ -25,6 +25,7 @@ export default class Client {
     this._isLeonGeneratingAnswer = false
     this._isVoiceModeEnabled = false
     this._hasSentInitMessages = false
+    this._chatbotInitPromise = null
     // this._ttsAudioContextes = {}
   }
 
@@ -130,7 +131,7 @@ export default class Client {
   }
 
   init() {
-    this.chatbot.init()
+    this._chatbotInitPromise = this.chatbot.init()
     this.voiceEnergy.init()
 
     if (window.leonConfigInfo?.tcpServer?.enabled === false) {
@@ -138,7 +139,12 @@ export default class Client {
     }
 
     this.socket.on('connect', () => {
-      this.socket.emit('init', this.client)
+      this.socket.emit('init', {
+        client: this.client,
+        capabilities: {
+          supportsWidgets: true
+        }
+      })
     })
 
     /**
@@ -155,12 +161,14 @@ export default class Client {
     })
 
     this.socket.on('ready', () => {
-      setTimeout(() => {
-        const body = document.querySelector('body')
-        body.classList.remove('settingup')
-      }, 250)
+      void this._chatbotInitPromise?.then(() => {
+        setTimeout(() => {
+          const body = document.querySelector('body')
+          body.classList.remove('settingup')
+        }, 250)
 
-      this.waitForInitUICompletion()
+        this.waitForInitUICompletion()
+      })
     })
 
     this.socket.on('answer', (data) => {
@@ -198,6 +206,7 @@ export default class Client {
        * Handle widget data directly
        */
       if (data.widget || data.componentTree) {
+        const isLiveOnlyWidget = this.chatbot.isLiveOnlyWidgetData(data)
         // Pass the entire widget data as JSON string for chatbot.js to handle
         const widgetString =
           typeof data === 'string' ? data : JSON.stringify(data)
@@ -205,6 +214,7 @@ export default class Client {
         this.chatbot.createBubble({
           who: 'leon',
           string: widgetString,
+          save: !isLiveOnlyWidget,
           messageId: data.widget?.id || data.id || `msg-${Date.now()}`
         })
 
@@ -234,7 +244,7 @@ export default class Client {
         this.chatbot.saveBubble(
           'leon',
           answerText,
-          this.chatbot.formatMessage(answerText),
+          answerText,
           null,
           llmMetrics
         )
@@ -253,7 +263,14 @@ export default class Client {
         this.chatbot.createBubble({
           who: 'leon',
           string: answerText,
-          metrics: llmMetrics
+          save:
+            !(
+              data &&
+              typeof data === 'object' &&
+              data.historyMode === 'live_only'
+            ),
+          metrics: llmMetrics,
+          messageId: data && typeof data === 'object' ? data.messageId : null
         })
       }
       this.chatbot.scrollDown({ force: true })
@@ -276,6 +293,18 @@ export default class Client {
 
     this.socket.on('is-typing', (data) => {
       this.chatbot.isTyping('leon', data)
+    })
+
+    this.socket.on('owner-utterance', (data) => {
+      if (!data?.utterance) {
+        return
+      }
+
+      this.chatbot.createBubble({
+        who: 'me',
+        string: data.utterance,
+        messageId: data.messageId
+      })
     })
 
     this.socket.on('recognized', (data, cb) => {
