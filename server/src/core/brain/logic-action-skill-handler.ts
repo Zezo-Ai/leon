@@ -276,8 +276,23 @@ export class LogicActionSkillHandler {
 
             SOCKET_SERVER.emitAnswerToChatClients(answerData)
           } else {
+            const shouldSkipParaphrase =
+              skillAnswer.output.codes.includes('error')
+            const queuedAnswer =
+              typeof answer === 'string'
+                ? {
+                    speech: answer,
+                    text: answer,
+                    ...(shouldSkipParaphrase ? { shouldSkipParaphrase } : {})
+                  }
+                : {
+                    speech: answer.speech,
+                    ...(answer.text ? { text: answer.text } : {}),
+                    ...(shouldSkipParaphrase ? { shouldSkipParaphrase } : {})
+                  }
+
             // For regular answers without replacement, use BRAIN.talk which handles the answer event
-            BRAIN.talk(answer, true)
+            BRAIN.talk(queuedAnswer, true)
           }
         }
       }

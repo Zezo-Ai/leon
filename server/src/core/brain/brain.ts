@@ -58,6 +58,7 @@ type QueuedAnswer =
       speech: string
       text?: string
       llmMetrics?: LLMAnswerMetrics
+      shouldSkipParaphrase?: boolean
     }
 
 interface QueuedSuggestions {
@@ -68,6 +69,8 @@ interface QueuedSuggestions {
 type QueuedOutput = QueuedAnswer | QueuedSuggestions
 
 const MIN_NB_OF_WORDS_TO_USE_LLM_NLG = 5
+const ESTIMATED_CHARS_PER_TOKEN = 4
+const MAX_PARAPHRASE_INPUT_TOKENS = 1_024
 
 export default class Brain {
   private static instance: Brain
@@ -234,6 +237,11 @@ export default class Brain {
         answer && typeof answer === 'object' && 'llmMetrics' in answer
           ? answer.llmMetrics
           : undefined
+      const shouldSkipParaphrase =
+        answer &&
+        typeof answer === 'object' &&
+        'shouldSkipParaphrase' in answer &&
+        answer.shouldSkipParaphrase === true
 
       if (answer && answer !== '') {
         textAnswer = typeof answer === 'string' ? answer : answer.text
@@ -261,7 +269,17 @@ export default class Brain {
             // Keep paraphrasing for substantive answers only.
             const textToParaphrase = textAnswer ?? speechAnswer
             const nbOfWords = String(textToParaphrase).split(' ').length
-            if (nbOfWords >= MIN_NB_OF_WORDS_TO_USE_LLM_NLG) {
+            const estimatedInputTokens = Math.ceil(
+              String(textToParaphrase).length / ESTIMATED_CHARS_PER_TOKEN
+            )
+
+            // Skip paraphrasing for deterministic errors and oversized answers
+            // so workflow responses stay fast on smaller local models.
+            if (
+              !shouldSkipParaphrase &&
+              nbOfWords >= MIN_NB_OF_WORDS_TO_USE_LLM_NLG &&
+              estimatedInputTokens <= MAX_PARAPHRASE_INPUT_TOKENS
+            ) {
               const paraphraseDuty = new ParaphraseLLMDuty({
                 input: textToParaphrase
               })
