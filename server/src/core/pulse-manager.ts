@@ -1152,7 +1152,8 @@ export default class PulseManager {
     core.SOCKET_SERVER.emitAnswerToChatClients(output)
     await core.CONVERSATION_LOGGER.push({
       who: 'leon',
-      message: output
+      message: output,
+      isAddedToHistory: true
     })
 
     const nowIso = new Date().toISOString()

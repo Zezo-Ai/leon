@@ -1008,8 +1008,7 @@ export class ReActLLMDuty extends LLMDuty {
     conversationLogs: MessageLog[]
   ): MessageLog[] {
     return conversationLogs.filter(
-      (conversationLog) =>
-        !ConversationHistoryHelper.isSystemWidget(conversationLog.widget)
+      (conversationLog) => ConversationHistoryHelper.isAddedToHistory(conversationLog)
     )
   }
 
@@ -1082,7 +1081,11 @@ export class ReActLLMDuty extends LLMDuty {
         {
           who: record['who'],
           sentAt: record['sentAt'],
-          message: record['message']
+          message: record['message'],
+          isAddedToHistory:
+            typeof record['isAddedToHistory'] === 'boolean'
+              ? record['isAddedToHistory']
+              : true
         }
       ]
     })
@@ -1317,7 +1320,8 @@ export class ReActLLMDuty extends LLMDuty {
     const summaryMessage: MessageLog = {
       who: 'leon',
       sentAt: state.summarySentAt ?? state.tail[0]?.sentAt ?? Date.now(),
-      message: buildCompactedHistoryMessage(state.summary)
+      message: buildCompactedHistoryMessage(state.summary),
+      isAddedToHistory: true
     }
 
     return [summaryMessage, ...state.tail]

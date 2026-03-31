@@ -343,7 +343,8 @@ export default class Brain {
 
           await CONVERSATION_LOGGER.push({
             who: 'leon',
-            message: textAnswer
+            message: textAnswer,
+            isAddedToHistory: true
           })
         }
 

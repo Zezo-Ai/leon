@@ -1185,6 +1185,7 @@ export default class NLU {
             await CONVERSATION_LOGGER.push({
               who: 'owner',
               message: utterance,
+              isAddedToHistory: true,
               ...(options?.ownerMessageId
                 ? { messageId: options.ownerMessageId }
                 : {})

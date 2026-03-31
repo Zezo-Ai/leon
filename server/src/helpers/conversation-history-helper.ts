@@ -32,6 +32,12 @@ export class ConversationHistoryHelper {
     return !!widget
   }
 
+  public static isAddedToHistory(
+    conversationLog: Pick<MessageLog, 'isAddedToHistory'>
+  ): boolean {
+    return conversationLog.isAddedToHistory === true
+  }
+
   public static isSystemWidget(
     widget: ConversationWidgetData | null | undefined
   ): boolean {

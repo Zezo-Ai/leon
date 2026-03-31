@@ -239,6 +239,7 @@ export default class SocketServer {
             who: 'leon',
             message: fallbackText,
             messageId,
+            isAddedToHistory: false,
             widget: answerDataRecord as never
           }
         )

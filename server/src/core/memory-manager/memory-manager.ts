@@ -1379,7 +1379,8 @@ No markdown. No explanation.`
       parseConversationPair(entry.content).map((parsed) => ({
         who: parsed.who,
         message: parsed.message,
-        sentAt: Date.now()
+        sentAt: Date.now(),
+        isAddedToHistory: true
       }))
     )
 

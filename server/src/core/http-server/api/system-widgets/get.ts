@@ -44,6 +44,7 @@ export const getSystemWidgets: FastifyPluginAsync<APIOptions> = async (
         )
         const systemWidgetLogs = (await CONVERSATION_LOGGER.loadAll()).filter(
           (conversationLog) =>
+            !ConversationHistoryHelper.isAddedToHistory(conversationLog) &&
             ConversationHistoryHelper.isSystemWidget(conversationLog.widget)
         )
         const widgets = ConversationHistoryHelper.toHistoryItems(

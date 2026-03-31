@@ -192,6 +192,7 @@ export class LogicActionSkillHandler {
             who: 'leon',
             message: widget.fallbackText || answerText,
             messageId: replaceMessageId || widget.id,
+            isAddedToHistory: widget.historyMode !== SYSTEM_WIDGET_HISTORY_MODE,
             widget
           },
           {
@@ -236,7 +237,8 @@ export class LogicActionSkillHandler {
             {
               who: 'leon',
               message: answerText,
-              messageId: replaceMessageId
+              messageId: replaceMessageId,
+              isAddedToHistory: true
             },
             {
               replaceMessageId

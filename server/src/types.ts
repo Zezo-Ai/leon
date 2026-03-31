@@ -72,6 +72,7 @@ export interface MessageLog {
   who: 'owner' | 'leon'
   sentAt: number
   message: string
+  isAddedToHistory: boolean
   messageId?: string
   widget?: ConversationWidgetData | null
 }
