@@ -34,6 +34,7 @@ import {
 import { ContextStateStore } from '@/core/context-manager/context-state-store'
 import { AGENT_LLM_PROVIDER as LLM_PROVIDER_NAME, LOGS_PATH } from '@/constants'
 import type { MessageLog } from '@/types'
+import { ConversationHistoryHelper } from '@/helpers/conversation-history-helper'
 
 import {
   PLAN_SYSTEM_PROMPT,
@@ -963,7 +964,9 @@ export class ReActLLMDuty extends LLMDuty {
   private async loadPreparedHistory(): Promise<PreparedReactHistory> {
     const historyConfig = this.getHistoryCompactionConfig()
     const historyScope = this.getHistoryCompactionScope()
-    const conversationLogs = await CONVERSATION_LOGGER.loadAll()
+    const conversationLogs = this.getHistoryEligibleConversationLogs(
+      await CONVERSATION_LOGGER.loadAll()
+    )
     const currentState = this.loadHistoryCompactionProviderState(historyScope)
     const synchronizedState = this.synchronizeHistoryCompactionState(
       conversationLogs,
@@ -999,6 +1002,15 @@ export class ReActLLMDuty extends LLMDuty {
       historyLimit: REACT_REMOTE_PROVIDER_HISTORY_LOGS,
       compactionBatchSize: REACT_REMOTE_PROVIDER_HISTORY_COMPACTION_POINT
     }
+  }
+
+  private getHistoryEligibleConversationLogs(
+    conversationLogs: MessageLog[]
+  ): MessageLog[] {
+    return conversationLogs.filter(
+      (conversationLog) =>
+        !ConversationHistoryHelper.isSystemWidget(conversationLog.widget)
+    )
   }
 
   private loadHistoryCompactionProviderState(
@@ -1248,7 +1260,9 @@ export class ReActLLMDuty extends LLMDuty {
   ): Promise<void> {
     const historyConfig = this.getHistoryCompactionConfig()
     const historyScope = this.getHistoryCompactionScope()
-    const conversationLogs = await CONVERSATION_LOGGER.loadAll()
+    const conversationLogs = this.getHistoryEligibleConversationLogs(
+      await CONVERSATION_LOGGER.loadAll()
+    )
     const currentState = this.loadHistoryCompactionProviderState(historyScope)
     const synchronizedState = this.synchronizeHistoryCompactionState(
       conversationLogs,

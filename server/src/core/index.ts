@@ -52,12 +52,6 @@ export const CONVERSATION_LOGGER = new ConversationLogger({
   nbOfLogsToKeep: 1_024,
   nbOfLogsToLoad: 256
 })
-export const SYSTEM_WIDGET_LOGGER = new ConversationLogger({
-  loggerName: 'System Widget Logger',
-  fileName: 'system_widget_log.json',
-  nbOfLogsToKeep: 1_024,
-  nbOfLogsToLoad: 256
-})
 export const TOOL_CALL_LOGGER = new ToolCallLogger({
   loggerName: 'Tool Call Logger',
   fileName: 'tool-calls.json',

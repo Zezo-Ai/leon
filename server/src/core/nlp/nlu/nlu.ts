@@ -6,7 +6,10 @@ import type {
   NLUResult
 } from '@/core/nlp/types'
 import type { SkillSchema } from '@/schemas/skill-schemas'
-import type { SkillAnswerCoreData } from '@/core/brain/types'
+import type {
+  BrainProcessResult,
+  SkillAnswerCoreData
+} from '@/core/brain/types'
 import {
   type ActionCallingMissingParamsOutput,
   type ActionCallingOutput,
@@ -65,6 +68,7 @@ type RoutingRoute = 'workflow' | 'react'
 
 const NO_LLM_ENABLED_MESSAGE =
   'I need an AI engine before I can answer. Enable local AI or configure an online provider.'
+const SYSTEM_WIDGET_HISTORY_MODE = 'system_widget'
 
 export default class NLU {
   private static instance: NLU
@@ -170,6 +174,26 @@ export default class NLU {
     hasPendingAction: boolean
   ): void {
     this.workflowProgress.startTurn(routingMode, hasPendingAction)
+  }
+
+  private emitDeferredSkillWidget(
+    processedData: Partial<BrainProcessResult>
+  ): void {
+    const lastOutputFromSkill = processedData.lastOutputFromSkill
+    const widget = lastOutputFromSkill?.widget
+
+    if (!widget || widget.historyMode === SYSTEM_WIDGET_HISTORY_MODE) {
+      return
+    }
+
+    if (BRAIN.isMuted) {
+      return
+    }
+
+    SOCKET_SERVER.emitAnswerToChatClients({
+      ...widget,
+      replaceMessageId: lastOutputFromSkill?.replaceMessageId || null
+    })
   }
 
   private async chooseSkill(utterance: NLPUtterance): Promise<NLPSkill | null> {
@@ -882,12 +906,14 @@ export default class NLU {
       await NLUProcessResultUpdater.update(DEFAULT_NLU_PROCESS_RESULT)
       this.workflowProgress.completeAll()
       this.workflowProgress.reset()
+      this.emitDeferredSkillWidget(processedData)
 
       return
     }
 
     if (processedData.core?.next_action) {
       this.workflowProgress.completeAll()
+      this.emitDeferredSkillWidget(processedData)
       await this.jumpToNextAction(processedData.core.next_action)
 
       return
@@ -919,6 +945,7 @@ export default class NLU {
        */
       this.workflowProgress.completeAll()
       this.workflowProgress.reset()
+      this.emitDeferredSkillWidget(processedData)
       return
     }
 
@@ -928,6 +955,7 @@ export default class NLU {
       const shouldContinueFlow = await this.handleSkillFlow(flow)
 
       if (shouldContinueFlow) {
+        this.emitDeferredSkillWidget(processedData)
         return
       }
     }
@@ -940,6 +968,7 @@ export default class NLU {
     await NLUProcessResultUpdater.update(DEFAULT_NLU_PROCESS_RESULT)
     this.workflowProgress.completeAll()
     this.workflowProgress.reset()
+    this.emitDeferredSkillWidget(processedData)
   }
 
   private async handleActionMissingParams(

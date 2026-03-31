@@ -21,7 +21,7 @@ import {
   NLU,
   BRAIN,
   LLM_PROVIDER,
-  SYSTEM_WIDGET_LOGGER
+  CONVERSATION_LOGGER
 } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { LangHelper } from '@/helpers/lang-helper'
@@ -234,16 +234,12 @@ export default class SocketServer {
             : ''
 
       if (messageId) {
-        void SYSTEM_WIDGET_LOGGER.upsert(
+        void CONVERSATION_LOGGER.upsert(
           {
             who: 'leon',
             message: fallbackText,
             messageId,
             widget: answerDataRecord as never
-          },
-          {
-            replaceMessageId: messageId,
-            refreshSentAt: true
           }
         )
       }

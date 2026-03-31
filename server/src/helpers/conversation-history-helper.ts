@@ -29,7 +29,13 @@ export class ConversationHistoryHelper {
   public static isWidgetPersisted(
     widget: ConversationWidgetData | null | undefined
   ): boolean {
-    return widget?.historyMode !== SYSTEM_WIDGET_HISTORY_MODE
+    return !!widget
+  }
+
+  public static isSystemWidget(
+    widget: ConversationWidgetData | null | undefined
+  ): boolean {
+    return widget?.historyMode === SYSTEM_WIDGET_HISTORY_MODE
   }
 
   public static serializeWidget(widget: ConversationWidgetData): string {

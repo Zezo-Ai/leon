@@ -23,6 +23,8 @@ import { DateHelper } from '@/helpers/date-helper'
 import { RuntimeHelper } from '@/helpers/runtime-helper'
 import { ConversationHistoryHelper } from '@/helpers/conversation-history-helper'
 
+const SYSTEM_WIDGET_HISTORY_MODE = 'system_widget'
+
 export class LogicActionSkillHandler {
   public static async handle(
     nluProcessResult: NLUProcessResult,
@@ -203,6 +205,10 @@ export class LogicActionSkillHandler {
       }
 
       try {
+        if (widget.historyMode !== SYSTEM_WIDGET_HISTORY_MODE) {
+          return
+        }
+
         /**
          * Send widget data with replaceMessageId (to target the same message id for the client).
          * Useful for a progress report, etc.

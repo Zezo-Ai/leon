@@ -3,7 +3,7 @@ import { Type } from '@sinclair/typebox'
 import type { Static } from '@sinclair/typebox'
 
 import type { APIOptions } from '@/core/http-server/http-server'
-import { SYSTEM_WIDGET_LOGGER } from '@/core'
+import { CONVERSATION_LOGGER } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { ConversationHistoryHelper } from '@/helpers/conversation-history-helper'
 
@@ -42,7 +42,10 @@ export const getSystemWidgets: FastifyPluginAsync<APIOptions> = async (
         const supportsWidgets = parseBooleanQuery(
           request.query.supports_widgets
         )
-        const systemWidgetLogs = await SYSTEM_WIDGET_LOGGER.loadAll()
+        const systemWidgetLogs = (await CONVERSATION_LOGGER.loadAll()).filter(
+          (conversationLog) =>
+            ConversationHistoryHelper.isSystemWidget(conversationLog.widget)
+        )
         const widgets = ConversationHistoryHelper.toHistoryItems(
           systemWidgetLogs,
           {
