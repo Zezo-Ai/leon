@@ -13,6 +13,7 @@ const WIDGETS_FETCH_CACHE = new Map()
 const REPLACED_MESSAGES = new Set()
 const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 24
 const MAXIMUM_BUBBLES_IN_MEMORY = 62
+const MAXIMUM_WIDGET_FETCH_CONCURRENCY = 4
 
 export default class Chatbot {
   constructor(socket, serverURL) {
@@ -26,6 +27,7 @@ export default class Chatbot {
     this.reasoningBlocks = new Map()
     this.feedAutoScrollEnabled = true
     this.isProgrammaticFeedScroll = false
+    this.widgetHydrationPromise = null
 
     // Initialize tool UI handler
     this.toolUIHandler = new ToolUIHandler(
@@ -214,10 +216,18 @@ export default class Chatbot {
   }
 
   async hydrateFetchedWidgets() {
-    const widgetContainers = WIDGETS_TO_FETCH.reverse()
+    if (this.widgetHydrationPromise) {
+      return this.widgetHydrationPromise
+    }
 
-    for (let i = 0; i < widgetContainers.length; i += 1) {
-      const widgetContainer = widgetContainers[i]
+    const widgetContainers = [...WIDGETS_TO_FETCH].reverse()
+    WIDGETS_TO_FETCH.length = 0
+
+    if (widgetContainers.length === 0) {
+      return Promise.resolve()
+    }
+
+    const hydrateWidgetContainer = async (widgetContainer) => {
       const hasWidgetBeenFetched = WIDGETS_FETCH_CACHE.has(
         widgetContainer.widgetId
       )
@@ -230,7 +240,7 @@ export default class Chatbot {
           this.scrollDown()
         }, 100)
 
-        continue
+        return
       }
 
       const data = await axios.get(
@@ -263,6 +273,35 @@ export default class Chatbot {
         this.scrollDown()
       }, 100)
     }
+
+    const workerCount = Math.min(
+      MAXIMUM_WIDGET_FETCH_CONCURRENCY,
+      widgetContainers.length
+    )
+    let currentIndex = 0
+
+    this.widgetHydrationPromise = Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (currentIndex < widgetContainers.length) {
+          const widgetContainer = widgetContainers[currentIndex]
+          currentIndex += 1
+
+          if (!widgetContainer) {
+            continue
+          }
+
+          await hydrateWidgetContainer(widgetContainer)
+        }
+      })
+    )
+      .catch((error) => {
+        console.error('Failed to hydrate fetched widgets:', error)
+      })
+      .finally(() => {
+        this.widgetHydrationPromise = null
+      })
+
+    return this.widgetHydrationPromise
   }
 
   async loadFeed() {
@@ -327,7 +366,7 @@ export default class Chatbot {
       })
     }
 
-    await this.hydrateFetchedWidgets()
+    void this.hydrateFetchedWidgets()
   }
 
   createBubble(params) {
