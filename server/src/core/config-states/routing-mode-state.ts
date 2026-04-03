@@ -16,7 +16,7 @@ export function normalizeRoutingMode(
     : null
 }
 
-class RoutingState {
+export class RoutingModeState {
   private routingMode: RoutingMode =
     normalizeRoutingMode(LEON_ROUTING_MODE) || DEFAULT_ROUTING_MODE
 
@@ -46,5 +46,3 @@ class RoutingState {
     return normalizedRoutingMode
   }
 }
-
-export const ROUTING_STATE = new RoutingState()

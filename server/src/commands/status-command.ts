@@ -21,7 +21,7 @@ import {
   type BuiltInCommandExecutionResult
 } from '@/commands/built-in-command'
 import { createListResult } from '@/commands/built-in-command-renderer'
-import { ROUTING_STATE } from '@/core/routing-state'
+import { CONFIG_STATE } from '@/core/config-states/config-state'
 import { DateHelper } from '@/helpers/date-helper'
 import { SystemHelper } from '@/helpers/system-helper'
 import {
@@ -87,8 +87,9 @@ export class StatusCommand extends BuiltInCommand {
   ): Promise<BuiltInCommandExecutionResult> {
     void context
 
+    const routingModeState = CONFIG_STATE.getRoutingModeState()
     const leonMetadata = getLeonMetadata()
-    const routingMode = ROUTING_STATE.getRoutingMode()
+    const routingMode = routingModeState.getRoutingMode()
     const llmDisplay = getRoutingModeLLMDisplay(
       routingMode,
       WORKFLOW_LLM_TARGET,

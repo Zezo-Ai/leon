@@ -6,7 +6,7 @@ import {
   type BuiltInCommandExecutionResult
 } from '@/commands/built-in-command'
 import { createListResult } from '@/commands/built-in-command-renderer'
-import { ROUTING_STATE } from '@/core/routing-state'
+import { CONFIG_STATE } from '@/core/config-states/config-state'
 
 export class RoutingCommand extends BuiltInCommand {
   protected override description = 'Display or change the current routing mode.'
@@ -21,9 +21,11 @@ export class RoutingCommand extends BuiltInCommand {
   public override getAutocompleteItems(
     context: BuiltInCommandAutocompleteContext
   ): BuiltInCommandAutocompleteItem[] {
+    const routingModeState = CONFIG_STATE.getRoutingModeState()
     const currentArgument = context.args[0]?.toLowerCase() || ''
 
-    return ROUTING_STATE.getSupportedRoutingModes()
+    return routingModeState
+      .getSupportedRoutingModes()
       .filter((routingMode) => routingMode.startsWith(currentArgument))
       .map((routingMode) => ({
         type: 'parameter',
@@ -39,10 +41,11 @@ export class RoutingCommand extends BuiltInCommand {
   public override async execute(
     context: BuiltInCommandExecutionContext
   ): Promise<BuiltInCommandExecutionResult> {
+    const routingModeState = CONFIG_STATE.getRoutingModeState()
     const requestedRoutingMode = context.args[0]?.toLowerCase()
 
     if (!requestedRoutingMode) {
-      const currentRoutingMode = ROUTING_STATE.getRoutingMode()
+      const currentRoutingMode = routingModeState.getRoutingMode()
 
       return {
         status: 'completed',
@@ -56,7 +59,7 @@ export class RoutingCommand extends BuiltInCommand {
             },
             {
               label: 'Available routing modes',
-              value: ROUTING_STATE.getSupportedRoutingModes().join(', ')
+              value: routingModeState.getSupportedRoutingModes().join(', ')
             }
           ]
         })
@@ -64,7 +67,7 @@ export class RoutingCommand extends BuiltInCommand {
     }
 
     const normalizedRoutingMode =
-      ROUTING_STATE.getSupportedRoutingModes().find(
+      routingModeState.getSupportedRoutingModes().find(
         (routingMode) => routingMode === requestedRoutingMode
       ) || null
 
@@ -81,7 +84,7 @@ export class RoutingCommand extends BuiltInCommand {
             },
             {
               label: 'Available routing modes',
-              value: ROUTING_STATE.getSupportedRoutingModes().join(', '),
+              value: routingModeState.getSupportedRoutingModes().join(', '),
               tone: 'error'
             }
           ]
@@ -89,7 +92,7 @@ export class RoutingCommand extends BuiltInCommand {
       }
     }
 
-    const nextRoutingMode = await ROUTING_STATE.setRoutingMode(
+    const nextRoutingMode = await routingModeState.setRoutingMode(
       normalizedRoutingMode
     )
 

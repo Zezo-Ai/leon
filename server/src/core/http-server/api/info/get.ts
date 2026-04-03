@@ -17,7 +17,7 @@ import { LLM_PROVIDER, PERSONA } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { DateHelper } from '@/helpers/date-helper'
 import { SystemHelper } from '@/helpers/system-helper'
-import { ROUTING_STATE } from '@/core/routing-state'
+import { CONFIG_STATE } from '@/core/config-states/config-state'
 import {
   getActiveLLMTarget,
   getRoutingModeLLMDisplay
@@ -48,7 +48,7 @@ export const getInfo: FastifyPluginAsync<APIOptions> = async (
         SystemHelper.getFreeVRAM(),
         SystemHelper.getUsedVRAM()
       ])
-      const routingMode = ROUTING_STATE.getRoutingMode()
+      const routingMode = CONFIG_STATE.getRoutingModeState().getRoutingMode()
       const activeLLMTarget = getActiveLLMTarget(
         routingMode,
         WORKFLOW_LLM_TARGET,

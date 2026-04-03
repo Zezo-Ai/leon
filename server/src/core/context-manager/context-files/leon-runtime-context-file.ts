@@ -10,7 +10,7 @@ import { DateHelper } from '@/helpers/date-helper'
 import { RuntimeHelper } from '@/helpers/runtime-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 import { ContextProbeHelper } from '@/core/context-manager/context-probe-helper'
-import { ROUTING_STATE } from '@/core/routing-state'
+import { CONFIG_STATE } from '@/core/config-states/config-state'
 import {
   getActiveLLMTarget,
   getRoutingModeLLMDisplay
@@ -48,7 +48,7 @@ export class LeonRuntimeContextFile extends ContextFile {
     const workflowLlmName = this.resolvers.getWorkflowLLMName()
     const agentLlmName = this.resolvers.getAgentLLMName()
     const localLlmName = this.resolvers.getLocalLLMName()
-    const routingMode = ROUTING_STATE.getRoutingMode()
+    const routingMode = CONFIG_STATE.getRoutingModeState().getRoutingMode()
     const llmDisplay = getRoutingModeLLMDisplay(
       routingMode,
       WORKFLOW_LLM_TARGET,
