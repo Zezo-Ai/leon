@@ -87,6 +87,7 @@ export class StatusCommand extends BuiltInCommand {
   ): Promise<BuiltInCommandExecutionResult> {
     void context
 
+    const moodState = CONFIG_STATE.getMoodState()
     const llmState = CONFIG_STATE.getLLMState()
     const routingModeState = CONFIG_STATE.getRoutingModeState()
     const leonMetadata = getLeonMetadata()
@@ -125,6 +126,16 @@ export class StatusCommand extends BuiltInCommand {
       {
         label: 'Routing mode',
         value: routingMode
+      },
+      {
+        label: 'Current mood',
+        value: moodState.getCurrentMood()
+      },
+      {
+        label: 'Mood mode',
+        value: moodState.isAutomatic()
+          ? 'auto'
+          : `forced (${moodState.getConfiguredMood()})`
       },
       {
         label: llmDisplay.heading,

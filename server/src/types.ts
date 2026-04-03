@@ -48,6 +48,17 @@ export enum RoutingMode {
 }
 
 /**
+ * Mood
+ */
+export enum Moods {
+  Default = 'default',
+  Tired = 'tired',
+  Sad = 'sad',
+  Angry = 'angry',
+  Cocky = 'cocky'
+}
+
+/**
  * Logger
  */
 

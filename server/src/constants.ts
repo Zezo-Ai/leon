@@ -62,6 +62,10 @@ export const SERVER_PATH = path.join(
 export const TMP_PATH = path.join(SERVER_PATH, 'tmp')
 export const SERVER_CORE_PATH = path.join(SERVER_PATH, 'core')
 export const LEON_FILE_PATH = path.join(process.cwd(), 'leon.json')
+export const RECENTLY_USED_COMMANDS_FILE_PATH = path.join(
+  process.cwd(),
+  '.recently-used-commands'
+)
 
 /**
  * NVIDIA paths and versions.
@@ -399,6 +403,7 @@ export const LLM_SKILL_ROUTER_DUTY_SKILL_LIST_PATH = path.join(
  */
 export const HAS_LLM = true
 export const LEON_ROUTING_MODE = process.env['LEON_ROUTING_MODE'] || 'smart'
+export const LEON_MOOD = process.env['LEON_MOOD'] || 'auto'
 export const LEON_PULSE_ENABLED = true
 // Every 30 minutes
 export const LEON_PULSE_INTERVAL_MS = 30 * 60 * 1_000

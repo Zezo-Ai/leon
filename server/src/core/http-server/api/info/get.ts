@@ -48,6 +48,7 @@ export const getInfo: FastifyPluginAsync<APIOptions> = async (
         SystemHelper.getFreeVRAM(),
         SystemHelper.getUsedVRAM()
       ])
+      const moodState = CONFIG_STATE.getMoodState()
       const routingMode = CONFIG_STATE.getRoutingModeState().getRoutingMode()
       const activeLLMTarget = getActiveLLMTarget(
         routingMode,
@@ -103,7 +104,8 @@ export const getInfo: FastifyPluginAsync<APIOptions> = async (
         },
         mood: {
           type: PERSONA.mood.type,
-          emoji: PERSONA.mood.emoji
+          emoji: PERSONA.mood.emoji,
+          mode: moodState.getConfiguredMood()
         },
         version: LEON_VERSION
       })

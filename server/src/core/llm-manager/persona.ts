@@ -4,12 +4,19 @@ import {
   TOOLKIT_REGISTRY,
   TOOL_EXECUTOR
 } from '@/core'
+import { CONFIG_STATE } from '@/core/config-states/config-state'
+import {
+  CONFIG_STATE_EVENT_EMITTER,
+  MOOD_CONFIGURATION_UPDATED_EVENT
+} from '@/core/config-states/config-state-event-emitter'
+import { pickAutomaticMood } from '@/core/config-states/mood-state'
 import { LogHelper } from '@/helpers/log-helper'
 import { StringHelper } from '@/helpers/string-helper'
 import { DateHelper } from '@/helpers/date-helper'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
 import { ContextStateStore } from '@/core/context-manager/context-state-store'
 import { readOwnerProfileSync } from '@/core/context-manager/owner-profile'
+import { Moods } from '@/types'
 
 /**
  * @see https://llama.meta.com/docs/how-to-guides/prompting/
@@ -38,14 +45,6 @@ interface CompactPromptOptions {
   includePersonality?: boolean
   includeMood?: boolean
   profile?: 'full' | 'lean'
-}
-
-enum Moods {
-  Default = 'default',
-  Tired = 'tired',
-  Sad = 'sad',
-  Angry = 'angry',
-  Cocky = 'cocky'
 }
 
 /**
@@ -192,6 +191,10 @@ export default class Persona {
       Persona.instance = this
 
       this.setMood()
+      CONFIG_STATE_EVENT_EMITTER.on(MOOD_CONFIGURATION_UPDATED_EVENT, () => {
+        this.setMood()
+        EVENT_EMITTER.emit('persona_new-mood-set')
+      })
       setInterval(() => {
         void this.syncWeatherMoodAndContext()
       }, WEATHER_REFRESH_INTERVAL_MS)
@@ -464,47 +467,46 @@ export default class Persona {
     LogHelper.title('Persona')
     LogHelper.info('Setting mood...')
 
+    const moodState = CONFIG_STATE.getMoodState()
     const date = new Date()
-    const day = date.getDay()
-    const hour = date.getHours()
     const random = Math.random()
     const tiredMood = MOODS.find((mood) => mood.type === Moods.Tired) as Mood
     const sadMood = MOODS.find((mood) => mood.type === Moods.Sad) as Mood
+    const angryMood = MOODS.find((mood) => mood.type === Moods.Angry) as Mood
     const cockyMood = MOODS.find((mood) => mood.type === Moods.Cocky) as Mood
 
-    if (hour >= 13 && hour <= 14 && random < 0.5) {
-      // After lunchtime, there is a 50% chance to be tired
-      this._mood = tiredMood
-    } else if (day === 0 && random < 0.2) {
-      // On Sunday, there is a 20% chance to be sad
-      this._mood = sadMood
-    } else if (day === 5 && random < 0.8) {
-      // On Friday, there is an 80% chance to be happy
-      this._mood = DEFAULT_MOOD
-    } else if (day === 6 && random < 0.25) {
-      // On Saturday, there is a 25% chance to be cocky
-      this._mood = cockyMood
-    } else if (day === 1 && random < 0.25) {
-      // On Monday, there is a 25% chance to be tired
-      this._mood = tiredMood
-    } else if (hour >= 23 || hour < 6) {
-      // Every day after 11pm and before 6am, there is a 33% chance to be tired
-      this._mood = random < 0.33 ? tiredMood : DEFAULT_MOOD
+    if (!moodState.isAutomatic()) {
+      if (moodState.getConfiguredMood() === Moods.Tired) {
+        this._mood = tiredMood
+      } else if (moodState.getConfiguredMood() === Moods.Sad) {
+        this._mood = sadMood
+      } else if (moodState.getConfiguredMood() === Moods.Angry) {
+        this._mood = angryMood
+      } else if (moodState.getConfiguredMood() === Moods.Cocky) {
+        this._mood = cockyMood
+      } else {
+        this._mood = DEFAULT_MOOD
+      }
     } else {
-      // The rest of the time, there is 75% chance to be happy
-      let pickedMood =
-        Math.random() < 0.75
-          ? DEFAULT_MOOD
-          : MOODS[Math.floor(Math.random() * MOODS.length)]
+      const automaticMood = pickAutomaticMood({
+        date,
+        random
+      })
 
-      if (!pickedMood) {
-        pickedMood = DEFAULT_MOOD
+      if (automaticMood === Moods.Tired) {
+        this._mood = tiredMood
+      } else if (automaticMood === Moods.Sad) {
+        this._mood = sadMood
+      } else if (automaticMood === Moods.Cocky) {
+        this._mood = cockyMood
+      } else {
+        this._mood = DEFAULT_MOOD
       }
 
-      this._mood = pickedMood
+      this.applyWeatherMoodOverride(random)
     }
 
-    this.applyWeatherMoodOverride(random)
+    moodState.syncCurrentMood(this._mood.type)
 
     if (SOCKET_SERVER) {
       SOCKET_SERVER.emitToChatClients('new-mood', {
