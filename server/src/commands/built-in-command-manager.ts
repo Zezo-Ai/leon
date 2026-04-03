@@ -64,9 +64,8 @@ export class BuiltInCommandManager {
       return {
         mode: 'autocomplete',
         session,
-        suggestions: this.rankSuggestions(
-          this.commands.map((command) => this.toCommandSuggestion(command)),
-          parsedInput
+        suggestions: this.sortSuggestionsAlphabetically(
+          this.commands.map((command) => this.toCommandSuggestion(command))
         )
       }
     }
@@ -292,6 +291,14 @@ export class BuiltInCommandManager {
 
       return firstSuggestion.usage.localeCompare(secondSuggestion.usage)
     })
+  }
+
+  private sortSuggestionsAlphabetically(
+    suggestions: BuiltInCommandAutocompleteItem[]
+  ): BuiltInCommandAutocompleteItem[] {
+    return [...suggestions].sort((firstSuggestion, secondSuggestion) =>
+      firstSuggestion.usage.localeCompare(secondSuggestion.usage)
+    )
   }
 
   private getSuggestionScore(
