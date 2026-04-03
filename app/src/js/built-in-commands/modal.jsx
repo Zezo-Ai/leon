@@ -57,13 +57,14 @@ function parseRemixIcon(rawIconName) {
 }
 
 function SuggestionList({
+  headerTitle,
   suggestions,
   selectedSuggestionIndex,
   onSuggestionSelect
 }) {
   return (
     <List>
-      <ListHeader>Suggestions</ListHeader>
+      <ListHeader>{headerTitle}</ListHeader>
       {suggestions.map((suggestion, index) => {
         const parsedIcon = parseRemixIcon(suggestion.icon_name)
 
@@ -129,7 +130,9 @@ export function BuiltInCommandsModal({
   isLoading,
   commandValue,
   suggestions,
-  selectedSuggestionIndex,
+  recentSuggestions,
+  recentSelectedSuggestionIndex,
+  suggestionSelectedSuggestionIndex,
   result,
   hasSubmitted,
   inputRef,
@@ -138,6 +141,8 @@ export function BuiltInCommandsModal({
   onSuggestionSelect,
   onReturn
 }) {
+  const isCommandInputEmpty = commandValue.trim() === ''
+
   return (
     <div
       className={`built-in-commands-modal ${
@@ -195,11 +200,24 @@ export function BuiltInCommandsModal({
               ) : result ? (
                 <BuiltInCommandResultRenderer result={result} />
               ) : suggestions.length > 0 ? (
-                <SuggestionList
-                  suggestions={suggestions}
-                  selectedSuggestionIndex={selectedSuggestionIndex}
-                  onSuggestionSelect={onSuggestionSelect}
-                />
+                <Flexbox gap="md">
+                  {isCommandInputEmpty && recentSuggestions.length > 0 ? (
+                    <SuggestionList
+                      headerTitle="Recently Used Commands"
+                      suggestions={recentSuggestions}
+                      selectedSuggestionIndex={recentSelectedSuggestionIndex}
+                      onSuggestionSelect={onSuggestionSelect}
+                    />
+                  ) : null}
+                  <SuggestionList
+                    headerTitle={
+                      isCommandInputEmpty ? 'All Commands' : 'Suggested Commands'
+                    }
+                    suggestions={suggestions}
+                    selectedSuggestionIndex={suggestionSelectedSuggestionIndex}
+                    onSuggestionSelect={onSuggestionSelect}
+                  />
+                </Flexbox>
               ) : (
                 <EmptyState />
               )}

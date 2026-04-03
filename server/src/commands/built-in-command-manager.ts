@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+
+import { RECENTLY_USED_COMMANDS_FILE_PATH } from '@/constants'
 import { StringHelper } from '@/helpers/string-helper'
 import {
   type BuiltInCommand,
@@ -8,6 +11,7 @@ import {
 import { createListResult } from '@/commands/built-in-command-renderer'
 
 const COMMAND_PREFIX = '/'
+const MAX_RECENT_COMMANDS = 3
 const WHITESPACE_PATTERN = /\s+/
 
 interface ParsedBuiltInCommandInput {
@@ -23,6 +27,7 @@ export interface BuiltInCommandAutocompleteResponse {
   mode: 'autocomplete'
   session: BuiltInCommandSession
   suggestions: BuiltInCommandAutocompleteItem[]
+  recent_suggestions: BuiltInCommandAutocompleteItem[]
 }
 
 export interface BuiltInCommandExecuteResponse {
@@ -31,6 +36,7 @@ export interface BuiltInCommandExecuteResponse {
   status: BuiltInCommandExecutionResult['status']
   result: BuiltInCommandExecutionResult['result']
   suggestions: BuiltInCommandAutocompleteItem[]
+  recent_suggestions: BuiltInCommandAutocompleteItem[]
 }
 
 export class BuiltInCommandManager {
@@ -56,7 +62,8 @@ export class BuiltInCommandManager {
       return {
         mode: 'autocomplete',
         session,
-        suggestions: []
+        suggestions: [],
+        recent_suggestions: this.getRecentSuggestions()
       }
     }
 
@@ -66,7 +73,8 @@ export class BuiltInCommandManager {
         session,
         suggestions: this.sortSuggestionsAlphabetically(
           this.commands.map((command) => this.toCommandSuggestion(command))
-        )
+        ),
+        recent_suggestions: this.getRecentSuggestions()
       }
     }
 
@@ -85,7 +93,8 @@ export class BuiltInCommandManager {
             )
             .map((command) => this.toCommandSuggestion(command)),
           parsedInput
-        )
+        ),
+        recent_suggestions: this.getRecentSuggestions()
       }
     }
 
@@ -104,7 +113,8 @@ export class BuiltInCommandManager {
       suggestions: this.rankSuggestions(
         this.dedupeSuggestions(suggestions),
         parsedInput
-      )
+      ),
+      recent_suggestions: this.getRecentSuggestions()
     }
   }
 
@@ -139,7 +149,8 @@ export class BuiltInCommandManager {
             }
           ]
         }),
-        suggestions: []
+        suggestions: [],
+        recent_suggestions: this.getRecentSuggestions()
       }
     }
 
@@ -167,7 +178,8 @@ export class BuiltInCommandManager {
           ]
         }),
         suggestions: this.autocomplete(parsedInput.normalized_input, session.id)
-          .suggestions
+          .suggestions,
+        recent_suggestions: this.getRecentSuggestions()
       }
     }
 
@@ -194,6 +206,10 @@ export class BuiltInCommandManager {
           ? 'error'
           : 'completed'
 
+    if (executionResult.status === 'completed') {
+      this.persistRecentCommandValue(parsedInput.normalized_input)
+    }
+
     return {
       mode: 'execute',
       session,
@@ -206,7 +222,8 @@ export class BuiltInCommandManager {
               args: parsedInput.args,
               ends_with_space: parsedInput.ends_with_space
             })
-          : []
+          : [],
+      recent_suggestions: this.getRecentSuggestions()
     }
   }
 
@@ -236,9 +253,52 @@ export class BuiltInCommandManager {
     return `cmd-${Date.now()}-${StringHelper.random(6)}`
   }
 
+  private getRecentSuggestions(): BuiltInCommandAutocompleteItem[] {
+    return this.readRecentCommandValues()
+      .map((commandInput) => this.resolveSuggestionByInput(commandInput))
+      .filter(
+        (
+          suggestion
+        ): suggestion is BuiltInCommandAutocompleteItem => suggestion !== null
+      )
+  }
+
   private getCommand(commandName: string): BuiltInCommand | null {
     return (
       this.commands.find((command) => command.matchesName(commandName)) || null
+    )
+  }
+
+  private resolveSuggestionByInput(
+    rawInput: string
+  ): BuiltInCommandAutocompleteItem | null {
+    const parsedInput = this.parseInput(rawInput)
+
+    if (!parsedInput.has_command_prefix || !parsedInput.command_name) {
+      return null
+    }
+
+    const command = this.getCommand(parsedInput.command_name)
+
+    if (!command) {
+      return null
+    }
+
+    if (parsedInput.args.length === 0) {
+      return this.toCommandSuggestion(command)
+    }
+
+    const normalizedInput = parsedInput.normalized_input.toLowerCase()
+
+    return (
+      command
+        .getAutocompleteItems({
+          raw_input: parsedInput.normalized_input,
+          args: parsedInput.args,
+          ends_with_space: parsedInput.ends_with_space
+        })
+        .find((suggestion) => suggestion.value.toLowerCase() === normalizedInput) ||
+      null
     )
   }
 
@@ -335,6 +395,43 @@ export class BuiltInCommandManager {
     }
 
     return score
+  }
+
+  private readRecentCommandValues(): string[] {
+    if (!fs.existsSync(RECENTLY_USED_COMMANDS_FILE_PATH)) {
+      return []
+    }
+
+    try {
+      return fs
+        .readFileSync(RECENTLY_USED_COMMANDS_FILE_PATH, 'utf8')
+        .split('\n')
+        .map((commandValue) => commandValue.trim())
+        .filter(Boolean)
+        .slice(0, MAX_RECENT_COMMANDS)
+    } catch {
+      return []
+    }
+  }
+
+  private persistRecentCommandValue(commandValue: string): void {
+    const normalizedCommandValue = commandValue.trim()
+    const nextRecentCommandValues = [
+      normalizedCommandValue,
+      ...this.readRecentCommandValues().filter(
+        (recentCommandValue) => recentCommandValue !== normalizedCommandValue
+      )
+    ].slice(0, MAX_RECENT_COMMANDS)
+
+    try {
+      fs.writeFileSync(
+        RECENTLY_USED_COMMANDS_FILE_PATH,
+        `${nextRecentCommandValues.join('\n')}\n`,
+        'utf8'
+      )
+    } catch {
+      // Ignore recent-history persistence errors to avoid blocking commands.
+    }
   }
 
   private parseInput(rawInput: string): ParsedBuiltInCommandInput {

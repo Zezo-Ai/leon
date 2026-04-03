@@ -36,6 +36,7 @@ export default class BuiltInCommands {
     this.commandValue = ''
     this.selectedSuggestionIndex = -1
     this.suggestions = []
+    this.recentSuggestions = []
     this.result = null
     this.isOpen = false
     this.isClosing = false
@@ -74,6 +75,9 @@ export default class BuiltInCommands {
   }
 
   render() {
+    const { recentSelectedSuggestionIndex, suggestionSelectedSuggestionIndex } =
+      this.getSelectedSuggestionIndices()
+
     this.root.render(
       <BuiltInCommandsModal
         isOpen={this.isOpen}
@@ -81,7 +85,9 @@ export default class BuiltInCommands {
         isLoading={this.isLoading}
         commandValue={this.commandValue}
         suggestions={this.suggestions}
-        selectedSuggestionIndex={this.selectedSuggestionIndex}
+        recentSuggestions={this.recentSuggestions}
+        recentSelectedSuggestionIndex={recentSelectedSuggestionIndex}
+        suggestionSelectedSuggestionIndex={suggestionSelectedSuggestionIndex}
         result={this.result}
         hasSubmitted={this.hasSubmitted}
         inputRef={this.modalInputRef}
@@ -149,8 +155,9 @@ export default class BuiltInCommands {
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault()
 
-        if (this.selectedSuggestionIndex >= 0 && this.suggestions.length > 0) {
-          const suggestion = this.suggestions[this.selectedSuggestionIndex]
+        if (this.selectedSuggestionIndex >= 0) {
+          const suggestion =
+            this.getVisibleSuggestions()[this.selectedSuggestionIndex]
 
           if (suggestion) {
             this.applySuggestion(suggestion)
@@ -296,7 +303,9 @@ export default class BuiltInCommands {
 
       this.sessionId = data.session.id
       this.suggestions = data.suggestions || []
-      this.selectedSuggestionIndex = this.suggestions.length > 0 ? 0 : -1
+      this.recentSuggestions = data.recent_suggestions || []
+      this.selectedSuggestionIndex =
+        this.getVisibleSuggestions().length > 0 ? 0 : -1
       this.isLoading = false
       this.render()
     } catch (error) {
@@ -351,6 +360,7 @@ export default class BuiltInCommands {
       this.sessionId = data.session.id
       this.isLoading = false
       this.result = data.result
+      this.recentSuggestions = data.recent_suggestions || []
       this.render()
     } catch (error) {
       this.isLoading = false
@@ -379,7 +389,9 @@ export default class BuiltInCommands {
       return
     }
 
-    if (this.suggestions.length === 0) {
+    const visibleSuggestions = this.getVisibleSuggestions()
+
+    if (visibleSuggestions.length === 0) {
       return
     }
 
@@ -387,8 +399,10 @@ export default class BuiltInCommands {
       this.selectedSuggestionIndex = 0
     } else {
       this.selectedSuggestionIndex =
-        (this.selectedSuggestionIndex + direction + this.suggestions.length) %
-        this.suggestions.length
+        (this.selectedSuggestionIndex +
+          direction +
+          visibleSuggestions.length) %
+        visibleSuggestions.length
     }
 
     this.render()
@@ -506,6 +520,45 @@ export default class BuiltInCommands {
 
   buildCommandInput() {
     return `/${this.commandValue}`.trim()
+  }
+
+  getVisibleSuggestions() {
+    if (this.commandValue.trim() === '') {
+      return [...this.recentSuggestions, ...this.suggestions]
+    }
+
+    return this.suggestions
+  }
+
+  getSelectedSuggestionIndices() {
+    if (this.commandValue.trim() !== '') {
+      return {
+        recentSelectedSuggestionIndex: -1,
+        suggestionSelectedSuggestionIndex: this.selectedSuggestionIndex
+      }
+    }
+
+    const recentSuggestionsLength = this.recentSuggestions.length
+
+    if (this.selectedSuggestionIndex < 0) {
+      return {
+        recentSelectedSuggestionIndex: -1,
+        suggestionSelectedSuggestionIndex: -1
+      }
+    }
+
+    if (this.selectedSuggestionIndex < recentSuggestionsLength) {
+      return {
+        recentSelectedSuggestionIndex: this.selectedSuggestionIndex,
+        suggestionSelectedSuggestionIndex: -1
+      }
+    }
+
+    return {
+      recentSelectedSuggestionIndex: -1,
+      suggestionSelectedSuggestionIndex:
+        this.selectedSuggestionIndex - recentSuggestionsLength
+    }
   }
 
   resetState() {

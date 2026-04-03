@@ -45,6 +45,7 @@ package-lock.json
 npm-debug.log
 debug.log
 .env
+.recently-used-commands
 .last-skill-deps-sync
 .last-nodejs-bridge-deps-sync
 .last-native-node-modules-rebuild
