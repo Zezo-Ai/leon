@@ -17,4 +17,4 @@ export type Color =
 
 export type Size = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
 
-export type IconType = 'line' | 'fill'
+export type IconType = 'line' | 'fill' | 'notype'

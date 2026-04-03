@@ -160,7 +160,7 @@ export const App: React.FC = () => {
               <Input name="input-2" placeholder="Input 2" />
               <Flexbox gap="md">
                 <Button type="submit">Submit</Button>
-                <Button type="reset" secondary>
+                <Button secondary>
                   Reset
                 </Button>
               </Flexbox>

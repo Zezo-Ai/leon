@@ -1,0 +1,220 @@
+.built-in-commands-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: block;
+  opacity: 0;
+  visibility: visible;
+  pointer-events: none;
+  transition:
+    opacity 0.18s ease,
+    visibility 0.18s ease;
+}
+
+.built-in-commands-modal--hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.built-in-commands-modal--open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.built-in-commands-modal__mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.56);
+  backdrop-filter: blur(10px);
+}
+
+.built-in-commands-modal__panel {
+  position: absolute;
+  top: 33%;
+  left: 50%;
+  transform: translate(-50%, -33%) scale(0.985);
+  width: min(864px, 100%);
+  min-height: 400px;
+  max-height: min(78vh, 756px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid transparent;
+  border-radius: 24px;
+  background:
+    linear-gradient(
+        var(--a-color-background-surface),
+        var(--a-color-background-surface)
+      )
+      padding-box,
+    linear-gradient(135deg, rgba(28, 117, 219, 0.8) 0%, rgba(237, 41, 122, 0.4) 100%)
+      border-box;
+  box-shadow:
+    0 28px 60px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    transform 0.18s cubic-bezier(0.18, 0.89, 0.32, 1.08),
+    opacity 0.18s ease;
+}
+
+.built-in-commands-modal--open .built-in-commands-modal__panel {
+  transform: translate(-50%, -33%) scale(1);
+  opacity: 1;
+}
+
+.built-in-commands-modal__section {
+  padding: 20px 22px;
+}
+
+.built-in-commands-modal__section--top {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.built-in-commands-modal__section--bottom {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.built-in-commands-modal__section--middle {
+  flex: 0 0 512px;
+  height: 512px;
+  min-height: 512px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.built-in-commands-modal__scroll-area {
+  height: 100%;
+}
+
+.built-in-commands-modal__input-field {
+  flex: 1;
+}
+
+.built-in-commands-modal__input-field .aurora-input-container {
+  --a-icon-container-width: 72px;
+}
+
+.built-in-commands-modal__input-field .aurora-input {
+  height: 72px;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.built-in-commands-modal__input-field .aurora-input-icon-container {
+  height: 72px;
+}
+
+.built-in-commands-modal__return-button .aurora-button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 14px;
+  font-size: var(--a-font-size-md);
+}
+
+.built-in-commands-modal__return-button .aurora-button .aurora-icon {
+  font-size: 22px;
+}
+
+.built-in-commands-modal__suggestion-copy {
+  min-width: 0;
+}
+
+.built-in-commands-modal .aurora-list-item > .aurora-flexbox .aurora-icon {
+  font-size: 28px;
+  padding: 23px;
+  border-radius: 12px;
+}
+
+.built-in-commands-modal
+  .aurora-list-item--selected
+  .aurora-list-item-clickable-icon
+  .aurora-icon {
+  color: var(--a-color-accent);
+}
+
+.built-in-commands-modal__result-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
+.built-in-commands-modal__result-copy,
+.built-in-commands-modal__result-value {
+  min-width: 0;
+}
+
+.built-in-commands-modal__result-value {
+  margin-left: auto;
+}
+
+.built-in-commands-modal .aurora-scroll-container-scrollview {
+  color-scheme: dark;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) rgba(10, 14, 18, 0.9);
+}
+
+.built-in-commands-modal .aurora-scroll-container-scrollview::-webkit-scrollbar {
+  width: 10px;
+}
+
+.built-in-commands-modal
+  .aurora-scroll-container-scrollview::-webkit-scrollbar-track {
+  background: rgba(10, 14, 18, 0.9);
+  border-radius: 999px;
+}
+
+.built-in-commands-modal
+  .aurora-scroll-container-scrollview::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    rgba(54, 65, 76, 0.95) 0%,
+    rgba(30, 38, 46, 0.95) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+}
+
+.built-in-commands-modal
+  .aurora-scroll-container-scrollview::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(70, 82, 95, 0.98) 0%,
+    rgba(40, 49, 58, 0.98) 100%
+  );
+}
+
+@media (max-width: 900px) {
+  .built-in-commands-modal__panel {
+    width: auto;
+    min-height: 360px;
+    max-height: calc(100vh - 24px);
+    left: 12px;
+    right: 12px;
+    top: 18%;
+    transform: translate(0, 0) scale(0.985);
+  }
+
+  .built-in-commands-modal--open .built-in-commands-modal__panel {
+    transform: translate(0, 0) scale(1);
+  }
+
+  .built-in-commands-modal__section {
+    padding: 16px;
+  }
+
+  .built-in-commands-modal__section--middle {
+    flex-basis: 280px;
+    height: 280px;
+    min-height: 280px;
+  }
+
+  .built-in-commands-modal__result-item {
+    flex-direction: column;
+    gap: 6px;
+  }
+}

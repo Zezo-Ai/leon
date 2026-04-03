@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import classNames from 'clsx'
 
 import { Text, Icon } from '../..'
+import type { IconProps } from '../icon'
 
 import './input.sass'
 
@@ -24,6 +25,9 @@ export interface InputProps {
     | 'week'
     | 'color'
   iconName?: string
+  iconSVG?: IconProps['svg']
+  iconType?: IconProps['type']
+  iconSize?: IconProps['size']
   hint?: string
   disabled?: boolean
   height?: number | 'auto'
@@ -35,6 +39,10 @@ export interface InputProps {
   pattern?: string
   multiline?: boolean
   autofocus?: boolean
+  onFocus?: () => void
+  onBlur?: () => void
+  onKeyDown?: (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => void
+  inputRef?: React.Ref<HTMLInputElement | HTMLTextAreaElement>
   onChange?: (value: string) => void
 }
 
@@ -44,6 +52,9 @@ export function Input({
   required = false,
   type = 'text',
   iconName,
+  iconSVG,
+  iconType = 'fill',
+  iconSize = 'md',
   hint,
   value,
   disabled,
@@ -53,9 +64,17 @@ export function Input({
   pattern,
   multiline,
   autofocus,
+  onFocus,
+  onBlur,
+  onKeyDown,
+  inputRef,
   onChange
 }: InputProps) {
   const [inputValue, setInputValue] = useState(value || '')
+
+  useEffect(() => {
+    setInputValue(value || '')
+  }, [value])
 
   if (!multiline) {
     if (!maxLength) {
@@ -79,6 +98,10 @@ export function Input({
           autoFocus={autofocus}
           minLength={minLength}
           maxLength={maxLength}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          onKeyDown={onKeyDown}
+          ref={inputRef as React.Ref<HTMLTextAreaElement>}
           onChange={(e) => {
             setInputValue(e.target.value)
 
@@ -90,7 +113,7 @@ export function Input({
           className={classNames('aurora-input', {
             'aurora-input--multiline': true,
             'aurora-input--disabled': disabled,
-            'aurora-input--with-icon': !!iconName
+            'aurora-input--with-icon': !!iconName || !!iconSVG
           })}
         />
       ) : (
@@ -105,6 +128,10 @@ export function Input({
           minLength={minLength}
           maxLength={maxLength}
           pattern={pattern}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          onKeyDown={onKeyDown}
+          ref={inputRef as React.Ref<HTMLInputElement>}
           onChange={(e) => {
             setInputValue(e.target.value)
 
@@ -114,13 +141,18 @@ export function Input({
           }}
           className={classNames('aurora-input', {
             'aurora-input--disabled': disabled,
-            'aurora-input--with-icon': !!iconName
+            'aurora-input--with-icon': !!iconName || !!iconSVG
           })}
         />
       )}
-      {iconName && (
+      {(iconName || iconSVG) && (
         <div className="aurora-input-icon-container">
-          <Icon iconName={iconName} type="fill" />
+          <Icon
+            iconName={iconName}
+            svg={iconSVG}
+            type={iconType}
+            size={iconSize}
+          />
         </div>
       )}
       {hint && (

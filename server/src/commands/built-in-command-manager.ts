@@ -1,0 +1,375 @@
+import { StringHelper } from '@/helpers/string-helper'
+import {
+  type BuiltInCommand,
+  type BuiltInCommandAutocompleteItem,
+  type BuiltInCommandExecutionResult,
+  type BuiltInCommandSession
+} from '@/commands/built-in-command'
+import { createListResult } from '@/commands/built-in-command-renderer'
+
+const COMMAND_PREFIX = '/'
+const WHITESPACE_PATTERN = /\s+/
+
+interface ParsedBuiltInCommandInput {
+  raw_input: string
+  normalized_input: string
+  command_name: string
+  args: string[]
+  ends_with_space: boolean
+  has_command_prefix: boolean
+}
+
+export interface BuiltInCommandAutocompleteResponse {
+  mode: 'autocomplete'
+  session: BuiltInCommandSession
+  suggestions: BuiltInCommandAutocompleteItem[]
+}
+
+export interface BuiltInCommandExecuteResponse {
+  mode: 'execute'
+  session: BuiltInCommandSession
+  status: BuiltInCommandExecutionResult['status']
+  result: BuiltInCommandExecutionResult['result']
+  suggestions: BuiltInCommandAutocompleteItem[]
+}
+
+export class BuiltInCommandManager {
+  private readonly sessions = new Map<string, BuiltInCommandSession>()
+
+  public constructor(private readonly commands: BuiltInCommand[]) {}
+
+  public listCommands(): BuiltInCommand[] {
+    return [...this.commands]
+  }
+
+  public autocomplete(
+    rawInput: string,
+    sessionId?: string
+  ): BuiltInCommandAutocompleteResponse {
+    const session = this.getSession(sessionId)
+    const parsedInput = this.parseInput(rawInput)
+
+    session.raw_input = parsedInput.normalized_input
+    session.command_name = parsedInput.command_name || null
+
+    if (!parsedInput.has_command_prefix) {
+      return {
+        mode: 'autocomplete',
+        session,
+        suggestions: []
+      }
+    }
+
+    if (!parsedInput.command_name) {
+      return {
+        mode: 'autocomplete',
+        session,
+        suggestions: this.rankSuggestions(
+          this.commands.map((command) => this.toCommandSuggestion(command)),
+          parsedInput
+        )
+      }
+    }
+
+    const exactCommand = this.getCommand(parsedInput.command_name)
+
+    if (!exactCommand) {
+      return {
+        mode: 'autocomplete',
+        session,
+        suggestions: this.rankSuggestions(
+          this.commands
+            .filter((command) =>
+              this.getCommandSearchTokens(command).some((token) =>
+                token.startsWith(parsedInput.command_name.toLowerCase())
+              )
+            )
+            .map((command) => this.toCommandSuggestion(command)),
+          parsedInput
+        )
+      }
+    }
+
+    const suggestions = [
+      this.toCommandSuggestion(exactCommand),
+      ...exactCommand.getAutocompleteItems({
+        raw_input: parsedInput.normalized_input,
+        args: parsedInput.args,
+        ends_with_space: parsedInput.ends_with_space
+      })
+    ]
+
+    return {
+      mode: 'autocomplete',
+      session,
+      suggestions: this.rankSuggestions(
+        this.dedupeSuggestions(suggestions),
+        parsedInput
+      )
+    }
+  }
+
+  public async execute(
+    rawInput: string,
+    sessionId?: string
+  ): Promise<BuiltInCommandExecuteResponse> {
+    const session = this.getSession(sessionId)
+    const parsedInput = this.parseInput(rawInput)
+
+    session.raw_input = parsedInput.normalized_input
+    session.command_name = parsedInput.command_name || null
+
+    if (!parsedInput.has_command_prefix || !parsedInput.command_name) {
+      session.status = 'error'
+
+      return {
+        mode: 'execute',
+        session,
+        status: 'error',
+        result: createListResult({
+          title: 'Invalid Command',
+          tone: 'error',
+          items: [
+            {
+              label: 'Built-in commands must start with "/".',
+              tone: 'error'
+            },
+            {
+              label: 'Use /help to inspect the supported commands.',
+              tone: 'error'
+            }
+          ]
+        }),
+        suggestions: []
+      }
+    }
+
+    const command = this.getCommand(parsedInput.command_name)
+
+    if (!command) {
+      session.status = 'error'
+
+      return {
+        mode: 'execute',
+        session,
+        status: 'error',
+        result: createListResult({
+          title: 'Unknown Command',
+          tone: 'error',
+          items: [
+            {
+              label: `The command "${parsedInput.command_name}" is not supported.`,
+              tone: 'error'
+            },
+            {
+              label: 'Use /help to inspect the supported commands.',
+              tone: 'error'
+            }
+          ]
+        }),
+        suggestions: this.autocomplete(parsedInput.normalized_input, session.id)
+          .suggestions
+      }
+    }
+
+    session.command_name = command.getName()
+    session.required_parameters = command
+      .getRequiredParameters()
+      .map((parameter) => parameter.name)
+
+    const executionResult = await command.execute({
+      raw_input: parsedInput.normalized_input,
+      args: parsedInput.args,
+      session,
+      resolveCommands: () => this.listCommands()
+    })
+
+    if (executionResult.session) {
+      Object.assign(session, executionResult.session)
+    }
+
+    session.status =
+      executionResult.status === 'awaiting_required_parameters'
+        ? 'awaiting_required_parameters'
+        : executionResult.status === 'error'
+          ? 'error'
+          : 'completed'
+
+    return {
+      mode: 'execute',
+      session,
+      status: executionResult.status,
+      result: executionResult.result,
+      suggestions:
+        executionResult.status === 'awaiting_required_parameters'
+          ? command.getAutocompleteItems({
+              raw_input: parsedInput.normalized_input,
+              args: parsedInput.args,
+              ends_with_space: parsedInput.ends_with_space
+            })
+          : []
+    }
+  }
+
+  private getSession(sessionId?: string): BuiltInCommandSession {
+    const resolvedSessionId = sessionId || this.createSessionId()
+    const existingSession = this.sessions.get(resolvedSessionId)
+
+    if (existingSession) {
+      return existingSession
+    }
+
+    const session: BuiltInCommandSession = {
+      id: resolvedSessionId,
+      status: 'idle',
+      command_name: null,
+      raw_input: '',
+      required_parameters: [],
+      collected_parameters: {}
+    }
+
+    this.sessions.set(resolvedSessionId, session)
+
+    return session
+  }
+
+  private createSessionId(): string {
+    return `cmd-${Date.now()}-${StringHelper.random(6)}`
+  }
+
+  private getCommand(commandName: string): BuiltInCommand | null {
+    return (
+      this.commands.find((command) => command.matchesName(commandName)) || null
+    )
+  }
+
+  private getCommandSearchTokens(command: BuiltInCommand): string[] {
+    return [command.getName(), ...command.getAliases()].map((token) =>
+      token.toLowerCase()
+    )
+  }
+
+  private toCommandSuggestion(
+    command: BuiltInCommand
+  ): BuiltInCommandAutocompleteItem {
+    return {
+      type: 'command',
+      icon_name: command.getIconName(),
+      name: command.getName(),
+      description: command.getDescription(),
+      usage: command.getPrimaryUsage(),
+      supported_usages: command.getSupportedUsages(),
+      value: command.getPrimaryUsage()
+    }
+  }
+
+  private dedupeSuggestions(
+    suggestions: BuiltInCommandAutocompleteItem[]
+  ): BuiltInCommandAutocompleteItem[] {
+    const uniqueSuggestions = new Map<string, BuiltInCommandAutocompleteItem>()
+
+    for (const suggestion of suggestions) {
+      uniqueSuggestions.set(`${suggestion.type}:${suggestion.value}`, suggestion)
+    }
+
+    return [...uniqueSuggestions.values()]
+  }
+
+  private rankSuggestions(
+    suggestions: BuiltInCommandAutocompleteItem[],
+    parsedInput: ParsedBuiltInCommandInput
+  ): BuiltInCommandAutocompleteItem[] {
+    const normalizedInput = parsedInput.normalized_input.toLowerCase()
+
+    return [...suggestions].sort((firstSuggestion, secondSuggestion) => {
+      const scoreDifference =
+        this.getSuggestionScore(secondSuggestion, normalizedInput) -
+        this.getSuggestionScore(firstSuggestion, normalizedInput)
+
+      if (scoreDifference !== 0) {
+        return scoreDifference
+      }
+
+      return firstSuggestion.usage.localeCompare(secondSuggestion.usage)
+    })
+  }
+
+  private getSuggestionScore(
+    suggestion: BuiltInCommandAutocompleteItem,
+    normalizedInput: string
+  ): number {
+    const normalizedUsage = suggestion.usage.toLowerCase()
+    const normalizedValue = suggestion.value.toLowerCase()
+    const normalizedName = suggestion.name.toLowerCase()
+    let score = 0
+
+    if (normalizedValue === normalizedInput || normalizedUsage === normalizedInput) {
+      score += 1_000
+    }
+
+    if (normalizedValue.startsWith(normalizedInput)) {
+      score += 800 - (normalizedValue.length - normalizedInput.length)
+    }
+
+    if (normalizedUsage.startsWith(normalizedInput)) {
+      score += 760 - (normalizedUsage.length - normalizedInput.length)
+    }
+
+    if (normalizedInput.startsWith(normalizedValue)) {
+      score += 520 + normalizedValue.length
+    }
+
+    if (normalizedInput.includes(normalizedName)) {
+      score += 120
+    }
+
+    if (suggestion.type === 'parameter') {
+      score += 40
+    }
+
+    return score
+  }
+
+  private parseInput(rawInput: string): ParsedBuiltInCommandInput {
+    const normalizedInput = String(rawInput || '').trimStart()
+    const hasCommandPrefix = normalizedInput.startsWith(COMMAND_PREFIX)
+    const endsWithSpace = /\s$/.test(rawInput)
+
+    if (!hasCommandPrefix) {
+      return {
+        raw_input: rawInput,
+        normalized_input: normalizedInput,
+        command_name: '',
+        args: [],
+        ends_with_space: endsWithSpace,
+        has_command_prefix: false
+      }
+    }
+
+    const inputBody = normalizedInput.slice(COMMAND_PREFIX.length).trim()
+
+    if (!inputBody) {
+      return {
+        raw_input: rawInput,
+        normalized_input: normalizedInput,
+        command_name: '',
+        args: [],
+        ends_with_space: endsWithSpace,
+        has_command_prefix: true
+      }
+    }
+
+    const [commandName, ...args] = inputBody
+      .split(WHITESPACE_PATTERN)
+      .filter(Boolean)
+
+    return {
+      raw_input: rawInput,
+      normalized_input: normalizedInput,
+      command_name: (commandName || '').toLowerCase(),
+      args,
+      ends_with_space: endsWithSpace,
+      has_command_prefix: true
+    }
+  }
+}

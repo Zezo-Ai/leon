@@ -43,6 +43,7 @@ import { SlotFillingLLMDuty } from '@/core/llm-manager/llm-duties/slot-filling-l
 import { ReActLLMDuty } from '@/core/llm-manager/llm-duties/react-llm-duty'
 import { AGENT_LLM_TARGET, LEON_ROUTING_MODE, WORKFLOW_LLM_TARGET } from '@/constants'
 import { RoutingMode } from '@/types'
+import { ROUTING_STATE } from '@/core/routing-state'
 import { WorkflowProgressWidget } from '@/core/nlp/nlu/workflow-progress-widget'
 
 // TODO: delete?
@@ -615,7 +616,8 @@ export default class NLU {
   }
 
   private getLeonMode(): RoutingMode {
-    const mode = String(LEON_ROUTING_MODE || RoutingMode.Smart).toLowerCase()
+    const runtimeRoutingMode = ROUTING_STATE.getRoutingMode()
+    const mode = String(runtimeRoutingMode || RoutingMode.Smart).toLowerCase()
     if (
       mode === RoutingMode.Workflow ||
       mode === RoutingMode.Agent ||
@@ -626,7 +628,7 @@ export default class NLU {
 
     LogHelper.title('NLU')
     LogHelper.warning(
-      `Unknown LEON_ROUTING_MODE "${LEON_ROUTING_MODE}", defaulting to smart`
+      `Unknown LEON_ROUTING_MODE "${runtimeRoutingMode || LEON_ROUTING_MODE}", defaulting to smart`
     )
 
     return RoutingMode.Smart

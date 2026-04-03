@@ -131,6 +131,8 @@ table {
 }
 
 :root {
+  color-scheme: dark;
+
   --black-color: #000;
   --light-black-color: #222426;
   --white-color: #fff;
@@ -169,6 +171,7 @@ body {
     'Noto Color Emoji';
   font-weight: 400;
 }
+
 
 @keyframes plan-tool-status-cozy-shine {
   0% {
@@ -522,33 +525,6 @@ textarea::-webkit-scrollbar-thumb {
   100% {
     opacity: 1;
   }
-}
-
-#suggestions-container {
-  position: absolute;
-  z-index: 10;
-  width: 100%;
-  bottom: 36%;
-  display: flex;
-  justify-content: flex-end;
-  column-gap: 8px;
-  overflow-x: auto;
-}
-.suggestion {
-  border: 1px solid var(--white-color);
-  background-color: transparent;
-  color: var(--white-color);
-  border-radius: 8px;
-  padding: 2px 8px;
-  font-size: inherit;
-  cursor: pointer;
-  transition:
-    background-color 0.2s,
-    color 0.2s;
-}
-.suggestion:hover {
-  color: var(--black-color);
-  background-color: var(--white-color);
 }
 
 #input-container {

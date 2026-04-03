@@ -1,3 +1,138 @@
-export class BuiltInCommand {
+const COMMAND_PREFIX = '/'
 
+export interface RequiredParameter {
+  name: string
+  questions: string[]
+}
+
+export interface BuiltInCommandAutocompleteContext {
+  raw_input: string
+  args: string[]
+  ends_with_space: boolean
+}
+
+export interface BuiltInCommandAutocompleteItem {
+  type: 'command' | 'parameter'
+  icon_name: string
+  name: string
+  description: string
+  usage: string
+  supported_usages: string[]
+  value: string
+}
+
+export interface BuiltInCommandSession {
+  id: string
+  status: 'idle' | 'awaiting_required_parameters' | 'completed' | 'error'
+  command_name: string | null
+  raw_input: string
+  required_parameters: string[]
+  collected_parameters: Record<string, string>
+}
+
+export interface BuiltInCommandExecutionContext {
+  raw_input: string
+  args: string[]
+  session: BuiltInCommandSession
+  resolveCommands: () => BuiltInCommand[]
+}
+
+export type BuiltInCommandResultTone = 'info' | 'success' | 'error'
+export type BuiltInCommandRenderItemTone =
+  | 'default'
+  | 'success'
+  | 'warning'
+  | 'error'
+
+export interface BuiltInCommandRenderListItem {
+  label: string
+  value?: string
+  description?: string
+  tone?: BuiltInCommandRenderItemTone
+}
+
+export interface BuiltInCommandRenderBlock {
+  type: 'list'
+  header?: string
+  items: BuiltInCommandRenderListItem[]
+}
+
+export interface BuiltInCommandResult {
+  title: string
+  tone: BuiltInCommandResultTone
+  blocks: BuiltInCommandRenderBlock[]
+  plain_text: string[]
+}
+
+export interface BuiltInCommandExecutionResult {
+  status: 'completed' | 'awaiting_required_parameters' | 'error'
+  result: BuiltInCommandResult
+  session?: Partial<BuiltInCommandSession>
+}
+
+export abstract class BuiltInCommand {
+  protected description = ''
+  protected required_parameters: RequiredParameter[] = []
+  protected icon_name = 'ri-terminal-box-line'
+  protected supported_usages: string[] = []
+  protected help_usage = ''
+  protected aliases: string[] = []
+
+  public constructor(protected readonly name: string) {}
+
+  public getName(): string {
+    return this.name
+  }
+
+  public getDescription(): string {
+    return this.description
+  }
+
+  public getRequiredParameters(): RequiredParameter[] {
+    return [...this.required_parameters]
+  }
+
+  public getIconName(): string {
+    return this.icon_name
+  }
+
+  public getAliases(): string[] {
+    return [...this.aliases]
+  }
+
+  public getSupportedUsages(): string[] {
+    if (this.supported_usages.length > 0) {
+      return [...this.supported_usages]
+    }
+
+    return [`${COMMAND_PREFIX}${this.name}`]
+  }
+
+  public getPrimaryUsage(): string {
+    return this.getSupportedUsages()[0] || `${COMMAND_PREFIX}${this.name}`
+  }
+
+  public getHelpUsage(): string {
+    return this.help_usage || this.getPrimaryUsage()
+  }
+
+  public matchesName(commandName: string): boolean {
+    const normalizedCommandName = commandName.trim().toLowerCase()
+
+    return [this.name, ...this.aliases]
+      .map((name) => name.toLowerCase())
+      .includes(normalizedCommandName)
+  }
+
+  public getAutocompleteItems(
+    context: BuiltInCommandAutocompleteContext
+  ): BuiltInCommandAutocompleteItem[] {
+    void context
+
+    return []
+  }
+
+  public abstract execute(
+    context: BuiltInCommandExecutionContext
+  ): Promise<BuiltInCommandExecutionResult>
 }

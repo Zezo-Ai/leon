@@ -5,6 +5,7 @@ window.leonInitStatusEvent = new EventTarget()
 
 import './init'
 import Client from './client'
+import { BuiltInCommands } from './built-in-commands'
 // import Recorder from './recorder'
 // import listener from './listener'
 import { onkeydownstartrecording, onkeydowninput } from './onkeydown'
@@ -29,6 +30,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const v = document.querySelector('#version small')
     const infoButton = document.querySelector('#info')
     const client = new Client(config.app, serverUrl, input)
+    const builtInCommands = new BuiltInCommands({
+      serverUrl,
+      input
+    })
     // let rec = {}
     // let chunks = []
 
@@ -56,6 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     client.updateMood(window.leonConfigInfo.mood)
     client.init()
+    builtInCommands.init()
 
     infoButton.addEventListener('click', () => {
       alert(JSON.stringify(infoToDisplay, null, 2))

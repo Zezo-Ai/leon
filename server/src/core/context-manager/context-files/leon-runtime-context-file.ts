@@ -1,6 +1,5 @@
 import {
   AGENT_LLM_TARGET,
-  LEON_ROUTING_MODE,
   LEON_VERSION,
   WORKFLOW_LLM_TARGET,
   NODEJS_BRIDGE_VERSION,
@@ -11,6 +10,7 @@ import { DateHelper } from '@/helpers/date-helper'
 import { RuntimeHelper } from '@/helpers/runtime-helper'
 import { ContextFile } from '@/core/context-manager/context-file'
 import { ContextProbeHelper } from '@/core/context-manager/context-probe-helper'
+import { ROUTING_STATE } from '@/core/routing-state'
 import {
   getActiveLLMTarget,
   getRoutingModeLLMDisplay
@@ -48,27 +48,28 @@ export class LeonRuntimeContextFile extends ContextFile {
     const workflowLlmName = this.resolvers.getWorkflowLLMName()
     const agentLlmName = this.resolvers.getAgentLLMName()
     const localLlmName = this.resolvers.getLocalLLMName()
+    const routingMode = ROUTING_STATE.getRoutingMode()
     const llmDisplay = getRoutingModeLLMDisplay(
-      LEON_ROUTING_MODE,
+      routingMode,
       WORKFLOW_LLM_TARGET,
       AGENT_LLM_TARGET
     )
     const activeLLMTarget = getActiveLLMTarget(
-      LEON_ROUTING_MODE,
+      routingMode,
       WORKFLOW_LLM_TARGET,
       AGENT_LLM_TARGET
     )
 
     return [
-      `> Runtime versions, routing/providers, LLMs and bridge/toolchain availability. I am running Leon ${LEON_VERSION || 'unknown'} on Node ${process.version}; routing mode ${LEON_ROUTING_MODE}; ${llmDisplay.heading.toLowerCase()} ${llmDisplay.value}; local LLM ${localLlmName}; managed node ${this.probeHelper.formatCommandProbe(nodeProbe)}, managed pnpm ${this.probeHelper.formatCommandProbe(pnpmProbe)}, git ${this.probeHelper.formatCommandProbe(gitProbe)}.`,
+      `> Runtime versions, routing/providers, LLMs and bridge/toolchain availability. I am running Leon ${LEON_VERSION || 'unknown'} on Node ${process.version}; routing mode ${routingMode}; ${llmDisplay.heading.toLowerCase()} ${llmDisplay.value}; local LLM ${localLlmName}; managed node ${this.probeHelper.formatCommandProbe(nodeProbe)}, managed pnpm ${this.probeHelper.formatCommandProbe(pnpmProbe)}, git ${this.probeHelper.formatCommandProbe(gitProbe)}.`,
       '# LEON_RUNTIME',
       `- Generated at: ${DateHelper.getDateTime()}`,
       `- Leon version: ${LEON_VERSION || 'unknown'}`,
       `- Node.js version: ${process.version}`,
-      `- Routing mode: ${LEON_ROUTING_MODE}`,
+      `- Routing mode: ${routingMode}`,
       `- ${llmDisplay.heading}: ${llmDisplay.value}`,
       `- Active LLM provider: ${activeLLMTarget.provider}`,
-      ...(LEON_ROUTING_MODE === 'smart'
+      ...(routingMode === 'smart'
         ? [
             `- Workflow LLM provider: ${WORKFLOW_LLM_TARGET.provider}`,
             `- Agent LLM provider: ${AGENT_LLM_TARGET.provider}`,

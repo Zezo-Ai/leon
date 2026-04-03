@@ -15,6 +15,7 @@ export interface ListItemProps {
   align?: 'left' | 'center'
   name?: string
   value?: string | number | undefined
+  selected?: boolean
   onClick?: (data: ListItemOnClickData) => void
 }
 
@@ -23,6 +24,7 @@ export function ListItem({
   align,
   name,
   value,
+  selected,
   onClick
 }: ListItemProps) {
   let isClickable = false
@@ -38,6 +40,7 @@ export function ListItem({
       value={value}
       className={classNames('aurora-list-item', {
         'aurora-list-item--clickable': isClickable,
+        'aurora-list-item--selected': selected,
         [`aurora-list-item--${align}`]: align
       })}
       onClick={(event) => {

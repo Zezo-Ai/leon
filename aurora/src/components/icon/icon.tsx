@@ -42,7 +42,7 @@ export function Icon({
 }: IconProps) {
   let iconClassName = `ri-${iconName}`
 
-  if (type) {
+  if (type && type !== 'notype') {
     iconClassName = `${iconClassName}-${type}`
   }
 

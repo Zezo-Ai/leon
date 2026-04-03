@@ -10,7 +10,6 @@ import {
   STT_PROVIDER,
   TTS_PROVIDER,
   IS_TELEMETRY_ENABLED,
-  LEON_ROUTING_MODE,
   SHOULD_START_PYTHON_TCP_SERVER,
   WORKFLOW_LLM_TARGET
 } from '@/constants'
@@ -18,6 +17,7 @@ import { LLM_PROVIDER, PERSONA } from '@/core'
 import { LogHelper } from '@/helpers/log-helper'
 import { DateHelper } from '@/helpers/date-helper'
 import { SystemHelper } from '@/helpers/system-helper'
+import { ROUTING_STATE } from '@/core/routing-state'
 import {
   getActiveLLMTarget,
   getRoutingModeLLMDisplay
@@ -48,13 +48,14 @@ export const getInfo: FastifyPluginAsync<APIOptions> = async (
         SystemHelper.getFreeVRAM(),
         SystemHelper.getUsedVRAM()
       ])
+      const routingMode = ROUTING_STATE.getRoutingMode()
       const activeLLMTarget = getActiveLLMTarget(
-        LEON_ROUTING_MODE,
+        routingMode,
         WORKFLOW_LLM_TARGET,
         AGENT_LLM_TARGET
       )
       const llmDisplay = getRoutingModeLLMDisplay(
-        LEON_ROUTING_MODE,
+        routingMode,
         WORKFLOW_LLM_TARGET,
         AGENT_LLM_TARGET
       )
@@ -96,7 +97,7 @@ export const getInfo: FastifyPluginAsync<APIOptions> = async (
           enabled: HAS_TTS,
           provider: TTS_PROVIDER
         },
-        routingMode: LEON_ROUTING_MODE,
+        routingMode,
         tcpServer: {
           enabled: SHOULD_START_PYTHON_TCP_SERVER
         },

@@ -25,6 +25,7 @@ import { inferencePlugin } from '@/core/http-server/api/inference'
 import { runActionPlugin } from '@/core/http-server/api/run-action'
 import { fetchWidgetPlugin } from '@/core/http-server/api/fetch-widget'
 import { conversationHistoryPlugin } from '@/core/http-server/api/conversation-history'
+import { commandPlugin } from '@/core/http-server/api/command'
 import { systemWidgetsPlugin } from '@/core/http-server/api/system-widgets'
 import { keyMidd } from '@/core/http-server/plugins/key'
 import { utterancePlugin } from '@/core/http-server/api/utterance'
@@ -176,6 +177,7 @@ export default class HTTPServer {
     })
     this.fastify.register(systemWidgetsPlugin, { apiVersion: API_VERSION })
     this.fastify.register(infoPlugin, { apiVersion: API_VERSION })
+    this.fastify.register(commandPlugin, { apiVersion: API_VERSION })
     this.fastify.register(inferencePlugin, { apiVersion: API_VERSION })
     this.fastify.register(openPathPlugin, { apiVersion: API_VERSION })
 

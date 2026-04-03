@@ -9,7 +9,6 @@ export default class Client {
   constructor(client, serverUrl, input) {
     this.client = client
     this._input = input
-    this._suggestionContainer = document.querySelector('#suggestions-container')
     this.voiceSpeechElement = document.querySelector('#voice-speech')
     this.serverUrl = serverUrl
     this.socket = io(this.serverUrl)
@@ -512,12 +511,6 @@ export default class Client {
       this.chatbot.sendTo('leon', this._input.value)
       this.chatbot.scrollDown({ force: true })
 
-      this._suggestions.forEach((suggestion) => {
-        // Remove all event listeners of the suggestion
-        suggestion.replaceWith(suggestion.cloneNode(true))
-        this._suggestionContainer.replaceChildren()
-      })
-
       this.save()
 
       return true
@@ -551,22 +544,6 @@ export default class Client {
       this._input.value = this._input.value.slice(0, -1)
     }, 0)
   }
-
-  /*addSuggestion(text) {
-    const newSuggestion = document.createElement('button')
-    newSuggestion.classList.add('suggestion')
-    newSuggestion.textContent = text
-
-    this._suggestionContainer.appendChild(newSuggestion)
-
-    newSuggestion.addEventListener('click', (e) => {
-      e.preventDefault()
-      this.input = e.target.textContent
-      this.send('utterance')
-    })
-
-    this._suggestions.push(newSuggestion)
-  }*/
 
   enableVoiceMode() {
     if (!this._isVoiceModeEnabled) {
