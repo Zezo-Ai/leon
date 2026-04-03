@@ -1,7 +1,5 @@
 import classNames from 'clsx'
 
-import { generateKeyId } from '../../lib/utils'
-
 import './scroll-container.sass'
 
 export interface ScrollContainerProps {
@@ -20,7 +18,6 @@ export function ScrollContainer({
 }: ScrollContainerProps) {
   return (
     <div
-      key={`aurora-scroll-container_${generateKeyId()}`}
       className={classNames(
         'aurora-scroll-container',
         `aurora-scroll-container--${orientation}`
