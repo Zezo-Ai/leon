@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 
 import { PNPM_RUNTIME_BIN_PATH } from '@/constants'
+import { RuntimeHelper } from '@/helpers/runtime-helper'
 
 import { setupConsola } from './setup-ui'
 
@@ -30,7 +31,7 @@ async function runLeonStartCommand() {
     const child = spawn(startCommand.command, startCommand.args, {
       cwd: process.cwd(),
       env: {
-        ...process.env,
+        ...RuntimeHelper.getManagedNodeEnvironment(),
         LEON_OPEN_BROWSER: 'true'
       },
       stdio: 'inherit',
