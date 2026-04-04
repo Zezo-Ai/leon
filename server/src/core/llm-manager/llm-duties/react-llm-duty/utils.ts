@@ -10,6 +10,23 @@ import type {
 type ExecutionHistoryFormatMode = 'compact' | 'complete'
 
 const COMPACT_EXECUTION_HISTORY_MAX_DETAILED_STEPS = 6
+const STRUCTURED_SUMMARY_PRIORITIES = [
+  'content',
+  'snippet',
+  'text',
+  'summary',
+  'description',
+  'title',
+  'answer',
+  'hits',
+  'files',
+  'results',
+  'items',
+  'query',
+  'filename',
+  'location',
+  'sourcePath'
+]
 
 export const formatFilePath = (filePath: string): string => {
   return `[FILE_PATH]${filePath}[/FILE_PATH]`
@@ -80,18 +97,7 @@ function summarizeScalar(
 }
 
 function pickRepresentativeText(record: Record<string, unknown>): string | null {
-  const preferredKeys = [
-    'content',
-    'snippet',
-    'text',
-    'description',
-    'title',
-    'filename',
-    'location',
-    'sourcePath'
-  ]
-
-  for (const key of preferredKeys) {
+  for (const key of STRUCTURED_SUMMARY_PRIORITIES) {
     const value = summarizeScalar(record[key])
     if (value) {
       return value
@@ -106,6 +112,12 @@ function pickRepresentativeText(record: Record<string, unknown>): string | null 
   }
 
   return null
+}
+
+function getStructuredSummaryPriority(key: string): number {
+  const priority = STRUCTURED_SUMMARY_PRIORITIES.indexOf(key)
+
+  return priority === -1 ? Number.MAX_SAFE_INTEGER : priority
 }
 
 function summarizeArrayField(
@@ -181,7 +193,16 @@ function summarizeStructuredPayload(
 
   const summaries: string[] = []
 
-  for (const [key, value] of Object.entries(payload)) {
+  const orderedEntries = Object.entries(payload).sort(
+    ([leftKey], [rightKey]) => {
+      return (
+        getStructuredSummaryPriority(leftKey) -
+        getStructuredSummaryPriority(rightKey)
+      )
+    }
+  )
+
+  for (const [key, value] of orderedEntries) {
     if (summaries.length >= 6) {
       break
     }
