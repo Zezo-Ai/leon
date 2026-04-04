@@ -100,6 +100,34 @@ export class RuntimeHelper {
   }
 
   /**
+   * Ensure pnpm lifecycle scripts use Leon's managed Node.js runtime instead of
+   * whichever `node` happens to be first on the user's PATH.
+   */
+  public static getManagedNodeEnvironment(
+    env: NodeJS.ProcessEnv = process.env
+  ): NodeJS.ProcessEnv {
+    const nodeBinPath = this.getNodeBinPath()
+    const nodeDirPath = path.dirname(nodeBinPath)
+    const pathKey = Object.keys(env).find((key) => key.toUpperCase() === 'PATH') ||
+      'PATH'
+    const currentPathValue = env[pathKey] || ''
+    const currentPathEntries = currentPathValue
+      .split(path.delimiter)
+      .filter(Boolean)
+    const nextPathValue = currentPathEntries.includes(nodeDirPath)
+      ? currentPathValue
+      : [nodeDirPath, ...currentPathEntries].join(path.delimiter)
+
+    return {
+      ...env,
+      [pathKey]: nextPathValue,
+      NODE: nodeBinPath,
+      npm_config_node_execpath: nodeBinPath,
+      npm_node_execpath: nodeBinPath
+    }
+  }
+
+  /**
    * Resolve the Python binary Leon should use for bridges and skills.
    */
   public static getPythonBinPath(): string {

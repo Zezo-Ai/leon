@@ -85,7 +85,10 @@ const syncNodejsSkillDependencies = async (skillFriendlyName, skillPath) => {
       'install',
       '--ignore-workspace',
       '--lockfile=false'
-    ], { cwd: runtimePath })
+    ], {
+      cwd: runtimePath,
+      env: RuntimeHelper.getManagedNodeEnvironment()
+    })
 
   await markSkillDependenciesAsSynced(skillPath)
 }

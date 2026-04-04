@@ -7,6 +7,7 @@ import {
   NODE_VERSION,
   PNPM_RUNTIME_BIN_PATH
 } from '@/constants'
+import { RuntimeHelper } from '@/helpers/runtime-helper'
 
 import { createSetupStatus } from './setup-status'
 
@@ -81,7 +82,8 @@ export default async function setupNativeNodeModules() {
       'rebuild',
       ...installedPackages
     ], {
-      cwd: process.cwd()
+      cwd: process.cwd(),
+      env: RuntimeHelper.getManagedNodeEnvironment()
     })
 
   await fs.promises.writeFile(STAMP_FILE_PATH, NODE_VERSION)
