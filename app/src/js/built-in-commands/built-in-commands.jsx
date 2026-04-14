@@ -28,9 +28,10 @@ function isEditableElement(element) {
 }
 
 export default class BuiltInCommands {
-  constructor({ serverUrl, input }) {
+  constructor({ serverUrl, input, onSubmitToChat }) {
     this.serverUrl = serverUrl
     this.input = input
+    this.onSubmitToChat = onSubmitToChat
     this.sessionId = null
     this.origin = 'shortcut'
     this.commandValue = ''
@@ -373,6 +374,18 @@ export default class BuiltInCommands {
         input: commandInput,
         session_id: this.sessionId
       })
+
+      if (data.client_action?.type === 'submit_to_chat') {
+        const wasSubmitted = this.onSubmitToChat?.(data.client_action)
+
+        if (!wasSubmitted) {
+          throw new Error('Failed to submit the built-in command to chat.')
+        }
+
+        this.isLoading = false
+        this.close()
+        return
+      }
 
       this.sessionId = data.session.id
       this.isLoading = false
