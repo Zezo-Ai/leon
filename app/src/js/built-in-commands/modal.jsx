@@ -241,6 +241,9 @@ export function BuiltInCommandsModal({
               <kbd>↑</kbd> <kbd>↓</kbd> navigate
             </Text>
             <Text fontSize="xs" secondary>
+              <kbd>tab</kbd> complete
+            </Text>
+            <Text fontSize="xs" secondary>
               <kbd>enter</kbd> submit
             </Text>
             <Text fontSize="xs" secondary>

@@ -157,6 +157,22 @@ export default class BuiltInCommands {
         return
       }
 
+      if (event.key === 'Tab') {
+        const suggestion =
+          this.selectedSuggestionIndex >= 0
+            ? this.getVisibleSuggestions()[this.selectedSuggestionIndex]
+            : null
+
+        if (suggestion) {
+          event.preventDefault()
+          this.applySuggestion(suggestion, {
+            appendTrailingSpace: true
+          })
+        }
+
+        return
+      }
+
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault()
 
@@ -468,8 +484,10 @@ export default class BuiltInCommands {
     this.applySuggestion(suggestion)
   }
 
-  applySuggestion(suggestion) {
-    this.commandValue = this.normalizeCommandValue(suggestion.value)
+  applySuggestion(suggestion, options = {}) {
+    this.commandValue = `${this.normalizeCommandValue(suggestion.value)}${
+      options.appendTrailingSpace ? ' ' : ''
+    }`
     this.loadingMessage = null
     this.queueAutocomplete()
     this.shouldFocusInput = true
