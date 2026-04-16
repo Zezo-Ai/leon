@@ -556,13 +556,16 @@ export class BuiltInCommandManager {
   }
 
   private parseInput(rawInput: string): ParsedBuiltInCommandInput {
-    const normalizedInput = String(rawInput || '').trimStart()
+    const rawInputString = String(rawInput || '')
+    const normalizedInput = rawInputString
+      .trimStart()
+      .replace(WHITESPACE_PATTERN, ' ')
     const hasCommandPrefix = normalizedInput.startsWith(COMMAND_PREFIX)
     const endsWithSpace = /\s$/.test(rawInput)
 
     if (!hasCommandPrefix) {
       return {
-        raw_input: rawInput,
+        raw_input: rawInputString,
         normalized_input: normalizedInput,
         command_name: '',
         args: [],
@@ -575,7 +578,7 @@ export class BuiltInCommandManager {
 
     if (!inputBody) {
       return {
-        raw_input: rawInput,
+        raw_input: rawInputString,
         normalized_input: normalizedInput,
         command_name: '',
         args: [],
@@ -589,7 +592,7 @@ export class BuiltInCommandManager {
       .filter(Boolean)
 
     return {
-      raw_input: rawInput,
+      raw_input: rawInputString,
       normalized_input: normalizedInput,
       command_name: (commandName || '').toLowerCase(),
       args,
