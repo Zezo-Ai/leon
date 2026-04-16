@@ -32,6 +32,12 @@ interface ParsedSkillCommandInput {
   skillEntry: SkillAutocompleteEntry | null
 }
 
+interface SkillSuggestionUsageInput {
+  commandPrefix: string
+  usage?: string
+  value?: string
+}
+
 function normalizeSkillSearchValue(value: string): string {
   return value
     .trim()
@@ -94,24 +100,31 @@ export class SkillCommand extends BuiltInCommand {
     context: BuiltInCommandAutocompleteContext
   ): BuiltInCommandAutocompleteItem[] {
     const parsedInput = this.parseSkillCommandInput(context.raw_input)
+    const skillSelectionStep = this.isSkillSelectionStep(context, parsedInput)
 
-    if (!this.isSkillSelectionStep(context, parsedInput)) {
+    if (!skillSelectionStep && !parsedInput.skillEntry) {
       return []
+    }
+
+    if (parsedInput.skillEntry && !skillSelectionStep) {
+      return [
+        this.toSkillSuggestion(parsedInput.skillEntry, {
+          commandPrefix: parsedInput.commandPrefix,
+          usage: context.raw_input.trim(),
+          value: context.raw_input.trim()
+        })
+      ]
     }
 
     return this.getSortedSkillAutocompleteEntries()
       .filter((entry) =>
         this.matchesRequestedSkill(entry, parsedInput.rawSkillCandidate)
       )
-      .map((entry) => ({
-        type: 'parameter',
-        icon_name: this.getIconName(),
-        name: entry.commandName,
-        description: entry.description,
-        usage: `${parsedInput.commandPrefix} ${entry.commandName}`,
-        supported_usages: this.getSupportedUsages(),
-        value: `${parsedInput.commandPrefix} ${entry.commandName}`
-      }))
+      .map((entry) =>
+        this.toSkillSuggestion(entry, {
+          commandPrefix: parsedInput.commandPrefix
+        })
+      )
   }
 
   public override async execute(
@@ -324,6 +337,22 @@ export class SkillCommand extends BuiltInCommand {
       collapsedCommandName.includes(collapsedRequestedSkillName) ||
       collapsedSkillName.includes(collapsedRequestedSkillName)
     )
+  }
+
+  private toSkillSuggestion(
+    entry: SkillAutocompleteEntry,
+    input: SkillSuggestionUsageInput
+  ): BuiltInCommandAutocompleteItem {
+    return {
+      type: 'parameter',
+      icon_name: this.getIconName(),
+      name: entry.commandName,
+      description: entry.description,
+      usage:
+        input.usage || `${input.commandPrefix} ${entry.commandName} <query>`,
+      supported_usages: this.getSupportedUsages(),
+      value: input.value || `${input.commandPrefix} ${entry.commandName}`
+    }
   }
 
   private matchSkillPrefix(
