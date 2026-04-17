@@ -52,7 +52,7 @@ function parseRemixIcon(rawIconName) {
 
   return {
     iconName: iconWithoutPrefix,
-    type: 'line'
+    type: 'notype'
   }
 }
 
@@ -192,7 +192,7 @@ export function BuiltInCommandsModal({
                 }
                 maxLength={2_048}
                 iconName={pendingInputIcon?.iconName}
-                iconType={pendingInputIcon ? pendingInput.icon_type : undefined}
+                iconType={pendingInputIcon ? pendingInputIcon.type : undefined}
                 iconSVG={pendingInput ? undefined : SLASH_COMMAND_ICON_SVG}
                 iconSize="lg"
                 value={commandValue}

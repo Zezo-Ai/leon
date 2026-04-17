@@ -22,6 +22,7 @@ const SKILL_COMMAND_PREFIXES = new Set([
 interface SkillAutocompleteEntry {
   commandName: string
   description: string
+  iconName: string
   skillName: string
 }
 
@@ -250,6 +251,7 @@ export class SkillCommand extends BuiltInCommand {
           return {
             commandName: SkillDomainHelper.getSkillCommandName(skillName),
             description: skillConfig.description,
+            iconName: skillConfig.icon_name,
             skillName
           }
         } catch {
@@ -345,7 +347,7 @@ export class SkillCommand extends BuiltInCommand {
   ): BuiltInCommandAutocompleteItem {
     return {
       type: 'parameter',
-      icon_name: this.getIconName(),
+      icon_name: entry.iconName,
       name: entry.commandName,
       description: entry.description,
       usage:
