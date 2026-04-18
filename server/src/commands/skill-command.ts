@@ -57,7 +57,7 @@ function escapeForRegExp(value: string): string {
 
 export class SkillCommand extends BuiltInCommand {
   protected override description =
-    'Invoke a specific skill directly with a natural language query.'
+    'Invoke a specific skill directly, optionally with a natural language query.'
   protected override icon_name = 'ri-magic-line'
   protected override supported_usages = [
     SKILL_COMMAND_FORMAT,
@@ -75,9 +75,8 @@ export class SkillCommand extends BuiltInCommand {
   ): string | null {
     const parsedInput = this.parseSkillCommandInput(context.raw_input)
     const requestedSkillName = parsedInput.skillEntry?.commandName || ''
-    const { query } = parsedInput
 
-    if (!requestedSkillName || !query) {
+    if (!requestedSkillName) {
       return null
     }
 
@@ -177,30 +176,10 @@ export class SkillCommand extends BuiltInCommand {
       }
     }
 
-    if (!query) {
-      return {
-        status: 'error',
-        result: createListResult({
-          title: 'Missing Query',
-          tone: 'error',
-          items: [
-            {
-              label: `Please provide a query for "${SkillDomainHelper.getSkillCommandName(normalizedSkillName)}".`,
-              tone: 'error'
-            },
-            {
-              label: 'Usage',
-              value: SKILL_COMMAND_FORMAT,
-              tone: 'error'
-            }
-          ]
-        })
-      }
-    }
-
     const resolvedSkillCommandName = parsedInput.skillEntry.commandName
-    const commandUtterance =
-      `${parsedInput.commandPrefix} ${resolvedSkillCommandName} ${query}`.trim()
+    const commandUtterance = query
+      ? `${parsedInput.commandPrefix} ${resolvedSkillCommandName} ${query}`
+      : `${parsedInput.commandPrefix} ${resolvedSkillCommandName}`
 
     return {
       status: 'completed',
