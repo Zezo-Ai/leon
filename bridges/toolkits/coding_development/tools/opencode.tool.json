@@ -4,7 +4,7 @@
   "toolkit_id": "coding_development",
   "name": "OpenCode",
   "description": "An AI-powered coding agent tool that generates skills using multiple LLM providers (Cerebras, MiniMax, Anthropic, OpenAI, Gemini).",
-  "icon_name": "code-box",
+  "icon_name": "code-box-line",
   "author": {
     "name": "Louis Grenard",
     "email": "louis@getleon.ai",
