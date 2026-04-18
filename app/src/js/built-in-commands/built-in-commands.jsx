@@ -474,6 +474,13 @@ export default class BuiltInCommands {
   }
 
   handleSuggestionSelect(suggestion) {
+    const normalizedSuggestionValue = this.normalizeCommandValue(suggestion.value)
+
+    if (normalizedSuggestionValue.trim() === this.commandValue.trim()) {
+      void this.submit()
+      return
+    }
+
     this.applySuggestion(suggestion, {
       appendTrailingSpace: true
     })
