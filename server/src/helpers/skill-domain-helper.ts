@@ -44,6 +44,10 @@ interface SkillActionObject {
   action: string
 }
 
+interface SkillLookupOptions {
+  includeDisabled?: boolean
+}
+
 const SKILL_NAME_SUFFIX = '_skill'
 
 export class SkillDomainHelper {
@@ -66,9 +70,9 @@ export class SkillDomainHelper {
   }
 
   /**
-   * List all skill folders
+   * List all skill folders, including disabled skills.
    */
-  public static listSkillFoldersSync(): string[] {
+  public static listAllSkillFoldersSync(): string[] {
     const skillFolders = new Set<string>()
 
     for (const skillsPath of [SKILLS_PATH, PROFILE_SKILLS_PATH]) {
@@ -77,16 +81,22 @@ export class SkillDomainHelper {
       }
 
       for (const folder of fs.readdirSync(skillsPath)) {
-        if (
-          folder.endsWith(SKILL_NAME_SUFFIX) &&
-          !ProfileHelper.isSkillDisabled(folder)
-        ) {
+        if (folder.endsWith(SKILL_NAME_SUFFIX)) {
           skillFolders.add(folder)
         }
       }
     }
 
     return [...skillFolders].sort()
+  }
+
+  /**
+   * List enabled skill folders.
+   */
+  public static listSkillFoldersSync(): string[] {
+    return this.listAllSkillFoldersSync().filter(
+      (folder) => !ProfileHelper.isSkillDisabled(folder)
+    )
   }
 
   public static async listSkillFolders(): Promise<string[]> {
@@ -100,9 +110,13 @@ export class SkillDomainHelper {
    * @param skillName Skill name to get configuration for
    */
   public static async getNewSkillConfig(
-    skillName: SkillSchema['name']
+    skillName: SkillSchema['name'],
+    options?: SkillLookupOptions
   ): Promise<SkillSchema | null> {
-    const skillConfigPath = SkillDomainHelper.getNewSkillConfigPath(skillName)
+    const skillConfigPath = SkillDomainHelper.getNewSkillConfigPath(
+      skillName,
+      options
+    )
 
     if (!skillConfigPath) {
       return null
@@ -114,9 +128,13 @@ export class SkillDomainHelper {
   }
 
   public static getNewSkillConfigSync(
-    skillName: SkillSchema['name']
+    skillName: SkillSchema['name'],
+    options?: SkillLookupOptions
   ): SkillSchema | null {
-    const skillConfigPath = SkillDomainHelper.getNewSkillConfigPath(skillName)
+    const skillConfigPath = SkillDomainHelper.getNewSkillConfigPath(
+      skillName,
+      options
+    )
 
     if (!skillConfigPath) {
       return null
@@ -132,9 +150,10 @@ export class SkillDomainHelper {
    * @param skillName Skill name to get configuration for
    */
   public static getNewSkillConfigPath(
-    skillName: SkillSchema['name']
+    skillName: SkillSchema['name'],
+    options?: SkillLookupOptions
   ): string | null {
-    const skillPath = this.resolveSkillPath(skillName)
+    const skillPath = this.resolveSkillPath(skillName, options)
 
     if (!skillPath) {
       return null
@@ -154,8 +173,11 @@ export class SkillDomainHelper {
    * Profile-installed skills override built-in skills with the same ID.
    * @param skillName Skill name to resolve
    */
-  public static resolveSkillPath(skillName: SkillSchema['name']): string | null {
-    if (ProfileHelper.isSkillDisabled(skillName)) {
+  public static resolveSkillPath(
+    skillName: SkillSchema['name'],
+    options?: SkillLookupOptions
+  ): string | null {
+    if (!options?.includeDisabled && ProfileHelper.isSkillDisabled(skillName)) {
       return null
     }
 
