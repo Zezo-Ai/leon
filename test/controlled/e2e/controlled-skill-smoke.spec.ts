@@ -59,11 +59,12 @@ beforeAll(async () => {
   ))
 })
 
-describe('workflow skill smoke', () => {
-  it('runs a real workflow action skill and returns its answer', async () => {
+describe('controlled skill smoke', () => {
+  it('runs a real controlled action skill and returns its answer', async () => {
     const skillConfigPath = path.join(
       process.cwd(),
       'skills',
+      'native',
       'date_time_skill',
       'skill.json'
     )
@@ -78,7 +79,7 @@ describe('workflow skill smoke', () => {
           name: 'Date/Time',
           bridge: 'nodejs',
           version: '1.0.0',
-          flow: []
+          workflow: []
         },
         localeSkillConfig: {
           variables: {},
@@ -105,7 +106,7 @@ describe('workflow skill smoke', () => {
           data: {}
         }
       },
-      `workflow-skill-smoke-${Date.now()}`
+      `controlled-skill-smoke-${Date.now()}`
     )
 
     const answer = result.lastOutputFromSkill?.answer

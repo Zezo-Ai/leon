@@ -8,6 +8,7 @@ import {
   DUTY_NAME
 } from './constants'
 import type {
+  AgentSkillContext,
   Catalog,
   LLMCaller,
   PlanResult,
@@ -26,7 +27,9 @@ import {
   extractPlanningTextHandoffDraft,
   createPlanFromUnexpectedToolCall,
   buildContextManifestSection,
-  buildSelfModelSection
+  buildSelfModelSection,
+  buildActiveAgentSkillSection,
+  buildAgentSkillDiscoverySection
 } from './phase-helpers'
 import {
   PLAN_RESPONSE_SCHEMA,
@@ -85,6 +88,93 @@ function buildPlanningPromptSections(params: {
   return sections
 }
 
+async function selectAgentSkillContext(
+  caller: LLMCaller,
+  history: MessageLog[],
+  systemPrompt: string
+): Promise<AgentSkillContext | null> {
+  if (caller.agentSkillContext) {
+    return caller.agentSkillContext
+  }
+
+  if (
+    !caller.agentSkillCatalog ||
+    caller.agentSkillCatalog.includes('No Agent Skills')
+  ) {
+    return null
+  }
+
+  const prompt = `<available_agent_skills>\n${caller.agentSkillCatalog}\n</available_agent_skills>\n\n<user_request>\n${caller.input}\n</user_request>\n\nSelect the one Agent Skill that clearly matches the user request. Return "None" when no Agent Skill is a clear fit.`
+
+  if (caller.supportsNativeTools) {
+    const toolResult = await caller.callLLMWithTools(
+      prompt,
+      systemPrompt,
+      [
+        {
+          type: 'function',
+          function: {
+            name: 'select_agent_skill',
+            description:
+              'Select the exact Agent Skill ID that should handle the request, or "None".',
+            parameters: {
+              type: 'object',
+              properties: {
+                skill_id: {
+                  type: 'string',
+                  description:
+                    'Exact Agent Skill ID from the catalog, or "None" if no Agent Skill clearly matches.'
+                },
+                reason: {
+                  type: 'string',
+                  description: 'Brief reason for the selection.'
+                }
+              },
+              required: ['skill_id'],
+              additionalProperties: false
+            }
+          }
+        }
+      ],
+      { type: 'function', function: { name: 'select_agent_skill' } },
+      history,
+      false,
+      [
+        {
+          name: 'AGENT_SKILL_SELECTION',
+          source:
+            'server/src/core/llm-manager/llm-duties/react-llm-duty/planning.ts',
+          content: prompt
+        }
+      ],
+      {
+        phase: 'planning',
+        disableThinking: true
+      }
+    )
+    const selectedSkillId = toolResult?.toolCall
+      ? String(
+          (parseToolCallArguments(toolResult.toolCall.arguments) || {})[
+            'skill_id'
+          ] || ''
+        ).trim()
+      : ''
+
+    if (selectedSkillId && selectedSkillId !== 'None') {
+      const selectedAgentSkillContext =
+        await caller.getAgentSkillContext(selectedSkillId)
+
+      if (selectedAgentSkillContext) {
+        caller.setAgentSkillContext(selectedAgentSkillContext)
+      }
+
+      return selectedAgentSkillContext
+    }
+  }
+
+  return null
+}
+
 function isOperatingSystemControlOnlyPlan(steps: { function: string }[]): boolean {
   if (steps.length === 0) {
     return false
@@ -134,7 +224,16 @@ export async function runPlanningPhase(
   const contextManifestSection = buildContextManifestSection(
     caller.getContextManifest()
   )
-  const prompt = `<context_manifest>\n${contextManifestSection}\n</context_manifest>\n\n<available_catalog>\n${catalog.text}${catalogNote}\n</available_catalog>\n\n<self_model>\n${selfModelSection}\n</self_model>\n\n<grounding_note>\nEnvironment context is available through structured_knowledge.context tools when needed.\n</grounding_note>\n\n<user_request>\n${caller.input}\n</user_request>`
+  const selectedAgentSkillContext = await selectAgentSkillContext(
+    caller,
+    history,
+    planSystemPrompt
+  )
+  const activeAgentSkillSection =
+    buildActiveAgentSkillSection(selectedAgentSkillContext)
+  const agentSkillSection =
+    activeAgentSkillSection || buildAgentSkillDiscoverySection(caller)
+  const prompt = `<context_manifest>\n${contextManifestSection}\n</context_manifest>\n\n${agentSkillSection}\n\n<available_catalog>\n${catalog.text}${catalogNote}\n</available_catalog>\n\n<self_model>\n${selfModelSection}\n</self_model>\n\n<grounding_note>\nEnvironment context is available through structured_knowledge.context tools when needed.\n</grounding_note>\n\n<user_request>\n${caller.input}\n</user_request>`
 
   const planSchema = PLAN_RESPONSE_SCHEMA
 

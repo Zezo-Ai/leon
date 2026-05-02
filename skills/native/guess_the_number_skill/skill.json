@@ -10,7 +10,7 @@
     "email": "louis@getleon.ai",
     "url": "https://github.com/louistiti"
   },
-  "flow": ["set_up", "guess", "replay"],
+  "workflow": ["set_up", "guess", "replay"],
   "actions": {
     "set_up": {
       "type": "logic",

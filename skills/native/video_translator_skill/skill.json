@@ -10,7 +10,7 @@
     "email": "louis@getleon.ai",
     "url": "https://twitter.com/grenlouis"
   },
-  "flow": [
+  "workflow": [
     "download_video",
     "extract_audio",
     "music_audio_toolkit_skill:split_instrumental_vocal",

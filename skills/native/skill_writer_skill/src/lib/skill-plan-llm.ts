@@ -20,13 +20,13 @@ export const SKILL_PLAN_SCHEMA = {
         type: 'string',
         enum: ['nodejs', 'python']
       },
-      flow: {
+      workflow: {
         type: 'array',
         items: {
           type: 'string'
         },
         description:
-          'Order of actions to execute. Use when skill has multiple sequential steps. Only the first action in the flow will be added to the action calling to avoid overloading the context with too many actions.'
+          'Order of actions to execute. Use when skill has multiple sequential steps. Only the first action in the workflow will be added to the action calling to avoid overloading the context with too many actions.'
       },
       action_notes: {
         type: 'array',
@@ -162,12 +162,12 @@ export const SKILL_PLAN_SYSTEM_PROMPT = `You are Leon's Skill Writer. Generate a
 - Answer keys map to \`locale_answers\` in the output
 - Parameters are retrieved using \`paramsHelper.getActionArgument('param_name')\` (TS) or \`params_helper.get_action_argument('param_name')\` (Python)
 
-### Flow (optional)
-Use \`flow\` array when a skill has **multiple sequential steps**:
-- Example: \`"flow": ["set_up", "play", "replay"]\`
-- Each action in the flow runs in order
-- Flow is NOT needed for simple one-action skills
-- **Important**: Only the first action in the flow will be added to the action calling to avoid overloading the context
+### Workflow (optional)
+Use \`workflow\` array when a skill has **multiple sequential steps**:
+- Example: \`"workflow": ["set_up", "play", "replay"]\`
+- Each action in the workflow runs in order
+- Workflow is NOT needed for simple one-action skills
+- **Important**: Only the first action in the workflow will be added to the action calling to avoid overloading the context
 
 ### Action Notes (optional)
 Use \`action_notes\` array to provide additional context to the LLM for better action matching:
@@ -197,7 +197,7 @@ core: {
 \`\`\`
 
 ### Storing Data Between Actions (context_data)
-To pass data to the next action in the flow:
+To pass data to the next action in the workflow:
 \`\`\`
 core: {
   context_data: {
@@ -320,7 +320,7 @@ def run(params: ActionParams, params_helper: ParamsHelper) -> None:
 \`\`\`
 
 ## Example: Guess the Number Skill
-This shows flow + loop + next_action + context_data:
+This shows workflow + loop + next_action + context_data:
 
 **skill.json:**
 \`\`\`json
@@ -332,7 +332,7 @@ This shows flow + loop + next_action + context_data:
   "author": {
     "name": "Leon"
   },
-  "flow": ["set_up", "guess", "replay"],
+  "workflow": ["set_up", "guess", "replay"],
   "actions": {
     "set_up": {
       "type": "logic",
@@ -491,7 +491,7 @@ When generating code, you can use these existing tools (import from '@tools/<too
 - locale_answers format: { "action_name": { "answer_key": ["Answer text with {{ variable }}"] } }
 - Use {{ variable }} syntax in answers to inject data
 - prefer Node.js bridge unless user specifies otherwise
-- Use flow when skill has multiple sequential steps
+- Use workflow when skill has multiple sequential steps
 - Use is_loop when action needs repeated user input
 - Use is_in_action_loop: false to exit loops
 - Use next_action to jump to another action

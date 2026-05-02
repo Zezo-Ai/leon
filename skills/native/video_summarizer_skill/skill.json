@@ -8,7 +8,7 @@
   "author": {
     "name": "Leon"
   },
-  "flow": [
+  "workflow": [
     "prepare_audio",
     "music_audio_toolkit_skill:transcribe_audio",
     "summarize_transcription"
@@ -39,6 +39,6 @@
     }
   },
   "action_notes": [
-    "This flow downloads or extracts audio, transcribes it via music_audio_toolkit_skill, then summarizes it."
+    "This workflow downloads or extracts audio, transcribes it via music_audio_toolkit_skill, then summarizes it."
   ]
 }

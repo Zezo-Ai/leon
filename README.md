@@ -55,7 +55,7 @@ Leon is no longer just a classic intent-classification assistant like it was for
 
 Today, Leon is being built as a more capable assistant that can understand a goal, choose how to handle it, use tools, remember useful information, and recover when something goes wrong.
 
-- Leon can run in different ways depending on the task: `smart` mode chooses for you, `workflow` mode follows a fixed path, and `agent` mode can plan step by step.
+- Leon can run in different ways depending on the task: `smart` mode chooses for you, `controlled` mode follows deterministic native skills and actions, and `agent` mode can plan step by step.
 - Leon can use real tools to get work done instead of only replying with plain text.
 - Leon can use context about your environment so answers stay grounded in what is actually happening on your machine and setup.
 - Leon keeps layered memory so it can remember durable preferences, day-to-day context, and recent discussion context.
@@ -116,7 +116,7 @@ By default, Leon runs locally and the app is available on `http://localhost:1337
 
 At a high level, Leon currently consists of:
 
-- `server/`: the main runtime, routing, memory, context management, HTTP API, and agent/workflow execution
+- `server/`: the main runtime, routing, memory, context management, HTTP API, and agent/controlled execution
 - `app/`: the web application
 - `aurora/`: UI components and preview environment
 - `skills/`: user-facing capabilities built on top of the core

@@ -291,6 +291,54 @@ describe('ReActLLMDuty agent loop', () => {
     ])
   })
 
+  it('keeps a selected Agent Skill active during execution', async () => {
+    const agentSkillContext = {
+      id: 'web-research',
+      name: 'web-research',
+      description: 'Fetch and crawl web pages.',
+      rootPath: '/tmp/web-research',
+      skillPath: '/tmp/web-research/SKILL.md',
+      instructions: '# Web Research'
+    }
+
+    phaseMocks.runPlanningPhase.mockImplementation(async (caller) => {
+      caller.setAgentSkillContext(agentSkillContext)
+
+      return {
+        type: 'plan',
+        steps: [
+          {
+            function: 'operating_system_control.bash.executeBashCommand',
+            label: 'Fetch target page'
+          }
+        ],
+        summary: 'Fetching the target page...'
+      }
+    })
+    phaseMocks.runExecutionStep.mockImplementation(async (caller) => {
+      expect(caller.agentSkillContext).toEqual(agentSkillContext)
+
+      return {
+        type: 'executed',
+        execution: {
+          function: 'operating_system_control.bash.executeBashCommand',
+          status: 'success',
+          observation: 'Fetched with skill script.',
+          stepLabel: 'Fetch target page'
+        }
+      }
+    })
+    phaseMocks.runFinalAnswerPhase.mockResolvedValue('Fetched with skill script.')
+
+    const duty = await createDuty(
+      'Use the web-research skill to inspect a page.'
+    )
+    const result = await duty.execute()
+
+    expect(phaseMocks.runExecutionStep).toHaveBeenCalledOnce()
+    expect(result?.output).toBe('Fetched with skill script.')
+  })
+
   it('short-circuits to final synthesis when a tool returns a handoff signal', async () => {
     // This covers the path where a tool result already contains the semantic
     // handoff Leon should forward into the final-answer phase.

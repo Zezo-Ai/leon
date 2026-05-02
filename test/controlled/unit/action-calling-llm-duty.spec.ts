@@ -71,7 +71,7 @@ describe('ActionCallingLLMDuty', () => {
           }
         }
       },
-      flow: []
+      workflow: []
     })
 
     coreMocks.llmProvider.prompt.mockResolvedValue({
@@ -118,7 +118,7 @@ describe('ActionCallingLLMDuty', () => {
     ])
   })
 
-  it('short-circuits when the skill flow starts with a parameterless action', async () => {
+  it('short-circuits when the skill workflow starts with a parameterless action', async () => {
     skillHelperMocks.getNewSkillConfig.mockResolvedValue({
       actions: {
         set_up: {
@@ -130,7 +130,7 @@ describe('ActionCallingLLMDuty', () => {
           description: 'Play.'
         }
       },
-      flow: ['set_up', 'play']
+      workflow: ['set_up', 'play']
     })
 
     const duty = new ActionCallingLLMDuty({

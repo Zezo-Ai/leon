@@ -12,7 +12,7 @@ const defaultProcessResult = {
     name: '',
     bridge: 'python',
     version: '',
-    flow: []
+    workflow: []
   },
   localeSkillConfig: {
     variables: {},
@@ -177,7 +177,7 @@ async function applyProcessResultUpdate(
         name: String(skillConfig['name'] || ''),
         bridge: String(skillConfig['bridge'] || 'nodejs'),
         version: String(skillConfig['version'] || '1.0.0'),
-        flow: Array.isArray(skillConfig['flow']) ? skillConfig['flow'] : []
+        workflow: Array.isArray(skillConfig['workflow']) ? skillConfig['workflow'] : []
       },
       localeSkillConfig: {
         variables:
@@ -241,7 +241,7 @@ vi.mock('@/constants', async (importOriginal) => {
 
   return {
     ...actual,
-    LEON_ROUTING_MODE: 'workflow'
+    LEON_ROUTING_MODE: 'controlled'
   }
 })
 
@@ -341,15 +341,15 @@ beforeEach(() => {
   testState.currentNlu = nlu
 })
 
-describe('Workflow NLU', () => {
-  it('executes flow actions sequentially', async () => {
+describe('Controlled NLU', () => {
+  it('executes workflow actions sequentially', async () => {
     const nlu = testState.currentNlu as InstanceType<typeof NLUClass>
 
     testState.skillConfigs['demo_flow_skill'] = {
-      name: 'Demo Flow',
+      name: 'Demo Workflow',
       bridge: 'nodejs',
       version: '1.0.0',
-      flow: ['step_one', 'step_two'],
+      workflow: ['step_one', 'step_two'],
       actions: {
         step_one: {
           type: 'logic',
@@ -377,10 +377,10 @@ describe('Workflow NLU', () => {
       actionName: 'step_one',
       skillConfigPath: '/tmp/demo_flow_skill/skill.json',
       skillConfig: {
-        name: 'Demo Flow',
+        name: 'Demo Workflow',
         bridge: 'nodejs',
         version: '1.0.0',
-        flow: ['step_one', 'step_two']
+        workflow: ['step_one', 'step_two']
       },
       localeSkillConfig: {
         variables: {},
@@ -391,13 +391,13 @@ describe('Workflow NLU', () => {
         description: 'First step.'
       },
       new: {
-        utterance: 'Run the demo flow',
+        utterance: 'Run the demo workflow',
         actionArguments: {},
         entities: [],
         sentiment: {}
       },
       context: {
-        utterances: ['Run the demo flow'],
+        utterances: ['Run the demo workflow'],
         actionArguments: [],
         entities: [],
         sentiments: [],
@@ -431,7 +431,7 @@ describe('Workflow NLU', () => {
       name: 'Timer',
       bridge: 'nodejs',
       version: '1.0.0',
-      flow: [],
+      workflow: [],
       actions: {
         set_timer: {
           type: 'logic',
@@ -463,7 +463,7 @@ describe('Workflow NLU', () => {
         name: 'Timer',
         bridge: 'nodejs',
         version: '1.0.0',
-        flow: []
+        workflow: []
       },
       localeSkillConfig: {
         variables: {},
@@ -526,7 +526,7 @@ describe('Workflow NLU', () => {
     })
   })
 
-  it('offers fallback, code generation, or cancel when workflow cannot find a skill', async () => {
+  it('offers fallback, code generation, or cancel when controlled mode cannot find a skill', async () => {
     const nlu = testState.currentNlu as InstanceType<typeof NLUClass>
 
     nlu.nluProcessResult = {

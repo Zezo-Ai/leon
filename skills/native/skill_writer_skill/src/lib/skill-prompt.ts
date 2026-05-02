@@ -3,13 +3,13 @@ export type SkillPromptMode = 'create' | 'modify'
 export const getContextFiles = (bridge: 'nodejs' | 'python'): string[] =>
   bridge === 'nodejs'
     ? [
-        'skills/leon/age/skill.json',
-        'skills/leon/age/src/actions/run.ts',
+        'skills/native/age_skill/skill.json',
+        'skills/native/age_skill/src/actions/run.ts',
         'schemas/skill-schemas/skill.json'
       ]
     : [
-        'skills/guess_the_number_skill/skill.json',
-        'skills/guess_the_number_skill/src/actions/set_up.py',
+        'skills/native/guess_the_number_skill/skill.json',
+        'skills/native/guess_the_number_skill/src/actions/set_up.py',
         'schemas/skill-schemas/skill.json'
       ]
 
@@ -24,7 +24,7 @@ const baseGuidance = [
 ]
 
 const createGuidance = [
-  '- Choose a concise skill folder name in snake_case ending with _skill'
+  '- Choose a concise skill folder name in snake_case ending with _skill under skills/native'
 ]
 
 const modifyGuidance = [

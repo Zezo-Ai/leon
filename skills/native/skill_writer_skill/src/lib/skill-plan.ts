@@ -24,7 +24,7 @@ export interface SkillPlan {
   display_name?: string
   description: string
   bridge: 'nodejs' | 'python'
-  flow?: string[]
+  workflow?: string[]
   action_notes?: string[]
   actions: SkillPlanAction[]
   tools?: SkillPlanTools

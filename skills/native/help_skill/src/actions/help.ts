@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { ActionFunction } from '@sdk/types'
 import { leon } from '@sdk/leon'
 
-const SKILLS_PATH = path.join(process.cwd(), 'skills')
+const NATIVE_SKILLS_PATH = path.join(process.cwd(), 'skills', 'native')
 
 interface Skill {
   name: string
@@ -13,12 +13,12 @@ interface Skill {
 
 export const run: ActionFunction = async function () {
   let list = ''
-  const skillFolders = (await fs.promises.readdir(SKILLS_PATH))
+  const skillFolders = (await fs.promises.readdir(NATIVE_SKILLS_PATH))
     .filter((folder) => folder.endsWith('_skill'))
     .sort()
 
   for (const skillFolder of skillFolders) {
-    const skillPath = path.join(SKILLS_PATH, skillFolder, 'skill.json')
+    const skillPath = path.join(NATIVE_SKILLS_PATH, skillFolder, 'skill.json')
     if (!fs.existsSync(skillPath)) {
       continue
     }

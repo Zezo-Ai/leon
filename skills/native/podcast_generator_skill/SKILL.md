@@ -9,4 +9,4 @@
 
 ## Avoid
 - Do not treat vague brainstorming as a generation request.
-- Do not overwrite an existing generation flow unless the owner clearly wants a restart.
+- Do not overwrite an existing generation workflow unless the owner clearly wants a restart.

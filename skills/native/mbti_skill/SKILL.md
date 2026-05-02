@@ -4,7 +4,7 @@
 - The owner wants to take the MBTI-style quiz or receive the associated personality result.
 
 ## Resolve With Context
-- Keep the quiz flow sequential and preserve prior answers from the active skill context.
+- Keep the quiz workflow sequential and preserve prior answers from the active skill context.
 - Only move to the result once the required quiz state is complete.
 
 ## Avoid
