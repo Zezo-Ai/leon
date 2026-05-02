@@ -2085,12 +2085,21 @@ export default class LLMProvider {
     }
 
     const onTokenWithStreamStart = (chunk: OnTokenChunk): void => {
-      markStreamStarted()
+      if (typeof chunk === 'string' && chunk.length === 0) {
+        userOnToken?.(chunk)
+        return
+      }
 
+      markStreamStarted()
       userOnToken?.(chunk)
     }
 
     const onReasoningTokenWithStreamStart = (reasoningChunk: string): void => {
+      if (reasoningChunk.length === 0) {
+        userOnReasoningToken?.(reasoningChunk)
+        return
+      }
+
       markStreamStarted()
       userOnReasoningToken?.(reasoningChunk)
     }

@@ -26,6 +26,7 @@ import type {
   LLMCaller,
   FunctionConfig,
   PromptLogSection,
+  LLMCallOptions,
   FinalPhaseIntent,
   FinalResponseSignal
 } from './types'
@@ -52,6 +53,14 @@ import {
 import {
   buildPhaseSystemPrompt
 } from './phase-policy'
+
+// Tool argument generation may still need execution reasoning to replan when
+// prerequisites are missing. Only disable provider streaming here, so timeouts
+// still protect tool calls if a stream opens but stalls before a final result.
+const TOOL_ARGUMENT_LLM_OPTIONS = {
+  phase: 'execution',
+  streamToProvider: false
+} satisfies LLMCallOptions
 
 async function buildExecutionMemorySection(
   _caller: LLMCaller,
@@ -694,9 +703,7 @@ async function resolveToolFunctionWithNativeTools(
         'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
       tools
     }),
-    {
-      phase: 'execution'
-    }
+    TOOL_ARGUMENT_LLM_OPTIONS
   )
 
   if (!result) {
@@ -944,9 +951,7 @@ async function resolveToolFunctionWithJSONMode(
         'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
       schema: resolveSchema
     }),
-    {
-      phase: 'execution'
-    }
+    TOOL_ARGUMENT_LLM_OPTIONS
   )
   const parsed = parseOutput(completionResult?.output)
 
@@ -1223,9 +1228,7 @@ async function executeFunctionWithNativeTools(
           'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
         tools: [tool]
       }),
-      {
-        phase: 'execution'
-      }
+      TOOL_ARGUMENT_LLM_OPTIONS
     )
 
     if (!result) {
@@ -1459,9 +1462,7 @@ async function executeFunctionWithJSONMode(
           'server/src/core/llm-manager/llm-duties/react-llm-duty/constants.ts',
         schema: executeSchema
       }),
-      {
-        phase: 'execution'
-      }
+      TOOL_ARGUMENT_LLM_OPTIONS
     )
     if (!completionResult) {
       const providerFailureObservation =
