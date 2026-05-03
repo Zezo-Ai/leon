@@ -1,6 +1,9 @@
 ---
 name: tiny-web-crawler
 description: Crawl from one or more starting web pages, fetch readable content, search within pages, follow relevant links, and stop when the requested information is found or a bounded limit is reached.
+metadata:
+  author: "Louis Grenard <louis@getleon.ai>"
+  version: "1.0.0"
 ---
 
 # Tiny Web Crawler

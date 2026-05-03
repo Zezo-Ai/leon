@@ -303,8 +303,7 @@ Rules:
 
   private buildPrompt(
     actionNotes: string[],
-    preselectedSingleActionName: string | null,
-    skillGuidance: string | null
+    preselectedSingleActionName: string | null
   ): string {
     const promptLines = [
       'Workflow context (JSON):',
@@ -312,10 +311,6 @@ Rules:
       '',
       `User Query: "${this.input}"`
     ]
-
-    if (skillGuidance) {
-      promptLines.unshift(`Selected skill guidance (SKILL.md):\n${skillGuidance}`)
-    }
 
     if (preselectedSingleActionName) {
       promptLines.unshift(
@@ -365,10 +360,9 @@ Rules:
     LogHelper.info('Executing...')
 
     try {
-      const [skillConfig, skillGuidance] = await Promise.all([
-        SkillDomainHelper.getNewSkillConfig(this.skillName),
-        SkillDomainHelper.getSkillGuidance(this.skillName)
-      ])
+      const skillConfig = await SkillDomainHelper.getNewSkillConfig(
+        this.skillName
+      )
       const {
         action_notes: actionNotes = [],
         actions,
@@ -397,11 +391,7 @@ Rules:
         return maybeResult as LLMDutyResult
       }
 
-      const prompt = this.buildPrompt(
-        actionNotes,
-        preselectedSingleActionName,
-        skillGuidance
-      )
+      const prompt = this.buildPrompt(actionNotes, preselectedSingleActionName)
       const filteredActions = this.filterActionsWithWorkflow(actions, workflow)
       const openAITools = this.actionsToOpenAITools(filteredActions)
       const config = LLM_MANAGER.coreLLMDuties[LLMDuties.ActionCalling]

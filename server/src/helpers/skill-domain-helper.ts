@@ -497,47 +497,6 @@ export class SkillDomainHelper {
   }
 
   /**
-   * Get skill guidance path (SKILL.md)
-   * @param skillName Skill name to get guidance path from
-   */
-  public static getSkillGuidancePath(
-    skillName: SkillSchema['name']
-  ): string | null {
-    const skillPath = this.resolveSkillPath(skillName)
-
-    if (!skillPath) {
-      return null
-    }
-
-    const skillGuidancePath = path.join(skillPath, 'SKILL.md')
-
-    if (!fs.existsSync(skillGuidancePath)) {
-      return null
-    }
-
-    return skillGuidancePath
-  }
-
-  /**
-   * Get skill guidance (SKILL.md)
-   * @param skillName Skill name to get guidance for
-   */
-  public static async getSkillGuidance(
-    skillName: SkillSchema['name']
-  ): Promise<string | null> {
-    const skillGuidancePath = SkillDomainHelper.getSkillGuidancePath(skillName)
-
-    if (!skillGuidancePath) {
-      return null
-    }
-
-    const guidance = await fs.promises.readFile(skillGuidancePath, 'utf8')
-    const trimmedGuidance = guidance.trim()
-
-    return trimmedGuidance === '' ? null : trimmedGuidance
-  }
-
-  /**
    * List all skills friendly prompts
    */
   public static async listSkillFriendlyPrompts(): Promise<string[]> {

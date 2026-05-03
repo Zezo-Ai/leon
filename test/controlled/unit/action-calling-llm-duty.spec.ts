@@ -19,8 +19,7 @@ const coreMocks = vi.hoisted(() => ({
 }))
 
 const skillHelperMocks = vi.hoisted(() => ({
-  getNewSkillConfig: vi.fn(),
-  getSkillGuidance: vi.fn()
+  getNewSkillConfig: vi.fn()
 }))
 
 vi.mock('@/helpers/log-helper', () => ({
@@ -52,8 +51,6 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks()
-
-  skillHelperMocks.getSkillGuidance.mockResolvedValue(null)
 })
 
 describe('ActionCallingLLMDuty', () => {
