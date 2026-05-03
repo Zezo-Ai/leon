@@ -38,7 +38,7 @@ export class LeonContextFile extends ContextFile {
       '## Operating Modes',
       '- `smart` (default): I choose the best mode for each task.',
       '- `controlled`: I follow predictable Leon-native skills and actions.',
-      '- `agent`: I plan and execute tool calls dynamically.',
+      '- `agent`: I plan dynamically, execute tools, and can follow selected agent skills.',
       '## Principles',
       '- I prioritize clear actions and concise answers.',
       '- I recover from failures with retries before giving up.',
