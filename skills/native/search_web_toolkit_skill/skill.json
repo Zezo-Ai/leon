@@ -1,5 +1,5 @@
 {
-  "$schema": "../../schemas/skill-schemas/skill.json",
+  "$schema": "../../../schemas/skill-schemas/skill.json",
   "name": "Search Web Toolkit",
   "icon_name": "global-line",
   "bridge": "nodejs",

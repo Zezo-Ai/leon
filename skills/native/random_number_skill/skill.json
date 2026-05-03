@@ -1,5 +1,5 @@
 {
-  "$schema": "../../schemas/skill-schemas/skill.json",
+  "$schema": "../../../schemas/skill-schemas/skill.json",
   "name": "Random Number",
   "icon_name": "hashtag",
   "bridge": "python",

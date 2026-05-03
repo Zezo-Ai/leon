@@ -1,5 +1,5 @@
 {
-  "$schema": "../../schemas/skill-schemas/skill.json",
+  "$schema": "../../../schemas/skill-schemas/skill.json",
   "name": "Weather Forecast",
   "icon_name": "sun-cloudy-line",
   "bridge": "nodejs",

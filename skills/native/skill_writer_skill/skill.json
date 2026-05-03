@@ -1,5 +1,5 @@
 {
-  "$schema": "../../schemas/skill-schemas/skill.json",
+  "$schema": "../../../schemas/skill-schemas/skill.json",
   "name": "Skill Writer",
   "icon_name": "code-box-line",
   "bridge": "nodejs",

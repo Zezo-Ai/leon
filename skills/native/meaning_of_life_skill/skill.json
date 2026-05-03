@@ -1,5 +1,5 @@
 {
-  "$schema": "../../schemas/skill-schemas/skill.json",
+  "$schema": "../../../schemas/skill-schemas/skill.json",
   "name": "Meaning of Life",
   "icon_name": "lightbulb-line",
   "bridge": null,
