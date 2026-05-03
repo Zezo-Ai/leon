@@ -10,7 +10,7 @@ import {
 import { createListResult } from '@/commands/built-in-command-renderer'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
 import { ProfileHelper } from '@/helpers/profile-helper'
-import { RoutingMode } from '@/types'
+import { RoutingMode, SkillFormat } from '@/types'
 
 const SKILL_COMMAND_NAME = 'skill'
 const SKILL_COMMAND_ALIAS = 's'
@@ -38,6 +38,7 @@ interface SkillAutocompleteEntry {
   description: string
   iconName: string
   isDisabled: boolean
+  format: SkillFormat
   skillName: string
   version: string
 }
@@ -64,7 +65,7 @@ function normalizeSkillSearchValue(value: string): string {
   return value
     .trim()
     .toLowerCase()
-    .replace(/[_\s]+/g, ' ')
+    .replace(/[-_\s]+/g, ' ')
     .trim()
 }
 
@@ -222,6 +223,12 @@ export class SkillCommand extends BuiltInCommand {
     const commandUtterance = query
       ? `${parsedInput.commandPrefix} ${resolvedSkillCommandName} ${query}`
       : `${parsedInput.commandPrefix} ${resolvedSkillCommandName}`
+    const forcedRoutingMode =
+      parsedInput.skillEntry.format === SkillFormat.AgentSkill
+        ? RoutingMode.Agent
+        : RoutingMode.Controlled
+    const routeLabel =
+      forcedRoutingMode === RoutingMode.Agent ? 'agent' : 'controlled'
 
     return {
       status: 'completed',
@@ -230,7 +237,7 @@ export class SkillCommand extends BuiltInCommand {
         tone: 'info',
         items: [
           {
-            label: `Submitting "${resolvedSkillCommandName}" through the normal workflow path.`
+            label: `Submitting "${resolvedSkillCommandName}" through the ${routeLabel} path.`
           }
         ]
       }),
@@ -238,7 +245,7 @@ export class SkillCommand extends BuiltInCommand {
         type: 'submit_to_chat',
         utterance: commandUtterance,
         command_context: {
-          forced_routing_mode: RoutingMode.Workflow,
+          forced_routing_mode: forcedRoutingMode,
           forced_skill_name: normalizedSkillName
         }
       }
@@ -263,36 +270,25 @@ export class SkillCommand extends BuiltInCommand {
     options?: SkillAutocompleteOptions
   ): SkillAutocompleteEntry[] {
     const skillFolders = options?.includeDisabled
-      ? SkillDomainHelper.listAllSkillFoldersSync()
-      : SkillDomainHelper.listSkillFoldersSync()
+      ? SkillDomainHelper.listAllSkillDescriptorsSync()
+      : SkillDomainHelper.listSkillDescriptorsSync()
 
     return skillFolders
-      .map((skillName) => {
-        try {
-          const isDisabled = ProfileHelper.isSkillDisabled(skillName)
+      .map((skillDescriptor) => {
+        const isDisabled = ProfileHelper.isSkillDisabled(skillDescriptor.id)
 
-          if (options?.onlyDisabled && !isDisabled) {
-            return null
-          }
-
-          const skillConfig = SkillDomainHelper.getNewSkillConfigSync(skillName, {
-            includeDisabled: options?.includeDisabled === true
-          })
-
-          if (!skillConfig) {
-            return null
-          }
-
-          return {
-            commandName: SkillDomainHelper.getSkillCommandName(skillName),
-            description: skillConfig.description,
-            iconName: skillConfig.icon_name,
-            isDisabled,
-            skillName,
-            version: skillConfig.version
-          }
-        } catch {
+        if (options?.onlyDisabled && !isDisabled) {
           return null
+        }
+
+        return {
+          commandName: skillDescriptor.commandName,
+          description: skillDescriptor.description,
+          iconName: skillDescriptor.iconName,
+          isDisabled,
+          format: skillDescriptor.format,
+          skillName: skillDescriptor.id,
+          version: skillDescriptor.version
         }
       })
       .filter(
@@ -454,7 +450,7 @@ export class SkillCommand extends BuiltInCommand {
     const skillItems = this.getSortedSkillAutocompleteEntries().map((entry) => {
       return {
         label: `${entry.commandName}`,
-        value: `version=${entry.version}`,
+        value: `format=${entry.format}, version=${entry.version}`,
         description: entry.description
       }
     })
@@ -499,7 +495,7 @@ export class SkillCommand extends BuiltInCommand {
     skillCommandName: string
   ): string | null {
     const skillParts = skillCommandName
-      .split('_')
+      .split(/[_-]/)
       .map((part) => part.trim())
       .filter(Boolean)
 
@@ -507,7 +503,7 @@ export class SkillCommand extends BuiltInCommand {
       return null
     }
 
-    const separatorPattern = '(?:[_\\s]+)'
+    const separatorPattern = '(?:[-_\\s]+)'
     const skillPattern = skillParts.map(escapeForRegExp).join(separatorPattern)
     const prefixPattern = new RegExp(`^${skillPattern}(?=$|\\s)`, 'i')
     const match = rawValue.match(prefixPattern)
