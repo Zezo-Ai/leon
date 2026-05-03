@@ -17,9 +17,11 @@ const SKILL_COMMAND_ALIAS = 's'
 const SKILL_ROOT_COMMAND_FORMAT = '/skill'
 const SKILL_ROOT_COMMAND_ALIAS_FORMAT = '/s'
 const SKILL_LIST_SUBCOMMAND = 'list'
+const SKILL_REMOVE_SUBCOMMAND = 'remove'
 const SKILL_ENABLE_SUBCOMMAND = 'enable'
 const SKILL_DISABLE_SUBCOMMAND = 'disable'
 const SKILL_LIST_COMMAND_FORMAT = '/skill list'
+const SKILL_REMOVE_COMMAND_FORMAT = '/skill remove <skill_name>'
 const SKILL_ENABLE_COMMAND_FORMAT = '/skill enable <skill_name>'
 const SKILL_DISABLE_COMMAND_FORMAT = '/skill disable <skill_name>'
 const SKILL_COMMAND_FORMAT = '/skill <skill_name> <query>'
@@ -29,9 +31,21 @@ const SKILL_COMMAND_PREFIXES = new Set([
 ])
 const SKILL_RESERVED_SUBCOMMANDS = [
   SKILL_LIST_SUBCOMMAND,
+  SKILL_REMOVE_SUBCOMMAND,
   SKILL_ENABLE_SUBCOMMAND,
   SKILL_DISABLE_SUBCOMMAND
 ]
+
+function getSkillSubcommandUsage(
+  commandPrefix: string,
+  subcommand: string
+): string {
+  if (subcommand === SKILL_LIST_SUBCOMMAND) {
+    return `${commandPrefix} ${subcommand}`
+  }
+
+  return `${commandPrefix} ${subcommand} <skill_name>`
+}
 
 interface SkillAutocompleteEntry {
   commandName: string
@@ -46,6 +60,7 @@ interface SkillAutocompleteEntry {
 interface SkillAutocompleteOptions {
   includeDisabled?: boolean
   onlyDisabled?: boolean
+  onlyProfile?: boolean
 }
 
 interface ParsedSkillCommandInput {
@@ -138,6 +153,10 @@ export class SkillCommand extends BuiltInCommand {
       return this.getSkillToggleSuggestions(context, subcommandArgument)
     }
 
+    if (subcommandArgument === SKILL_REMOVE_SUBCOMMAND) {
+      return this.getSkillRemoveSuggestions(context)
+    }
+
     const skillSelectionStep = this.isSkillSelectionStep(context, parsedInput)
     const subcommandSuggestions = this.getSubcommandSuggestions(
       parsedInput.commandPrefix,
@@ -183,6 +202,10 @@ export class SkillCommand extends BuiltInCommand {
 
     if (this.isSkillToggleSubcommand(subcommand)) {
       return this.executeSkillToggle(subcommand, context.args.slice(1).join(' '))
+    }
+
+    if (subcommand === SKILL_REMOVE_SUBCOMMAND) {
+      return this.executeSkillRemove(context.args.slice(1).join(' '))
     }
 
     if (normalizedRawSkillName === SKILL_LIST_SUBCOMMAND && !query) {
@@ -269,7 +292,9 @@ export class SkillCommand extends BuiltInCommand {
   private getSortedSkillAutocompleteEntries(
     options?: SkillAutocompleteOptions
   ): SkillAutocompleteEntry[] {
-    const skillFolders = options?.includeDisabled
+    const skillFolders = options?.onlyProfile
+      ? SkillDomainHelper.listProfileSkillDescriptorsSync()
+      : options?.includeDisabled
       ? SkillDomainHelper.listAllSkillDescriptorsSync()
       : SkillDomainHelper.listSkillDescriptorsSync()
 
@@ -406,6 +431,8 @@ export class SkillCommand extends BuiltInCommand {
         const description =
           subcommand === SKILL_LIST_SUBCOMMAND
             ? 'List all installed skills.'
+            : subcommand === SKILL_REMOVE_SUBCOMMAND
+              ? 'Remove a profile-installed skill.'
             : subcommand === SKILL_ENABLE_SUBCOMMAND
               ? 'Enable a disabled skill.'
               : 'Disable an enabled skill.'
@@ -415,12 +442,14 @@ export class SkillCommand extends BuiltInCommand {
           icon_name:
             subcommand === SKILL_LIST_SUBCOMMAND
               ? 'ri-list-check-3'
+              : subcommand === SKILL_REMOVE_SUBCOMMAND
+                ? 'ri-delete-bin-line'
               : subcommand === SKILL_ENABLE_SUBCOMMAND
                 ? 'ri-checkbox-circle-line'
                 : 'ri-checkbox-blank-circle-line',
           name: subcommand,
           description,
-          usage: `${commandPrefix} ${subcommand}`,
+          usage: getSkillSubcommandUsage(commandPrefix, subcommand),
           supported_usages: this.getSupportedUsages(),
           value: `${commandPrefix} ${subcommand}`
         }
@@ -473,6 +502,10 @@ export class SkillCommand extends BuiltInCommand {
         {
           label: SKILL_LIST_COMMAND_FORMAT,
           description: `List all installed skills (${installedSkillsCount}).`
+        },
+        {
+          label: SKILL_REMOVE_COMMAND_FORMAT,
+          description: 'Remove a skill installed in the active profile.'
         },
         {
           label: SKILL_ENABLE_COMMAND_FORMAT,
@@ -537,6 +570,26 @@ export class SkillCommand extends BuiltInCommand {
           commandPrefix: `${SKILL_ROOT_COMMAND_FORMAT} ${subcommand}`,
           usage: `${SKILL_ROOT_COMMAND_FORMAT} ${subcommand} ${entry.commandName}`,
           value: `${SKILL_ROOT_COMMAND_FORMAT} ${subcommand} ${entry.commandName}`
+        })
+      )
+  }
+
+  private getSkillRemoveSuggestions(
+    context: BuiltInCommandAutocompleteContext
+  ): BuiltInCommandAutocompleteItem[] {
+    const requestedSkillName = context.args.slice(1).join(' ')
+
+    return this.getSortedSkillAutocompleteEntries({
+      onlyProfile: true
+    })
+      .filter((entry) =>
+        this.matchesRequestedSkill(entry, requestedSkillName)
+      )
+      .map((entry) =>
+        this.toSkillSuggestion(entry, {
+          commandPrefix: `${SKILL_ROOT_COMMAND_FORMAT} ${SKILL_REMOVE_SUBCOMMAND}`,
+          usage: `${SKILL_ROOT_COMMAND_FORMAT} ${SKILL_REMOVE_SUBCOMMAND} ${entry.commandName}`,
+          value: `${SKILL_ROOT_COMMAND_FORMAT} ${SKILL_REMOVE_SUBCOMMAND} ${entry.commandName}`
         })
       )
   }
@@ -622,6 +675,85 @@ export class SkillCommand extends BuiltInCommand {
       entries.find((entry) => this.matchesRequestedSkill(entry, rawSkillName)) ||
       null
     )
+  }
+
+  private async executeSkillRemove(
+    rawSkillName: string
+  ): Promise<BuiltInCommandExecutionResult> {
+    const skillEntry = this.resolveSkillEntry(rawSkillName, {
+      onlyProfile: true
+    })
+
+    if (!rawSkillName.trim()) {
+      return {
+        status: 'error',
+        result: createListResult({
+          title: 'Missing Skill Name',
+          tone: 'error',
+          items: [
+            {
+              label: `Usage: ${SKILL_REMOVE_COMMAND_FORMAT}`,
+              tone: 'error'
+            }
+          ]
+        })
+      }
+    }
+
+    if (!skillEntry) {
+      return {
+        status: 'error',
+        result: createListResult({
+          title: 'Skill Not Installed In Profile',
+          tone: 'error',
+          items: [
+            {
+              label: `The skill "${rawSkillName.trim()}" is not installed in the active profile.`,
+              tone: 'error'
+            },
+            {
+              label:
+                'Built-in skills cannot be removed from the codebase; use /skill disable <skill_name> instead.',
+              tone: 'error'
+            }
+          ]
+        })
+      }
+    }
+
+    const removedSkill = await SkillDomainHelper.removeProfileSkill(
+      skillEntry.skillName
+    )
+
+    if (!removedSkill) {
+      return {
+        status: 'error',
+        result: createListResult({
+          title: 'Skill Not Removed',
+          tone: 'error',
+          items: [
+            {
+              label: `The skill "${skillEntry.commandName}" is no longer installed in the active profile.`,
+              tone: 'error'
+            }
+          ]
+        })
+      }
+    }
+
+    return {
+      status: 'completed',
+      result: createListResult({
+        title: 'Skill Removed',
+        tone: 'success',
+        items: [
+          {
+            label: `Removed "${removedSkill.commandName}" from the active profile.`,
+            tone: 'success'
+          }
+        ]
+      })
+    }
   }
 
   private createSkillToggleSuccessResult(
