@@ -7,6 +7,8 @@ const MINIMUM_DROPDOWN_HEIGHT_PX = 196
 const MAXIMUM_DROPDOWN_HEIGHT_PX = 280
 const FILE_SYSTEM_TRIGGER = '@'
 const FOLDER_TYPE = 'folder'
+const DEFAULT_FILE_ICON_NAME = 'file-line'
+const DEFAULT_FOLDER_ICON_NAME = 'folder-3-line'
 const NAVIGATION_DIRECTIONS = {
   next: 1,
   previous: -1
@@ -257,8 +259,12 @@ export default class FileSystemAutocomplete {
             ? ' file-system-autocomplete__item--selected'
             : ''
         }`
-        icon.className =
-          entry.type === FOLDER_TYPE ? 'ri-folder-3-line' : 'ri-file-line'
+        icon.className = `ri-${
+          entry.iconName ||
+          (entry.type === FOLDER_TYPE
+            ? DEFAULT_FOLDER_ICON_NAME
+            : DEFAULT_FILE_ICON_NAME)
+        }`
         label.className = 'file-system-autocomplete__label'
         label.textContent = entry.value
 

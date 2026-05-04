@@ -7,6 +7,7 @@ import { Type } from '@sinclair/typebox'
 import type { Static } from '@sinclair/typebox'
 
 import type { APIOptions } from '@/core/http-server/http-server'
+import { FileHelper } from '@/helpers/file-helper'
 
 const FILE_SYSTEM_TRIGGER = '@'
 const PATH_SEPARATOR = '/'
@@ -29,6 +30,7 @@ interface FileSystemListEntry {
   name: string
   value: string
   absolutePath: string
+  iconName: string
   type: 'file' | 'folder'
 }
 
@@ -168,6 +170,10 @@ async function listFolderChildren(
             type === 'folder' ? PATH_SEPARATOR : ''
           }`,
           absolutePath: formatAbsolutePath(entryPath, type),
+          iconName:
+            type === 'folder'
+              ? FileHelper.FOLDER_REMIX_ICON_NAME
+              : FileHelper.getRemixIconName(entry.name),
           type,
           entryPath,
           score: 0
@@ -245,6 +251,10 @@ export const postFileSystemList: FastifyPluginAsync<APIOptions> = async (
                 type === 'folder' ? PATH_SEPARATOR : ''
               }`,
               absolutePath: formatAbsolutePath(entryPath, type),
+              iconName:
+                type === 'folder'
+                  ? FileHelper.FOLDER_REMIX_ICON_NAME
+                  : FileHelper.getRemixIconName(entry.name),
               type,
               entryPath,
               score
@@ -257,11 +267,12 @@ export const postFileSystemList: FastifyPluginAsync<APIOptions> = async (
 
         const entries = (await expandMatchedFolders(matchedEntries, query))
           .slice(0, MAXIMUM_FILE_SYSTEM_ENTRIES)
-          .map(({ name, value, absolutePath, type }) => {
+          .map(({ name, value, absolutePath, iconName, type }) => {
             return {
               name,
               value,
               absolutePath,
+              iconName,
               type
             }
           })
