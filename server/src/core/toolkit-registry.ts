@@ -1,7 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { TOOLS_PATH } from '@/constants'
+import {
+  PROFILE_TOOLS_PATH,
+  TOOLS_PATH
+} from '@/constants'
 import { LogHelper } from '@/helpers/log-helper'
 import { ProfileHelper } from '@/helpers/profile-helper'
 
@@ -275,62 +278,71 @@ export default class ToolkitRegistry {
     }
   }
 
+  public async reload(): Promise<void> {
+    this._toolkits = []
+    this._isLoaded = false
+
+    await this.load()
+  }
+
   private async loadBuiltInToolkits(
     toolkitsById: Map<string, ToolkitDefinition>
   ): Promise<void> {
-    if (!fs.existsSync(TOOLS_PATH)) {
-      return
-    }
-
-    const entries = await fs.promises.readdir(TOOLS_PATH, {
-      withFileTypes: true
-    })
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) {
+    for (const toolsPath of [TOOLS_PATH, PROFILE_TOOLS_PATH]) {
+      if (!fs.existsSync(toolsPath)) {
         continue
       }
 
-      const toolkitId = entry.name
-      const toolkitPath = path.join(TOOLS_PATH, toolkitId)
-      const toolkitConfigPath = path.join(toolkitPath, 'toolkit.json')
+      const entries = await fs.promises.readdir(toolsPath, {
+        withFileTypes: true
+      })
 
-      if (!fs.existsSync(toolkitConfigPath)) {
-        continue
-      }
-
-      try {
-        const toolkitConfig = await this.loadToolkitConfig(toolkitConfigPath)
-        const existingToolkit = toolkitsById.get(toolkitId)
-        const toolkit: ToolkitDefinition = existingToolkit || {
-          id: toolkitId,
-          name: toolkitConfig.name,
-          description: toolkitConfig.description,
-          iconName: toolkitConfig.icon_name,
-          contextFiles: this.normalizeContextFiles(
-            toolkitConfig.context_files
-          ),
-          tools: {}
+      for (const entry of entries) {
+        if (!entry.isDirectory()) {
+          continue
         }
 
-        for (const toolId of toolkitConfig.tools || []) {
-          if (ProfileHelper.isToolDisabled(toolId)) {
-            continue
+        const toolkitId = entry.name
+        const toolkitPath = path.join(toolsPath, toolkitId)
+        const toolkitConfigPath = path.join(toolkitPath, 'toolkit.json')
+
+        if (!fs.existsSync(toolkitConfigPath)) {
+          continue
+        }
+
+        try {
+          const toolkitConfig = await this.loadToolkitConfig(toolkitConfigPath)
+          const existingToolkit = toolkitsById.get(toolkitId)
+          const toolkit: ToolkitDefinition = existingToolkit || {
+            id: toolkitId,
+            name: toolkitConfig.name,
+            description: toolkitConfig.description,
+            iconName: toolkitConfig.icon_name,
+            contextFiles: this.normalizeContextFiles(
+              toolkitConfig.context_files
+            ),
+            tools: {}
           }
 
-          await this.loadToolConfig(
-            toolkit,
-            toolId,
-            path.join(toolkitPath, toolId, 'tool.json')
+          for (const toolId of toolkitConfig.tools || []) {
+            if (ProfileHelper.isToolDisabled(toolId, toolkitId)) {
+              continue
+            }
+
+            await this.loadToolConfig(
+              toolkit,
+              toolId,
+              path.join(toolkitPath, toolId, 'tool.json')
+            )
+          }
+
+          toolkitsById.set(toolkitId, toolkit)
+        } catch (e) {
+          LogHelper.title('Toolkit Registry')
+          LogHelper.error(
+            `Failed to load toolkit config at "${toolkitConfigPath}": ${e}`
           )
         }
-
-        toolkitsById.set(toolkitId, toolkit)
-      } catch (e) {
-        LogHelper.title('Toolkit Registry')
-        LogHelper.error(
-          `Failed to load toolkit config at "${toolkitConfigPath}": ${e}`
-        )
       }
     }
   }

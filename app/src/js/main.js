@@ -42,7 +42,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         return client.sendUtterance(clientAction.utterance, {
           commandContext: {
             forcedRoutingMode: clientAction.command_context?.forced_routing_mode,
-            forcedSkillName: clientAction.command_context?.forced_skill_name
+            forcedSkillName: clientAction.command_context?.forced_skill_name,
+            forcedToolName: clientAction.command_context?.forced_tool_name
           }
         })
       }

@@ -675,6 +675,30 @@ export default class NLU {
     return utteranceTokens.slice(2).join(' ').trim()
   }
 
+  private getToolUtterance(
+    utterance: NLPUtterance,
+    forcedToolName?: string
+  ): NLPUtterance {
+    if (!forcedToolName) {
+      return utterance
+    }
+
+    const trimmedUtterance = utterance.trim()
+    const utteranceTokens = trimmedUtterance.split(/\s+/).filter(Boolean)
+    const normalizedCommand = utteranceTokens[0]?.toLowerCase() || ''
+    const normalizedToolName = forcedToolName.toLowerCase()
+
+    if (
+      utteranceTokens.length < 2 ||
+      (normalizedCommand !== '/tool' && normalizedCommand !== '/t') ||
+      utteranceTokens[1]?.toLowerCase() !== normalizedToolName
+    ) {
+      return utterance
+    }
+
+    return utteranceTokens.slice(2).join(' ').trim()
+  }
+
   private getRoutingDecision(forcedMode?: RoutingMode): {
     mode: RoutingMode
     route: RoutingRoute
@@ -699,7 +723,8 @@ export default class NLU {
 
   private async runReAct(
     utterance: NLPUtterance,
-    agentSkillName?: NLPSkill
+    agentSkillName?: NLPSkill,
+    forcedToolName?: string
   ): Promise<void> {
     LogHelper.title('NLU')
     LogHelper.info('Routing to ReAct...')
@@ -716,7 +741,8 @@ export default class NLU {
 
     const reactDuty = new ReActLLMDuty({
       input: utterance,
-      agentSkill: agentSkillContext
+      agentSkill: agentSkillContext,
+      ...(forcedToolName ? { forcedToolName } : {})
     })
     await reactDuty.init()
     const reactResult = await reactDuty.execute()
@@ -1226,6 +1252,7 @@ export default class NLU {
       ownerMessageId?: string
       forcedRoutingMode?: RoutingMode
       forcedSkillName?: NLPSkill
+      forcedToolName?: string
     }
   ): Promise<NLUPartialProcessResult | null> {
     // TODO: core rewrite
@@ -1242,6 +1269,10 @@ export default class NLU {
             const workflowUtterance = this.getWorkflowUtterance(
               utterance,
               options?.forcedSkillName
+            )
+            const toolUtterance = this.getToolUtterance(
+              utterance,
+              options?.forcedToolName
             )
 
             await CONVERSATION_LOGGER.push({
@@ -1316,8 +1347,9 @@ export default class NLU {
                   : undefined
 
               await this.runReAct(
-                forcedAgentSkillName ? workflowUtterance : utterance,
-                forcedAgentSkillName
+                forcedAgentSkillName ? workflowUtterance : toolUtterance,
+                forcedAgentSkillName,
+                options?.forcedToolName
               )
               return resolve(null)
             }

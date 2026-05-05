@@ -10,6 +10,9 @@ const COMMAND_INPUT_SEPARATOR_PATTERN = /\s+/
 const SKILL_COMMAND_NAME = 'skill'
 const SKILL_ENABLE_SUBCOMMAND = 'enable'
 const SKILL_DISABLE_SUBCOMMAND = 'disable'
+const TOOL_COMMAND_NAME = 'tool'
+const TOOL_ENABLE_SUBCOMMAND = 'enable'
+const TOOL_DISABLE_SUBCOMMAND = 'disable'
 
 const postCommandSchema = {
   body: Type.Object({
@@ -53,6 +56,15 @@ function isSkillToggleCommand(rawInput: string): boolean {
   )
 }
 
+function isToolToggleCommand(rawInput: string): boolean {
+  const [, subcommand = ''] = rawInput.trim().split(COMMAND_INPUT_SEPARATOR_PATTERN)
+
+  return (
+    subcommand === TOOL_ENABLE_SUBCOMMAND ||
+    subcommand === TOOL_DISABLE_SUBCOMMAND
+  )
+}
+
 async function refreshSkillListIfSkillToggleCommand(input: {
   mode: (typeof COMMAND_MODES)[number]
   commandName: string | null
@@ -71,6 +83,26 @@ async function refreshSkillListIfSkillToggleCommand(input: {
   const { LLM_MANAGER } = await import('@/core')
 
   await LLM_MANAGER.refreshSkillListContent()
+}
+
+async function refreshToolkitRegistryIfToolToggleCommand(input: {
+  mode: (typeof COMMAND_MODES)[number]
+  commandName: string | null
+  rawInput: string
+  status: string | undefined
+}): Promise<void> {
+  if (
+    input.mode !== 'execute' ||
+    input.commandName !== TOOL_COMMAND_NAME ||
+    input.status !== 'completed' ||
+    !isToolToggleCommand(input.rawInput)
+  ) {
+    return
+  }
+
+  const { TOOLKIT_REGISTRY } = await import('@/core')
+
+  await TOOLKIT_REGISTRY.reload()
 }
 
 export const postCommand: FastifyPluginAsync<APIOptions> = async (
@@ -98,6 +130,12 @@ export const postCommand: FastifyPluginAsync<APIOptions> = async (
           status: 'status' in data ? data.status : undefined
         })
         await refreshSkillListIfSkillToggleCommand({
+          mode,
+          commandName: data.session.command_name,
+          rawInput: input,
+          status: 'status' in data ? data.status : undefined
+        })
+        await refreshToolkitRegistryIfToolToggleCommand({
           mode,
           commandName: data.session.command_name,
           rawInput: input,

@@ -57,6 +57,7 @@ interface UtteranceDataEvent {
   commandContext?: {
     forcedRoutingMode?: RoutingMode
     forcedSkillName?: string
+    forcedToolName?: string
   }
 }
 
@@ -437,6 +438,12 @@ export default class SocketServer {
                   ? {
                       forcedSkillName:
                         utteranceData.commandContext.forcedSkillName
+                    }
+                  : {}),
+                ...(utteranceData.commandContext?.forcedToolName
+                  ? {
+                      forcedToolName:
+                        utteranceData.commandContext.forcedToolName
                     }
                   : {})
               })

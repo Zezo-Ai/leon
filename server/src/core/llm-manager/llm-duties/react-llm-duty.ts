@@ -248,6 +248,7 @@ export class ReActLLMDuty extends LLMDuty {
   private finalResponseIntent: FinalResponseSignal['intent'] = 'answer'
   private lastExecutionHistory: ExecutionRecord[] = []
   private activeAgentSkillContext: AgentSkillContext | null
+  private activeForcedToolName: string | null
 
   constructor(params: ReactLLMDutyParams) {
     super()
@@ -261,6 +262,7 @@ export class ReActLLMDuty extends LLMDuty {
 
     this.input = params.input
     this.activeAgentSkillContext = params.agentSkill || null
+    this.activeForcedToolName = params.forcedToolName || null
     this.systemPrompt = PERSONA.getCompactDutySystemPrompt(PLAN_SYSTEM_PROMPT, {
       includePersonality: false,
       includeMood: false
@@ -456,6 +458,29 @@ export class ReActLLMDuty extends LLMDuty {
         }
 
         emitPlanWidget(trackedSteps, null, planWidgetIdValue, true)
+        hasPlanningWidget = true
+      } else if (this.activeForcedToolName) {
+        const forcedToolStep = this.getForcedToolPlanStep()
+
+        if (!forcedToolStep) {
+          const unsupportedToolSignal: FinalResponseSignal = {
+            intent: 'error',
+            draft: `The tool "${this.activeForcedToolName}" is not available.`,
+            source: 'system'
+          }
+
+          return await finalizeFromSignal(unsupportedToolSignal)
+        }
+
+        pendingSteps = [forcedToolStep]
+        trackedSteps = [
+          {
+            label: forcedToolStep.label,
+            status: 'in_progress' as PlanStepStatus
+          }
+        ]
+
+        emitPlanWidget(trackedSteps, null, planWidgetIdValue, false)
         hasPlanningWidget = true
       } else {
         // --- Phase 1: Planning ---
@@ -1008,6 +1033,25 @@ export class ReActLLMDuty extends LLMDuty {
     }
 
     return null
+  }
+
+  private getForcedToolPlanStep(): PlanStep | null {
+    if (!this.activeForcedToolName) {
+      return null
+    }
+
+    const resolvedTool = TOOLKIT_REGISTRY.resolveToolById(
+      this.activeForcedToolName
+    )
+
+    if (!resolvedTool) {
+      return null
+    }
+
+    return {
+      function: `${resolvedTool.toolkitId}.${resolvedTool.toolId}`,
+      label: `Use ${resolvedTool.toolName}`
+    }
   }
 
   private async loadPreparedHistory(): Promise<PreparedReactHistory> {

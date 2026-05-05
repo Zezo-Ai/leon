@@ -7,6 +7,7 @@ import { RoutingCommand } from '@/built-in-command/commands/routing-command/rout
 import { SkillCommand } from '@/built-in-command/commands/skill-command/skill-command'
 import { StatusCommand } from '@/built-in-command/commands/status-command/status-command'
 import { StopCommand } from '@/built-in-command/commands/stop-command/stop-command'
+import { ToolCommand } from '@/built-in-command/commands/tool-command/tool-command'
 
 const WHITELISTED_BUILT_IN_COMMAND_NAMES = [
   'status',
@@ -16,7 +17,8 @@ const WHITELISTED_BUILT_IN_COMMAND_NAMES = [
   'mood',
   'model',
   'skill',
-  'stop'
+  'stop',
+  'tool'
 ]
 
 const BUILT_IN_COMMANDS = [
@@ -27,6 +29,7 @@ const BUILT_IN_COMMANDS = [
   new ModelCommand(),
   new SkillCommand(),
   new StopCommand(),
+  new ToolCommand(),
   new HelpCommand()
 ]
   .filter((command) =>
