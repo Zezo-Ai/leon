@@ -4,6 +4,7 @@ import type { Static } from '@sinclair/typebox'
 
 import { BUILT_IN_COMMAND_MANAGER } from '@/built-in-command'
 import type { APIOptions } from '@/core/http-server/http-server'
+import { CONVERSATION_SESSION_MANAGER } from '@/core/session-manager'
 
 const COMMAND_MODES = ['autocomplete', 'execute'] as const
 const COMMAND_INPUT_SEPARATOR_PATTERN = /\s+/
@@ -18,7 +19,8 @@ const postCommandSchema = {
   body: Type.Object({
     mode: Type.Union(COMMAND_MODES.map((mode) => Type.Literal(mode))),
     input: Type.String(),
-    session_id: Type.Optional(Type.String())
+    session_id: Type.Optional(Type.String()),
+    conversation_session_id: Type.Optional(Type.String())
   })
 } satisfies FastifySchema
 
@@ -116,13 +118,24 @@ export const postCommand: FastifyPluginAsync<APIOptions> = async (
     url: `/api/${options.apiVersion}/command`,
     schema: postCommandSchema,
     handler: async (request, reply) => {
-      const { mode, input, session_id: sessionId } = request.body
+      const {
+        mode,
+        input,
+        session_id: sessionId,
+        conversation_session_id: conversationSessionId
+      } = request.body
 
       try {
-        const data =
-          mode === 'autocomplete'
-            ? BUILT_IN_COMMAND_MANAGER.autocomplete(input, sessionId)
-            : await BUILT_IN_COMMAND_MANAGER.execute(input, sessionId)
+        const activeSessionId =
+          conversationSessionId ||
+          CONVERSATION_SESSION_MANAGER.getActiveSessionId()
+        const data = await CONVERSATION_SESSION_MANAGER.runWithSession(
+          activeSessionId,
+          async () =>
+            mode === 'autocomplete'
+              ? BUILT_IN_COMMAND_MANAGER.autocomplete(input, sessionId)
+              : await BUILT_IN_COMMAND_MANAGER.execute(input, sessionId)
+        )
 
         await refreshLLMRuntimeIfModelCommand({
           mode,

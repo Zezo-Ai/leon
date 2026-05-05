@@ -37,6 +37,7 @@ import type { MessageLog } from '@/types'
 import { ConversationHistoryHelper } from '@/helpers/conversation-history-helper'
 import { CONFIG_STATE } from '@/core/config-states/config-state'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
+import { getActiveConversationSessionId } from '@/core/session-manager/session-context'
 
 function getLLMProviderName(): LLMProviders {
   return CONFIG_STATE.getModelState().getAgentProvider()
@@ -106,6 +107,7 @@ import {
 const REACT_CONTINUATION_STATE_FILENAME = '.react-execution-continuation-state.json'
 const REACT_HISTORY_COMPACTION_STATE_FILENAME =
   '.react-history-compaction-state.json'
+const REACT_SESSION_STATE_FILENAME_SEPARATOR = '--'
 const REACT_CONTINUATION_MAX_AGE_MS = 30 * 60 * 1_000
 const REACT_PROMPTS_LOG_DIR = path.join(PROFILE_LOGS_PATH, 'prompts')
 
@@ -214,16 +216,10 @@ export class ReActLLMDuty extends LLMDuty {
   private static context: LlamaContext = null as unknown as LlamaContext
   private static session: LlamaChatSession =
     null as unknown as LlamaChatSession
-  private static readonly continuationStateStore =
-    new ContextStateStore<ReactExecutionContinuationState | null>(
-      REACT_CONTINUATION_STATE_FILENAME,
-      null
-    )
-  private static readonly historyCompactionStateStore =
-    new ContextStateStore<ReactHistoryCompactionState>(
-      REACT_HISTORY_COMPACTION_STATE_FILENAME,
-      REACT_HISTORY_COMPACTION_STATE_FALLBACK
-    )
+  private static readonly continuationStateStores =
+    new Map<string, ContextStateStore<ReactExecutionContinuationState | null>>()
+  private static readonly historyCompactionStateStores =
+    new Map<string, ContextStateStore<ReactHistoryCompactionState>>()
   protected systemPrompt: LLMDutyParams['systemPrompt'] = null
   protected readonly name = 'ReAct LLM Duty'
   protected input: LLMDutyParams['input'] = null
@@ -1097,6 +1093,54 @@ export class ReActLLMDuty extends LLMDuty {
     }
   }
 
+  private getSessionStateFilename(filename: string): string {
+    const sessionId = getActiveConversationSessionId()
+
+    if (!sessionId) {
+      return filename
+    }
+
+    return `${filename}${REACT_SESSION_STATE_FILENAME_SEPARATOR}${sessionId}`
+  }
+
+  private getContinuationStateStore(): ContextStateStore<ReactExecutionContinuationState | null> {
+    const filename = this.getSessionStateFilename(REACT_CONTINUATION_STATE_FILENAME)
+    const existingStore = ReActLLMDuty.continuationStateStores.get(filename)
+
+    if (existingStore) {
+      return existingStore
+    }
+
+    const store = new ContextStateStore<ReactExecutionContinuationState | null>(
+      filename,
+      null
+    )
+
+    ReActLLMDuty.continuationStateStores.set(filename, store)
+
+    return store
+  }
+
+  private getHistoryCompactionStateStore(): ContextStateStore<ReactHistoryCompactionState> {
+    const filename = this.getSessionStateFilename(
+      REACT_HISTORY_COMPACTION_STATE_FILENAME
+    )
+    const existingStore = ReActLLMDuty.historyCompactionStateStores.get(filename)
+
+    if (existingStore) {
+      return existingStore
+    }
+
+    const store = new ContextStateStore<ReactHistoryCompactionState>(
+      filename,
+      REACT_HISTORY_COMPACTION_STATE_FALLBACK
+    )
+
+    ReActLLMDuty.historyCompactionStateStores.set(filename, store)
+
+    return store
+  }
+
   private getHistoryEligibleConversationLogs(
     conversationLogs: MessageLog[]
   ): MessageLog[] {
@@ -1108,7 +1152,7 @@ export class ReActLLMDuty extends LLMDuty {
   private loadHistoryCompactionProviderState(
     scope: ReactHistoryCompactionScope
   ): ReactHistoryCompactionProviderState {
-    const persistedState = ReActLLMDuty.historyCompactionStateStore.load()
+    const persistedState = this.getHistoryCompactionStateStore().load()
     return this.normalizeHistoryCompactionProviderState(persistedState?.[scope])
   }
 
@@ -1140,7 +1184,7 @@ export class ReActLLMDuty extends LLMDuty {
     scope: ReactHistoryCompactionScope,
     providerState: ReactHistoryCompactionProviderState
   ): void {
-    const persistedState = ReActLLMDuty.historyCompactionStateStore.load()
+    const persistedState = this.getHistoryCompactionStateStore().load()
     const nextState: ReactHistoryCompactionState = {
       version: 1,
       local:
@@ -1153,7 +1197,7 @@ export class ReActLLMDuty extends LLMDuty {
           : this.normalizeHistoryCompactionProviderState(persistedState?.remote)
     }
 
-    ReActLLMDuty.historyCompactionStateStore.save(nextState)
+    this.getHistoryCompactionStateStore().save(nextState)
   }
 
   private normalizeMessageLogs(value: unknown): MessageLog[] {
@@ -1611,8 +1655,8 @@ export class ReActLLMDuty extends LLMDuty {
     return this.safeJSONStringify(input)
   }
 
-  private static loadValidExecutionContinuationState(): ReactExecutionContinuationState | null {
-    const state = ReActLLMDuty.continuationStateStore.load()
+  private loadValidExecutionContinuationState(): ReactExecutionContinuationState | null {
+    const state = this.getContinuationStateStore().load()
     if (!state) {
       return null
     }
@@ -1620,12 +1664,12 @@ export class ReActLLMDuty extends LLMDuty {
     const isExpired =
       !state.createdAt || Date.now() - state.createdAt > REACT_CONTINUATION_MAX_AGE_MS
     if (isExpired) {
-      ReActLLMDuty.continuationStateStore.save(null)
+      this.getContinuationStateStore().save(null)
       return null
     }
 
     if (state.phase !== 'execution' || !Array.isArray(state.pendingSteps)) {
-      ReActLLMDuty.continuationStateStore.save(null)
+      this.getContinuationStateStore().save(null)
       return null
     }
 
@@ -1633,15 +1677,15 @@ export class ReActLLMDuty extends LLMDuty {
   }
 
   private loadExecutionContinuation(): ReactExecutionContinuationState | null {
-    return ReActLLMDuty.loadValidExecutionContinuationState()
+    return this.loadValidExecutionContinuationState()
   }
 
   private saveExecutionContinuation(state: ReactExecutionContinuationState): void {
-    ReActLLMDuty.continuationStateStore.save(state)
+    this.getContinuationStateStore().save(state)
   }
 
   private clearExecutionContinuation(): void {
-    ReActLLMDuty.continuationStateStore.save(null)
+    this.getContinuationStateStore().save(null)
   }
 
   private consumeExecutionContinuation(
