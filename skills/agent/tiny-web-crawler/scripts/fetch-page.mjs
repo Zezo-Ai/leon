@@ -7,7 +7,7 @@ const DEFAULT_TEXT_PREVIEW_CHARS = 1_500
 const DEFAULT_MAX_LINKS = 150
 const DEFAULT_MODE = 'summary'
 const USER_AGENT =
-  'Leon Tiny Web Crawler Skill/1.0 (+https://github.com/leon-ai/leon)'
+  'Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7815.2 Safari/537.36'
 const REMOVED_BLOCK_TAGS = [
   'script',
   'style',
