@@ -15,6 +15,7 @@ DOWNLOAD_DESTINATION_PATTERN = re.compile(r"Destination:\s+(.+)$")
 ALREADY_DOWNLOADED_PATTERN = re.compile(
     r"\[download\]\s+(.+)\s+has already been downloaded"
 )
+MERGED_FILE_PATTERN = re.compile(r'\[Merger\]\s+Merging formats into\s+"(.+)"$')
 SUBTITLE_DESTINATION_PATTERN = re.compile(
     r"Writing (?:video subtitles|video automatic captions) to:\s+(.+)$"
 )
@@ -26,6 +27,17 @@ YTDLP_TITLE_TEMPLATE = "%(title)s"
 YTDLP_PLAYLIST_INDEX_TEMPLATE = "%(playlist_index)s"
 SUBTITLE_FORMAT = "srt/best"
 SUBTITLE_CONVERT_FORMAT = "srt"
+IGNORED_MEDIA_OUTPUT_EXTENSIONS = {
+    ".part",
+    ".ytdl",
+    ".tmp",
+    ".temp",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".json",
+}
 LANGUAGE_CODE_SEPARATOR = ","
 SUBTITLE_OUTPUT_TYPE = "subtitle"
 TYPED_OUTPUT_SEPARATOR = ":"
@@ -185,19 +197,58 @@ class YtdlpTool(BaseTool):
         """
         Parse file paths reported by yt-dlp.
         """
+        parsed_path = None
+
         for line in output.split("\n"):
             match = (
                 DOWNLOAD_DESTINATION_PATTERN.search(line)
                 or ALREADY_DOWNLOADED_PATTERN.search(line)
+                or MERGED_FILE_PATTERN.search(line)
                 or SUBTITLE_DESTINATION_PATTERN.search(line)
             )
             if match and match.group(1):
-                return match.group(1).strip()
+                parsed_path = match.group(1).strip()
 
-        return None
+        return parsed_path
+
+    @staticmethod
+    def _find_newest_output_file(
+        directory_path: str, started_at_ms: Optional[float] = None
+    ) -> Optional[str]:
+        """
+        Find the newest file created or updated in the output directory.
+        """
+        if not os.path.isdir(directory_path):
+            return None
+
+        min_modified_time = ((started_at_ms - 2000) / 1000) if started_at_ms else 0
+        newest_path = None
+        newest_modified_time = 0.0
+
+        for entry_name in os.listdir(directory_path):
+            candidate_path = os.path.join(directory_path, entry_name)
+            if not os.path.isfile(candidate_path):
+                continue
+            if os.path.splitext(candidate_path)[1] in IGNORED_MEDIA_OUTPUT_EXTENSIONS:
+                continue
+
+            modified_time = os.path.getmtime(candidate_path)
+            if modified_time < min_modified_time:
+                continue
+
+            if modified_time >= newest_modified_time:
+                newest_path = candidate_path
+                newest_modified_time = modified_time
+
+        return newest_path
 
     @classmethod
-    def _resolve_downloaded_media_path(cls, output: str, target: OutputTarget) -> str:
+    def _resolve_downloaded_media_path(
+        cls,
+        output: str,
+        target: OutputTarget,
+        started_at_ms: Optional[float] = None,
+    ) -> str:
         """
         Resolve a media path from yt-dlp output or a deterministic file target.
         """
@@ -206,6 +257,15 @@ class YtdlpTool(BaseTool):
             return predicted_file_path
 
         parsed_path = cls._parse_output_file_path(output)
+        if parsed_path and os.path.exists(parsed_path):
+            return parsed_path
+
+        newest_output_file = cls._find_newest_output_file(
+            target["directory_path"], started_at_ms
+        )
+        if newest_output_file:
+            return newest_output_file
+
         if parsed_path:
             return parsed_path
 
@@ -240,6 +300,7 @@ class YtdlpTool(BaseTool):
         try:
             target = self._resolve_media_output_target(output_path)
             os.makedirs(target["directory_path"], exist_ok=True)
+            command_started_at_ms = time.time() * 1000
 
             args = self._get_config_args() + [
                 video_url,
@@ -252,7 +313,9 @@ class YtdlpTool(BaseTool):
                 )
             )
 
-            return self._resolve_downloaded_media_path(result, target)
+            return self._resolve_downloaded_media_path(
+                result, target, command_started_at_ms
+            )
 
         except Exception as e:
             raise Exception(f"Video download failed: {str(e)}")
@@ -274,6 +337,7 @@ class YtdlpTool(BaseTool):
         try:
             target = self._resolve_media_output_target(output_path, audio_format)
             os.makedirs(target["directory_path"], exist_ok=True)
+            command_started_at_ms = time.time() * 1000
 
             args = self._get_config_args() + [
                 video_url,
@@ -290,7 +354,9 @@ class YtdlpTool(BaseTool):
                 )
             )
 
-            return self._resolve_downloaded_media_path(result, target)
+            return self._resolve_downloaded_media_path(
+                result, target, command_started_at_ms
+            )
 
         except Exception as e:
             raise Exception(f"Audio download failed: {str(e)}")
@@ -359,15 +425,14 @@ class YtdlpTool(BaseTool):
 
             target = self._resolve_media_output_target(output_path)
             os.makedirs(target["directory_path"], exist_ok=True)
+            command_started_at_ms = time.time() * 1000
             downloaded_file_path = ""
 
             def handle_output(output: str, is_error: bool):
                 nonlocal downloaded_file_path
-                if is_error:
-                    return
 
                 for line in output.split("\n"):
-                    if "[download]" in line:
+                    if not is_error and "[download]" in line:
                         progress_match = DOWNLOAD_PROGRESS_PATTERN.search(line)
                         if progress_match and on_progress:
                             on_progress(
@@ -384,7 +449,7 @@ class YtdlpTool(BaseTool):
                     if path_match:
                         downloaded_file_path = path_match
 
-                    if "[download] 100%" in line and on_progress:
+                    if not is_error and "[download] 100%" in line and on_progress:
                         on_progress({"percentage": 100, "status": "completed"})
 
             args = self._get_config_args() + [
@@ -393,8 +458,9 @@ class YtdlpTool(BaseTool):
                 format_selector,
                 "-o",
                 target["output_template"],
+                "--newline",
             ]
-            self.execute_command(
+            result = self.execute_command(
                 ExecuteCommandOptions(
                     binary_name="yt-dlp",
                     args=args,
@@ -404,7 +470,11 @@ class YtdlpTool(BaseTool):
                 )
             )
 
-            return self._resolve_downloaded_media_path(downloaded_file_path, target)
+            return self._resolve_downloaded_media_path(
+                "\n".join([downloaded_file_path, result]),
+                target,
+                command_started_at_ms,
+            )
 
         except Exception as e:
             raise Exception(f"Quality-specific video download failed: {str(e)}")
@@ -469,6 +539,7 @@ class YtdlpTool(BaseTool):
         try:
             target = self._resolve_media_output_target(output_path)
             os.makedirs(target["directory_path"], exist_ok=True)
+            command_started_at_ms = time.time() * 1000
 
             args = self._get_config_args() + [
                 video_url,
@@ -484,7 +555,9 @@ class YtdlpTool(BaseTool):
                 )
             )
 
-            return self._resolve_downloaded_media_path(result, target)
+            return self._resolve_downloaded_media_path(
+                result, target, command_started_at_ms
+            )
 
         except Exception as e:
             raise Exception(f"Video download with thumbnail failed: {str(e)}")
