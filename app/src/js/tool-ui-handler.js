@@ -95,6 +95,26 @@ export default class ToolUIHandler {
       : this.createLegacyToolGroupContainer(params)
   }
 
+  getRemixIconClass(iconName) {
+    const fallbackIconName = 'ri-magic-line'
+    if (typeof iconName !== 'string') {
+      return fallbackIconName
+    }
+
+    const trimmedIconName = iconName.trim()
+    if (!trimmedIconName || trimmedIconName.includes(' ')) {
+      return fallbackIconName
+    }
+
+    return trimmedIconName.startsWith('ri-')
+      ? trimmedIconName
+      : `ri-${trimmedIconName}`
+  }
+
+  getToolActivityIconClass(data) {
+    return this.getRemixIconClass(data.toolIconName || data.toolkitIconName)
+  }
+
   /**
    * Create the legacy shell-like tool group container.
    */
@@ -159,7 +179,7 @@ export default class ToolUIHandler {
     heading.className = 'tool-activity-heading'
 
     const icon = document.createElement('i')
-    icon.className = 'ri-magic-line tool-icon'
+    icon.className = `${this.getToolActivityIconClass(data)} tool-icon`
 
     const titleBlock = document.createElement('div')
     titleBlock.className = 'tool-activity-title-block'

@@ -45,6 +45,8 @@ import { LEON_ROUTING_MODE } from '@/constants'
 import { RoutingMode, SkillFormat } from '@/types'
 import { CONFIG_STATE } from '@/core/config-states/config-state'
 import { WorkflowProgressWidget } from '@/core/nlp/nlu/workflow-progress-widget'
+import { CONVERSATION_SESSION_MANAGER } from '@/core/session-manager'
+import { getActiveConversationSessionId } from '@/core/session-manager/session-context'
 
 // TODO: delete?
 export const DEFAULT_NLU_RESULT = {
@@ -77,7 +79,7 @@ export default class NLU {
   private _nluProcessResult = DEFAULT_NLU_PROCESS_RESULT
   private _nluResult: NLUResult = DEFAULT_NLU_RESULT
   // Used to store the conversation state (across multiple turns)
-  public conversation = new Conversation('conv0')
+  private readonly conversations = new Map<string, Conversation>()
   private hasHandledProviderFailure = false
   private _currentResponseRoute: RoutingRoute = 'controlled'
   private workflowProgress = new WorkflowProgressWidget()
@@ -88,6 +90,21 @@ export default class NLU {
   private readonly routingRoutes: Record<RoutingRoute, RoutingRoute> = {
     controlled: 'controlled',
     react: 'react'
+  }
+
+  public get conversation(): Conversation {
+    const sessionId = getActiveConversationSessionId() || 'conv0'
+    const existingConversation = this.conversations.get(sessionId)
+
+    if (existingConversation) {
+      return existingConversation
+    }
+
+    const conversation = new Conversation(sessionId)
+
+    this.conversations.set(sessionId, conversation)
+
+    return conversation
   }
 
   get nluProcessResult(): NLUProcessResult {
@@ -1283,6 +1300,16 @@ export default class NLU {
                 ? { messageId: options.ownerMessageId }
                 : {})
             })
+            const currentSessionId =
+              CONVERSATION_SESSION_MANAGER.getCurrentSessionId()
+            CONVERSATION_SESSION_MANAGER.maybeSetFallbackTitle(
+              currentSessionId,
+              utterance
+            )
+            CONVERSATION_SESSION_MANAGER.generateTitleFromFirstMessage(
+              currentSessionId,
+              utterance
+            )
             void PULSE_MANAGER.observeOwnerUtterance(utterance).catch(
               (error: unknown) => {
                 LogHelper.title('NLU')

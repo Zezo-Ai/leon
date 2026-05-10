@@ -37,6 +37,7 @@ import type { MessageLog } from '@/types'
 import { ConversationHistoryHelper } from '@/helpers/conversation-history-helper'
 import { CONFIG_STATE } from '@/core/config-states/config-state'
 import { SkillDomainHelper } from '@/helpers/skill-domain-helper'
+import { getActiveConversationSessionId } from '@/core/session-manager/session-context'
 
 function getLLMProviderName(): LLMProviders {
   return CONFIG_STATE.getModelState().getAgentProvider()
@@ -102,34 +103,24 @@ import {
   deriveLLMMetrics,
   observeCompletionMetrics
 } from './react-llm-duty/metrics'
+import {
+  buildPausedTrackedSteps,
+  buildResumedExecutionInput,
+  createExecutionContinuationState,
+  createIntermediateAnswerExecutionRecord,
+  isExecutionContinuationStateValid,
+  shouldContinueAfterIntermediateAnswerHandoff,
+  type ReactExecutionContinuationPayload,
+  type ReactExecutionContinuationState
+} from './react-llm-duty/human-in-the-loop'
 
 const REACT_CONTINUATION_STATE_FILENAME = '.react-execution-continuation-state.json'
 const REACT_HISTORY_COMPACTION_STATE_FILENAME =
   '.react-history-compaction-state.json'
-const REACT_CONTINUATION_MAX_AGE_MS = 30 * 60 * 1_000
+const REACT_SESSION_STATE_FILENAME_SEPARATOR = '--'
 const REACT_PROMPTS_LOG_DIR = path.join(PROFILE_LOGS_PATH, 'prompts')
 
 type ReactHistoryCompactionScope = 'local' | 'remote'
-
-interface ReactExecutionContinuationState {
-  version: 1
-  phase: 'execution'
-  planWidgetId: string
-  originalInput: string
-  clarificationQuestion: string
-  pendingSteps: PlanStep[]
-  executionHistory: ExecutionRecord[]
-  trackedSteps: TrackedPlanStep[]
-  currentStepIndex: number
-  replanCount: number
-  executionCount: number
-  createdAt: number
-}
-
-interface ReactExecutionContinuationPayload {
-  state: ReactExecutionContinuationState
-  resumedInput: string
-}
 
 interface PreparedReactHistory {
   messageLogs: MessageLog[]
@@ -214,16 +205,10 @@ export class ReActLLMDuty extends LLMDuty {
   private static context: LlamaContext = null as unknown as LlamaContext
   private static session: LlamaChatSession =
     null as unknown as LlamaChatSession
-  private static readonly continuationStateStore =
-    new ContextStateStore<ReactExecutionContinuationState | null>(
-      REACT_CONTINUATION_STATE_FILENAME,
-      null
-    )
-  private static readonly historyCompactionStateStore =
-    new ContextStateStore<ReactHistoryCompactionState>(
-      REACT_HISTORY_COMPACTION_STATE_FILENAME,
-      REACT_HISTORY_COMPACTION_STATE_FALLBACK
-    )
+  private static readonly continuationStateStores =
+    new Map<string, ContextStateStore<ReactExecutionContinuationState | null>>()
+  private static readonly historyCompactionStateStores =
+    new Map<string, ContextStateStore<ReactHistoryCompactionState>>()
   protected systemPrompt: LLMDutyParams['systemPrompt'] = null
   protected readonly name = 'ReAct LLM Duty'
   protected input: LLMDutyParams['input'] = null
@@ -451,7 +436,7 @@ export class ReActLLMDuty extends LLMDuty {
             Math.max(continuation.state.currentStepIndex, 0),
             Math.max(trackedSteps.length - 1, 0)
           )
-          trackedSteps = this.buildPausedTrackedSteps(
+          trackedSteps = buildPausedTrackedSteps(
             trackedSteps,
             currentStepIndex
           )
@@ -611,7 +596,7 @@ export class ReActLLMDuty extends LLMDuty {
           )
 
           if (stepResult.signal.intent === 'clarification') {
-            const pausedTrackedSteps = this.buildPausedTrackedSteps(
+            const pausedTrackedSteps = buildPausedTrackedSteps(
               trackedSteps,
               currentStepIndex
             )
@@ -641,6 +626,41 @@ export class ReActLLMDuty extends LLMDuty {
               `Execution paused for clarification at step "${currentStep.label}"`
             )
             return await finalizeFromSignal(stepResult.signal)
+          }
+
+          if (
+            shouldContinueAfterIntermediateAnswerHandoff(
+              stepResult.signal,
+              pendingSteps
+            )
+          ) {
+            LogHelper.debug(
+              `Continuing after intermediate answer handoff; ${pendingSteps.length} pending step(s) remain`
+            )
+            executionHistory.push(
+              createIntermediateAnswerExecutionRecord(
+                currentStep,
+                stepResult.signal
+              )
+            )
+
+            if (currentStepIndex < trackedSteps.length) {
+              trackedSteps[currentStepIndex]!.status = 'completed'
+            }
+            const nextTrackedIndex = currentStepIndex + 1
+            if (nextTrackedIndex < trackedSteps.length) {
+              trackedSteps[nextTrackedIndex]!.status = 'in_progress'
+            }
+            currentExecutingFunction = null
+            emitPlanWidget(
+              trackedSteps,
+              currentStepIndex,
+              planWidgetIdValue,
+              true,
+              currentExecutingFunction
+            )
+            currentStepIndex = nextTrackedIndex
+            continue
           }
 
           // Mark all remaining steps as completed in the widget
@@ -727,7 +747,7 @@ export class ReActLLMDuty extends LLMDuty {
           )
 
           if (stepResult.handoffSignal.intent === 'clarification') {
-            const pausedTrackedSteps = this.buildPausedTrackedSteps(
+            const pausedTrackedSteps = buildPausedTrackedSteps(
               trackedSteps,
               currentStepIndex
             )
@@ -759,20 +779,31 @@ export class ReActLLMDuty extends LLMDuty {
             return await finalizeFromSignal(stepResult.handoffSignal)
           }
 
-          // Mark all remaining as completed
-          for (const ts of trackedSteps) {
-            ts.status = 'completed'
-          }
-          currentExecutingFunction = null
-          emitPlanWidget(
-            trackedSteps,
-            null,
-            planWidgetIdValue,
-            true,
-            currentExecutingFunction
-          )
+          if (
+            shouldContinueAfterIntermediateAnswerHandoff(
+              stepResult.handoffSignal,
+              pendingSteps
+            )
+          ) {
+            LogHelper.debug(
+              `Continuing after intermediate tool answer handoff; ${pendingSteps.length} pending step(s) remain`
+            )
+          } else {
+            // Mark all remaining as completed
+            for (const ts of trackedSteps) {
+              ts.status = 'completed'
+            }
+            currentExecutingFunction = null
+            emitPlanWidget(
+              trackedSteps,
+              null,
+              planWidgetIdValue,
+              true,
+              currentExecutingFunction
+            )
 
-          return await finalizeFromSignal(stepResult.handoffSignal)
+            return await finalizeFromSignal(stepResult.handoffSignal)
+          }
         }
 
         // Update plan widget: mark current step as completed, next as in_progress
@@ -821,7 +852,7 @@ export class ReActLLMDuty extends LLMDuty {
               const retryStepIndex = Math.max(0, currentStepIndex - 1)
               const pausedTrackedSteps =
                 trackedSteps.length > 0
-                  ? this.buildPausedTrackedSteps(trackedSteps, retryStepIndex)
+                  ? buildPausedTrackedSteps(trackedSteps, retryStepIndex)
                   : [
                       {
                         label: currentStep.label,
@@ -1097,6 +1128,54 @@ export class ReActLLMDuty extends LLMDuty {
     }
   }
 
+  private getSessionStateFilename(filename: string): string {
+    const sessionId = getActiveConversationSessionId()
+
+    if (!sessionId) {
+      return filename
+    }
+
+    return `${filename}${REACT_SESSION_STATE_FILENAME_SEPARATOR}${sessionId}`
+  }
+
+  private getContinuationStateStore(): ContextStateStore<ReactExecutionContinuationState | null> {
+    const filename = this.getSessionStateFilename(REACT_CONTINUATION_STATE_FILENAME)
+    const existingStore = ReActLLMDuty.continuationStateStores.get(filename)
+
+    if (existingStore) {
+      return existingStore
+    }
+
+    const store = new ContextStateStore<ReactExecutionContinuationState | null>(
+      filename,
+      null
+    )
+
+    ReActLLMDuty.continuationStateStores.set(filename, store)
+
+    return store
+  }
+
+  private getHistoryCompactionStateStore(): ContextStateStore<ReactHistoryCompactionState> {
+    const filename = this.getSessionStateFilename(
+      REACT_HISTORY_COMPACTION_STATE_FILENAME
+    )
+    const existingStore = ReActLLMDuty.historyCompactionStateStores.get(filename)
+
+    if (existingStore) {
+      return existingStore
+    }
+
+    const store = new ContextStateStore<ReactHistoryCompactionState>(
+      filename,
+      REACT_HISTORY_COMPACTION_STATE_FALLBACK
+    )
+
+    ReActLLMDuty.historyCompactionStateStores.set(filename, store)
+
+    return store
+  }
+
   private getHistoryEligibleConversationLogs(
     conversationLogs: MessageLog[]
   ): MessageLog[] {
@@ -1108,7 +1187,7 @@ export class ReActLLMDuty extends LLMDuty {
   private loadHistoryCompactionProviderState(
     scope: ReactHistoryCompactionScope
   ): ReactHistoryCompactionProviderState {
-    const persistedState = ReActLLMDuty.historyCompactionStateStore.load()
+    const persistedState = this.getHistoryCompactionStateStore().load()
     return this.normalizeHistoryCompactionProviderState(persistedState?.[scope])
   }
 
@@ -1140,7 +1219,7 @@ export class ReActLLMDuty extends LLMDuty {
     scope: ReactHistoryCompactionScope,
     providerState: ReactHistoryCompactionProviderState
   ): void {
-    const persistedState = ReActLLMDuty.historyCompactionStateStore.load()
+    const persistedState = this.getHistoryCompactionStateStore().load()
     const nextState: ReactHistoryCompactionState = {
       version: 1,
       local:
@@ -1153,7 +1232,7 @@ export class ReActLLMDuty extends LLMDuty {
           : this.normalizeHistoryCompactionProviderState(persistedState?.remote)
     }
 
-    ReActLLMDuty.historyCompactionStateStore.save(nextState)
+    this.getHistoryCompactionStateStore().save(nextState)
   }
 
   private normalizeMessageLogs(value: unknown): MessageLog[] {
@@ -1611,21 +1690,14 @@ export class ReActLLMDuty extends LLMDuty {
     return this.safeJSONStringify(input)
   }
 
-  private static loadValidExecutionContinuationState(): ReactExecutionContinuationState | null {
-    const state = ReActLLMDuty.continuationStateStore.load()
+  private loadValidExecutionContinuationState(): ReactExecutionContinuationState | null {
+    const state = this.getContinuationStateStore().load()
     if (!state) {
       return null
     }
 
-    const isExpired =
-      !state.createdAt || Date.now() - state.createdAt > REACT_CONTINUATION_MAX_AGE_MS
-    if (isExpired) {
-      ReActLLMDuty.continuationStateStore.save(null)
-      return null
-    }
-
-    if (state.phase !== 'execution' || !Array.isArray(state.pendingSteps)) {
-      ReActLLMDuty.continuationStateStore.save(null)
+    if (!isExecutionContinuationStateValid(state)) {
+      this.getContinuationStateStore().save(null)
       return null
     }
 
@@ -1633,15 +1705,15 @@ export class ReActLLMDuty extends LLMDuty {
   }
 
   private loadExecutionContinuation(): ReactExecutionContinuationState | null {
-    return ReActLLMDuty.loadValidExecutionContinuationState()
+    return this.loadValidExecutionContinuationState()
   }
 
   private saveExecutionContinuation(state: ReactExecutionContinuationState): void {
-    ReActLLMDuty.continuationStateStore.save(state)
+    this.getContinuationStateStore().save(state)
   }
 
   private clearExecutionContinuation(): void {
-    ReActLLMDuty.continuationStateStore.save(null)
+    this.getContinuationStateStore().save(null)
   }
 
   private consumeExecutionContinuation(
@@ -1654,7 +1726,11 @@ export class ReActLLMDuty extends LLMDuty {
 
     this.clearExecutionContinuation()
 
-    const resumedInput = `${state.originalInput}\n\nPrevious clarification request: "${state.clarificationQuestion}"\nClarification reply: "${ownerReply}"`
+    const resumedInput = buildResumedExecutionInput(
+      state.originalInput,
+      state.clarificationQuestion,
+      ownerReply
+    )
 
     return { state, resumedInput }
   }
@@ -1671,51 +1747,7 @@ export class ReActLLMDuty extends LLMDuty {
     replanCount: number
     executionCount: number
   }): void {
-    this.saveExecutionContinuation({
-      version: 1,
-      phase: 'execution',
-      planWidgetId: params.planWidgetId,
-      originalInput: params.originalInput,
-      clarificationQuestion: params.clarificationQuestion,
-      pendingSteps: [params.currentStep, ...params.pendingSteps].map((step) => ({
-        function: step.function,
-        label: step.label
-      })),
-      executionHistory: params.executionHistory.map((item) => ({ ...item })),
-      trackedSteps: params.trackedSteps.map((step) => ({ ...step })),
-      currentStepIndex:
-        params.trackedSteps.length > 0
-          ? Math.min(params.currentStepIndex, params.trackedSteps.length - 1)
-          : 0,
-      replanCount: params.replanCount,
-      executionCount: params.executionCount,
-      createdAt: Date.now()
-    })
-  }
-
-  private buildPausedTrackedSteps(
-    trackedSteps: TrackedPlanStep[],
-    inProgressIndex: number
-  ): TrackedPlanStep[] {
-    if (trackedSteps.length === 0) {
-      return []
-    }
-
-    const normalizedIndex = Math.min(
-      Math.max(inProgressIndex, 0),
-      trackedSteps.length - 1
-    )
-
-    return trackedSteps.map((step, index) => {
-      if (index < normalizedIndex) {
-        return { ...step, status: 'completed' as PlanStepStatus }
-      }
-      if (index === normalizedIndex) {
-        return { ...step, status: 'in_progress' as PlanStepStatus }
-      }
-
-      return { ...step, status: 'pending' as PlanStepStatus }
-    })
+    this.saveExecutionContinuation(createExecutionContinuationState(params))
   }
 
   // ---------------------------------------------------------------------------

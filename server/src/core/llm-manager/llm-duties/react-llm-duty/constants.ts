@@ -116,6 +116,7 @@ You are executing one specific step. You are given the current function signatur
 
 <step_execution_policy>
 - Fill in the tool_input based on the user request and any observations from previous steps.
+- Use prior conversation history when the current request is a short follow-up or confirmation and the needed artifact details were discussed earlier.
 - When chaining tools, reuse fields from the latest observation to fill the next tool_input whenever possible.
 - Previous Executions contain reusable observed values from earlier steps. Use them directly for later write/report/transform steps.
 - If an active Agent Skill is provided, its SKILL.md and active skill policy are binding for the current step.
@@ -232,7 +233,7 @@ export const MAX_TOOL_FAILURE_RETRIES = 2
 export const REACT_TEMPERATURE = 0.2
 export const REACT_INFERENCE_TIMEOUT_MS = 120_000
 export const REACT_TIMEOUT_MAX_RETRIES = 1
-export const FINAL_ANSWER_RETRY_DURATION_MS = 75_000
+export const FINAL_ANSWER_RETRY_DURATION_MS = 180_000
 export const FINAL_ANSWER_MAX_RETRIES = 2
 export const TOOL_CALL_WAIT_NOTICE_DELAY_MS = 45_000
 export const TOOL_CALL_DIAGNOSIS_DELAY_MS = 90_000
