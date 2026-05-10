@@ -116,6 +116,7 @@ You are executing one specific step. You are given the current function signatur
 
 <step_execution_policy>
 - Fill in the tool_input based on the user request and any observations from previous steps.
+- Use prior conversation history when the current request is a short follow-up or confirmation and the needed artifact details were discussed earlier.
 - When chaining tools, reuse fields from the latest observation to fill the next tool_input whenever possible.
 - Previous Executions contain reusable observed values from earlier steps. Use them directly for later write/report/transform steps.
 - If an active Agent Skill is provided, its SKILL.md and active skill policy are binding for the current step.

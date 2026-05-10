@@ -164,6 +164,61 @@ function shouldInjectContextManifestForExecution(
   return toolkitId === 'structured_knowledge' && toolId === 'context'
 }
 
+function resolveUniqueFunctionByLeafName(
+  functionName: string
+): string | null {
+  const normalizedFunctionName = functionName.trim()
+  if (!normalizedFunctionName) {
+    return null
+  }
+
+  const matches: string[] = []
+  for (const tool of TOOLKIT_REGISTRY.getFlattenedTools()) {
+    const functions = TOOLKIT_REGISTRY.getToolFunctions(
+      tool.toolkitId,
+      tool.toolId
+    )
+
+    if (functions?.[normalizedFunctionName]) {
+      matches.push(
+        `${tool.toolkitId}.${tool.toolId}.${normalizedFunctionName}`
+      )
+    }
+  }
+
+  return matches.length === 1 ? matches[0]! : null
+}
+
+function resolvePlannedFunctionReference(qualifiedName: string): string | null {
+  const normalizedQualifiedName = qualifiedName.trim()
+  if (!normalizedQualifiedName) {
+    return null
+  }
+
+  const parts = normalizedQualifiedName.split('.').filter(Boolean)
+  if (parts.length >= 3) {
+    const toolkitId = parts[0] || ''
+    const toolId = parts[1] || ''
+    const functionName = parts.slice(2).join('.') || ''
+    const functions = TOOLKIT_REGISTRY.getToolFunctions(toolkitId, toolId)
+
+    if (functions?.[functionName]) {
+      return normalizedQualifiedName
+    }
+  }
+
+  if (parts.length <= 2) {
+    const toolkitId = parts.length === 2 ? parts[0] : undefined
+    const toolId = parts.length === 2 ? parts[1] : parts[0]
+    if (toolId && TOOLKIT_REGISTRY.resolveToolById(toolId, toolkitId)) {
+      return normalizedQualifiedName
+    }
+  }
+
+  const leafName = parts[parts.length - 1] || ''
+  return resolveUniqueFunctionByLeafName(leafName)
+}
+
 function buildExecutionContextManifestSection(
   caller: LLMCaller,
   toolkitId: string,
@@ -405,7 +460,7 @@ Use only the user request and collected observations to decide whether the reque
     prompt,
     systemPrompt,
     schema,
-    undefined,
+    caller.history,
     buildExecutionPromptSections({
       prompt,
       systemPrompt,
@@ -463,7 +518,27 @@ export async function runExecutionStep(
   executionHistory: ExecutionRecord[],
   catalog: Catalog
 ): Promise<ExecutionStepResult> {
-  const qualifiedName = step.function
+  const resolvedQualifiedName = resolvePlannedFunctionReference(step.function)
+
+  if (!resolvedQualifiedName) {
+    return {
+      type: 'executed',
+      execution: {
+        function: step.function,
+        status: 'error',
+        observation: `Invalid function reference "${step.function}". Use a function from the available catalog.`
+      }
+    }
+  }
+
+  if (resolvedQualifiedName !== step.function) {
+    LogHelper.title(`${DUTY_NAME} / execution`)
+    LogHelper.debug(
+      `Normalized planned function "${step.function}" -> "${resolvedQualifiedName}"`
+    )
+  }
+
+  const qualifiedName = resolvedQualifiedName
   const parts = qualifiedName.split('.')
 
   // If the plan only has tool-level references (from tool-level catalog),
@@ -696,7 +771,7 @@ async function resolveToolFunctionWithNativeTools(
     resolveSystemPrompt,
     tools,
     'auto',
-    undefined,
+    caller.history,
     false,
     buildExecutionPromptSections({
       prompt,
@@ -948,7 +1023,7 @@ async function resolveToolFunctionWithJSONMode(
     prompt,
     resolveSystemPrompt,
     resolveSchema,
-    undefined,
+    caller.history,
     buildExecutionPromptSections({
       prompt,
       systemPrompt: resolveSystemPrompt,
@@ -1227,7 +1302,7 @@ async function executeFunctionWithNativeTools(
       executeSystemPrompt,
       [tool],
       'auto',
-      undefined,
+      caller.history,
       false,
       buildExecutionPromptSections({
         prompt,
@@ -1465,7 +1540,7 @@ async function executeFunctionWithJSONMode(
       prompt,
       executeSystemPrompt,
       executeSchema,
-      undefined,
+      caller.history,
       buildExecutionPromptSections({
         prompt,
         systemPrompt: executeSystemPrompt,
