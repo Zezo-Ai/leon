@@ -276,6 +276,8 @@ function emitToolExecutionToWebApp(params: {
   )
   const toolkitName = resolvedTool?.toolkitName || params.toolkitId
   const toolName = resolvedTool?.toolName || params.toolId
+  const toolkitIconName = resolvedTool?.toolkitIconName
+  const toolIconName = resolvedTool?.toolIconName
   const toolGroupId =
     `react_${params.toolkitId}_${params.toolId}_${params.functionName}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 
@@ -304,6 +306,8 @@ function emitToolExecutionToWebApp(params: {
     toolPhase: 'input',
     toolkitName,
     toolName,
+    toolkitIconName,
+    toolIconName,
     toolGroupId,
     key: `${params.toolkitId}.${params.toolId}.${params.functionName}`,
     functionName: params.functionName,
@@ -317,6 +321,8 @@ function emitToolExecutionToWebApp(params: {
     toolPhase: 'output',
     toolkitName,
     toolName,
+    toolkitIconName,
+    toolIconName,
     toolGroupId,
     key: `${params.toolkitId}.${params.toolId}.${params.functionName}`,
     functionName: params.functionName,
