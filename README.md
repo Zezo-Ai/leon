@@ -178,12 +178,8 @@ You can also contribute by [sponsoring Leon](http://sponsor.getleon.ai).
 
 ## Thanks
 
-![OpenAI logo.](./.github/assets/thanks/openai-logo-light-mode.svg#gh-light-mode-only)![OpenAI logo.](./.github/assets/thanks/openai-logo-dark-mode.svg#gh-dark-mode-only)
-
-https://openai.com/form/codex-for-oss/
-
-[![JetBrains logo.](https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg)](https://jb.gg/OpenSource)
-
-![MacStadium logo.](./.github/assets/thanks/macstadium-logo-light-mode.svg#gh-light-mode-only)![MacStadium logo.](https://cdn.prod.website-files.com/687e650a56916806eaaf8f62/68e52d7970d6ee25d5710371_MacStadium-Logo-WhiteText1.svg#gh-dark-mode-only)
-
-https://macstadium.com/company/opensource
+| Logo | URL |
+| --- | --- |
+| ![OpenAI logo.](./.github/assets/thanks/openai-logo-light-mode.svg#gh-light-mode-only)![OpenAI logo.](./.github/assets/thanks/openai-logo-dark-mode.svg#gh-dark-mode-only) | [openai.com/form/codex-for-oss](https://openai.com/form/codex-for-oss/) |
+| [![JetBrains logo.](https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg)](https://jb.gg/OpenSource) | [jb.gg/OpenSource](https://jb.gg/OpenSource) |
+| ![MacStadium logo.](./.github/assets/thanks/macstadium-logo-light-mode.svg#gh-light-mode-only)![MacStadium logo.](./.github/assets/thanks/macstadium-logo-dark-mode.svg#gh-dark-mode-only) | [macstadium.com/company/opensource](https://macstadium.com/company/opensource) |
