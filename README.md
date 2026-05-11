@@ -178,18 +178,6 @@ You can also contribute by [sponsoring Leon](http://sponsor.getleon.ai).
 
 ## Thanks
 
-<p align="center">
-  <a href="https://openai.com/form/codex-for-oss/">
-    <img alt="OpenAI logo." src="./.github/assets/thanks/openai-logo-light-mode.svg#gh-light-mode-only" height="64" />
-    <img alt="OpenAI logo." src="./.github/assets/thanks/openai-logo-dark-mode.svg#gh-dark-mode-only" height="64" />
-  </a>
-  &nbsp;&nbsp;&nbsp;
-  <a href="https://jb.gg/OpenSource">
-    <img alt="JetBrains logo." src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg" height="64" />
-  </a>
-  &nbsp;&nbsp;&nbsp;
-  <a href="https://macstadium.com/company/opensource">
-    <img alt="MacStadium logo." src="./.github/assets/thanks/macstadium-logo-light-mode.svg#gh-light-mode-only" height="64" />
-    <img alt="MacStadium logo." src="https://cdn.prod.website-files.com/687e650a56916806eaaf8f62/68e52d7970d6ee25d5710371_MacStadium-Logo-WhiteText1.svg#gh-dark-mode-only" height="64" />
-  </a>
-</p>
+[![OpenAI logo.](./.github/assets/thanks/openai-logo-light-mode.svg#gh-light-mode-only)](https://openai.com/form/codex-for-oss/)[![OpenAI logo.](./.github/assets/thanks/openai-logo-dark-mode.svg#gh-dark-mode-only)](https://openai.com/form/codex-for-oss/)
+[![JetBrains logo.](https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg)](https://jb.gg/OpenSource)
+[![MacStadium logo.](./.github/assets/thanks/macstadium-logo-light-mode.svg#gh-light-mode-only)](https://macstadium.com/company/opensource)[![MacStadium logo.](https://cdn.prod.website-files.com/687e650a56916806eaaf8f62/68e52d7970d6ee25d5710371_MacStadium-Logo-WhiteText1.svg#gh-dark-mode-only)](https://macstadium.com/company/opensource)
