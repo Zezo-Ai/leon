@@ -26,6 +26,7 @@ import {
 import {
   LLMDuties,
   LLMProviders,
+  type LLMReasoningMode,
   type LLMPromptAbortReason,
   type OpenAITool,
   type OpenAIToolCall,
@@ -119,6 +120,62 @@ const REACT_HISTORY_COMPACTION_STATE_FILENAME =
   '.react-history-compaction-state.json'
 const REACT_SESSION_STATE_FILENAME_SEPARATOR = '--'
 const REACT_PROMPTS_LOG_DIR = path.join(PROFILE_LOGS_PATH, 'prompts')
+const LOCAL_REACT_MIN_REASONING_PHASES = new Set<ReactPhase>([
+  'execution',
+  'recovery'
+])
+const REPEATED_EXECUTION_LOOP_THRESHOLD = 2
+
+function isLocalAgentProvider(): boolean {
+  return [LLMProviders.Local, LLMProviders.LlamaCPP].includes(
+    getLLMProviderName()
+  )
+}
+
+function getEffectiveReasoningMode(
+  phase: ReactPhase,
+  requestedMode: LLMReasoningMode
+): LLMReasoningMode {
+  if (!isLocalAgentProvider()) {
+    return requestedMode
+  }
+
+  if (LOCAL_REACT_MIN_REASONING_PHASES.has(phase)) {
+    return 'off'
+  }
+
+  if (phase === 'planning' && requestedMode === 'on') {
+    return 'guarded'
+  }
+
+  return requestedMode
+}
+
+function getExecutionLoopSignature(execution: ExecutionRecord): string {
+  return JSON.stringify({
+    function: execution.function,
+    status: execution.status,
+    requestedToolInput: execution.requestedToolInput || '',
+    observation: String(execution.observation || '').slice(0, 1_000)
+  })
+}
+
+function countRecentRepeatedExecutions(
+  executionHistory: ExecutionRecord[],
+  execution: ExecutionRecord
+): number {
+  const signature = getExecutionLoopSignature(execution)
+  let count = 0
+
+  for (const historyItem of [...executionHistory].reverse()) {
+    if (getExecutionLoopSignature(historyItem) !== signature) {
+      break
+    }
+    count += 1
+  }
+
+  return count
+}
 
 type ReactHistoryCompactionScope = 'local' | 'remote'
 
@@ -723,7 +780,38 @@ export class ReActLLMDuty extends LLMDuty {
         }
 
         // Record execution
+        const repeatedExecutionCount = countRecentRepeatedExecutions(
+          executionHistory,
+          stepResult.execution
+        )
         executionHistory.push(stepResult.execution)
+
+        if (repeatedExecutionCount >= REPEATED_EXECUTION_LOOP_THRESHOLD) {
+          LogHelper.title(this.name)
+          LogHelper.warning(
+            `Execution loop detected after ${repeatedExecutionCount + 1} repeated "${stepResult.execution.function}" result(s)`
+          )
+          if (currentStepIndex < trackedSteps.length) {
+            trackedSteps[currentStepIndex]!.status =
+              stepResult.execution.status === 'error' ? 'error' : 'completed'
+          }
+          currentExecutingFunction = null
+          emitPlanWidget(
+            trackedSteps,
+            null,
+            planWidgetIdValue,
+            true,
+            currentExecutingFunction
+          )
+
+          return await finalizeFromSignal({
+            intent:
+              stepResult.execution.status === 'error' ? 'error' : 'blocked',
+            draft:
+              'Execution stopped because the same tool result repeated without new progress. Summarize the repeated observation and explain the next concrete input or setup needed.',
+            source: 'execution'
+          })
+        }
 
         if (
           stepResult.execution.status === 'success' &&
@@ -1918,13 +2006,19 @@ export class ReActLLMDuty extends LLMDuty {
     const phase = options?.phase ?? 'execution'
     const completionStartedAt = Date.now()
     const phasePolicy = getPhasePolicy(phase)
-    const reasoningMode =
+    const requestedReasoningMode =
       options?.disableThinking === true
         ? 'off'
         : (options?.reasoningMode ?? phasePolicy.reasoningMode)
+    const reasoningMode = getEffectiveReasoningMode(
+      phase,
+      requestedReasoningMode
+    )
     const disableThinking = reasoningMode === 'off'
     const shouldEmitReasoning =
-      options?.emitReasoning ?? phasePolicy.emitReasoning
+      reasoningMode === 'off'
+        ? false
+        : (options?.emitReasoning ?? phasePolicy.emitReasoning)
     const shouldStream =
       (options?.streamToProvider ?? phasePolicy.streamToProvider) &&
       getLLMProviderName() !== LLMProviders.Local
@@ -2023,13 +2117,19 @@ export class ReActLLMDuty extends LLMDuty {
     const completionStartedAt = Date.now()
     let firstVisibleTokenAt: number | null = null
     const phasePolicy = getPhasePolicy(phase)
-    const reasoningMode =
+    const requestedReasoningMode =
       options?.disableThinking === true
         ? 'off'
         : (options?.reasoningMode ?? phasePolicy.reasoningMode)
+    const reasoningMode = getEffectiveReasoningMode(
+      phase,
+      requestedReasoningMode
+    )
     const disableThinking = reasoningMode === 'off'
     const shouldEmitReasoning =
-      options?.emitReasoning ?? phasePolicy.emitReasoning
+      reasoningMode === 'off'
+        ? false
+        : (options?.emitReasoning ?? phasePolicy.emitReasoning)
     const shouldStreamToUser =
       options?.streamToUser ?? shouldStream ?? phasePolicy.streamToUser
     const shouldStreamEffective =
@@ -2193,13 +2293,19 @@ export class ReActLLMDuty extends LLMDuty {
     const phasePolicy = getPhasePolicy(phase)
     const effectiveToolChoice: OpenAIToolChoice | undefined =
       tools.length === 0 ? undefined : (toolChoice ?? 'auto')
-    const reasoningMode =
+    const requestedReasoningMode =
       options?.disableThinking === true
         ? 'off'
         : (options?.reasoningMode ?? phasePolicy.reasoningMode)
+    const reasoningMode = getEffectiveReasoningMode(
+      phase,
+      requestedReasoningMode
+    )
     const disableThinking = reasoningMode === 'off'
     const shouldEmitReasoning =
-      options?.emitReasoning ?? phasePolicy.emitReasoning
+      reasoningMode === 'off'
+        ? false
+        : (options?.emitReasoning ?? phasePolicy.emitReasoning)
     const shouldStreamToUserEffective =
       options?.streamToUser ?? shouldStreamToUser ?? phasePolicy.streamToUser
     const shouldStreamEffective =
