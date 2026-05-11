@@ -174,36 +174,22 @@ Leon started in 2017 and has been active since 2019. If you want the longer back
 
 ## 👍 Sponsors
 
-<table>
-  <tbody>
-    <tr>
-      <td align="center" valign="middle" width="128">
-        <a href="https://github.com/Appwrite">
-          <img src="https://github.com/Appwrite.png?size=128" />
-          Appwrite
-        </a><br>
-        <sub><sup>250 USD / month</sup></sub>
-      </td>
-      <td align="center" valign="middle" width="128">
-        <img src="https://getleon.ai/img/anonymous.svg" width="128" />
-        Anonymous
-        <br>
-        <sub><sup>100 USD / month</sup></sub>
-      </td>
-      <td align="center" valign="middle" width="128">
-        <a href="https://github.com/herbundkraut">
-          <img src="https://github.com/herbundkraut.png?size=128" />
-          herbundkraut
-        </a><br>
-        <sub><sup>10 USD / month</sup></sub>
-      </td>
-      <td align="center" valign="middle" width="128">
-        <a href="http://sponsor.getleon.ai/">
-          You?
-        </a>
-      </td>
-    </tr>
-  </tbody>
-</table>
-
 You can also contribute by [sponsoring Leon](http://sponsor.getleon.ai).
+
+## Thanks
+
+<p align="center">
+  <a href="https://openai.com/form/codex-for-oss/">
+    <img alt="OpenAI logo." src="./.github/assets/thanks/openai-logo-light-mode.svg#gh-light-mode-only" height="64" />
+    <img alt="OpenAI logo." src="./.github/assets/thanks/openai-logo-dark-mode.svg#gh-dark-mode-only" height="64" />
+  </a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://jb.gg/OpenSource">
+    <img alt="JetBrains logo." src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg" height="64" />
+  </a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://macstadium.com/company/opensource">
+    <img alt="MacStadium logo." src="./.github/assets/thanks/macstadium-logo-light-mode.svg#gh-light-mode-only" height="64" />
+    <img alt="MacStadium logo." src="https://cdn.prod.website-files.com/687e650a56916806eaaf8f62/68e52d7970d6ee25d5710371_MacStadium-Logo-WhiteText1.svg#gh-dark-mode-only" height="64" />
+  </a>
+</p>
