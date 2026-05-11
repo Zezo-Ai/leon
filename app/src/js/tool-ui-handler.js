@@ -270,6 +270,7 @@ export default class ToolUIHandler {
       rawDetails,
       rawInput: null,
       rawOutput: null,
+      preparationLog: [],
       isNew: true
     }
   }
@@ -448,6 +449,23 @@ export default class ToolUIHandler {
       }
     }
 
+    if (data.toolPhase === 'preparation') {
+      const progressMessage = data.message || data.answer || ''
+      this.setStatusChip(toolGroupContainer.statusChip, 'running')
+
+      if (progressMessage) {
+        toolGroupContainer.summary.textContent = progressMessage
+        toolGroupContainer.preparationLog.push(progressMessage)
+        this.renderPreparationLog(
+          toolGroupContainer.outputBody,
+          toolGroupContainer.preparationLog
+        )
+        toolGroupContainer.rawOutput = {
+          preparation: toolGroupContainer.preparationLog
+        }
+      }
+    }
+
     if (data.toolPhase === 'output') {
       const isError = data.status === 'error'
       toolGroupContainer.summary.textContent =
@@ -546,6 +564,29 @@ export default class ToolUIHandler {
 
     const preview = this.buildValueNode(data.output)
     container.appendChild(preview)
+  }
+
+  /**
+   * Render preparation progress before the final tool output is available.
+   */
+  renderPreparationLog(container, messages) {
+    container.innerHTML = ''
+
+    if (!messages.length) {
+      this.renderPlaceholder(container, 'Waiting for function output...')
+      return
+    }
+
+    const list = document.createElement('ul')
+    list.className = 'tool-value-list'
+
+    messages.forEach((message) => {
+      const item = document.createElement('li')
+      item.textContent = message
+      list.appendChild(item)
+    })
+
+    container.appendChild(list)
   }
 
   /**
