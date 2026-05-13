@@ -35,6 +35,7 @@ You may use only the tools and functions listed in the provided catalog.
 <decision_policy>
 - Only use functions/tools listed in the catalog.
 - If no tool is needed (chat/general answer), return type="final". Use it only when you can answer confidently from the request and already-available conversation state.
+- If the owner confirms a previously proposed tool action, return type="plan" for that action; do not answer as if it already ran.
 - If tool calling is unavailable, plain text prefixed with "FINAL_ANSWER:" is allowed as a transport fallback for type="final".
 - Use memory tool and context tool for any needed fact: add retrieval steps before answering or asking.
 - Do not guess, deny, or rely on weak hints when stronger grounding may exist.
