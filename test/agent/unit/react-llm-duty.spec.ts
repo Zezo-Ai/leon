@@ -425,6 +425,46 @@ describe('ReActLLMDuty agent loop', () => {
     })
   })
 
+  it('routes local plain-text planning output to final answer handoff', async () => {
+    const callLLM = vi.fn(async () => ({
+      output: 'Good morning. I am here and ready.'
+    }))
+    const caller = {
+      callLLM,
+      callLLMText: vi.fn(),
+      callLLMWithTools: vi.fn(),
+      supportsNativeTools: false,
+      input: 'Good morning Leon',
+      history: [],
+      agentSkillCatalog: '',
+      setAgentSkillContext: vi.fn(),
+      getAgentSkillContext: vi.fn(),
+      getContextFileContent: vi.fn(() => null),
+      getContextManifest: vi.fn(() => ''),
+      getSelfModelSnapshot: vi.fn(() => ''),
+      consumeProviderErrorMessage: vi.fn(() => null)
+    }
+
+    const result = await runPlanningPhaseDirect(
+      caller,
+      {
+        text: 'mock catalog',
+        mode: 'function'
+      },
+      []
+    )
+
+    expect(callLLM).toHaveBeenCalledOnce()
+    expect(result).toEqual({
+      type: 'handoff',
+      signal: {
+        intent: 'answer',
+        draft: 'Good morning. I am here and ready.',
+        source: 'planning'
+      }
+    })
+  })
+
   it('attempts Agent Skill selection on a clear metadata match', async () => {
     const agentSkillContext = {
       id: 'tiny-web-crawler',

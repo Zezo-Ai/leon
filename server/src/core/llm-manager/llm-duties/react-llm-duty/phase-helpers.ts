@@ -358,6 +358,27 @@ export function extractPlanningMarkedFinalAnswer(text: string): string | null {
   return answer || null
 }
 
+export function shouldTreatPlainPlanningTextAsFinalAnswer(text: string): boolean {
+  const sanitized = stripInlineToolMarkup(text)
+  if (!sanitized) {
+    return false
+  }
+
+  if (/^(\{|\[|```|<tool_call\b|<function=)/i.test(sanitized)) {
+    return false
+  }
+
+  if (/\b[a-z_]+\.[a-z_]+\.[a-zA-Z_]+\b/.test(sanitized)) {
+    return false
+  }
+
+  if (/\b(type|steps|summary|function|tool_call)\b\s*[:=]/i.test(sanitized)) {
+    return false
+  }
+
+  return true
+}
+
 export function extractPlanningTextHandoffDraft(text: string): string | null {
   const markedAnswer = extractPlanningMarkedFinalAnswer(text)
   if (markedAnswer) {

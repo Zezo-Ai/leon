@@ -22,6 +22,7 @@ import {
 } from './utils'
 import {
   shouldTreatPlanningTextAsFinalAnswer,
+  shouldTreatPlainPlanningTextAsFinalAnswer,
   extractPlanningMarkedFinalAnswer,
   extractPlanningTextHandoffDraft,
   createPlanFromUnexpectedToolCall,
@@ -635,6 +636,13 @@ export async function runPlanningPhase(
     const rawHandoffDraft = extractPlanningTextHandoffDraft(raw)
     if (rawHandoffDraft) {
       return createPlanningHandoff(rawHandoffDraft, 'answer')
+    }
+
+    if (shouldTreatPlainPlanningTextAsFinalAnswer(raw)) {
+      LogHelper.debug(
+        'Planning: local JSON mode returned plain conversational text; routing to final answer handoff'
+      )
+      return createPlanningHandoff(raw, 'answer')
     }
   }
 
