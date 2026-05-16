@@ -5,7 +5,8 @@ import { CONFIG_STATE } from '@/core/config-states/config-state'
 
 import {
   PLAN_SYSTEM_PROMPT,
-  DUTY_NAME
+  DUTY_NAME,
+  READ_TOOL_ARTIFACT_FUNCTION
 } from './constants'
 import type {
   Catalog,
@@ -222,7 +223,7 @@ export async function runPlanningPhase(
   const previousToolArtifacts =
     (await caller.getPreviousToolArtifacts?.())?.trim() || ''
   const previousToolArtifactsSection = previousToolArtifacts
-    ? `\n\n<previous_tool_artifacts>\n${previousToolArtifacts}\n</previous_tool_artifacts>`
+    ? `\n\n<previous_tool_outputs>\nUse these exact outputLogPath values with ${READ_TOOL_ARTIFACT_FUNCTION} when a previous tool result is needed in full. Do not invent output file paths.\n${previousToolArtifacts}\n</previous_tool_outputs>`
     : ''
   const prompt = `<context_manifest>\n${contextManifestSection}\n</context_manifest>\n\n${agentSkillSection}\n\n<available_catalog>\n${catalog.text}${catalogNote}\n</available_catalog>\n\n<self_model>\n${selfModelSection}\n</self_model>\n\n<grounding_note>\nEnvironment context is available through structured_knowledge.context tools when needed.\n</grounding_note>${previousToolArtifactsSection}\n\n<user_request>\n${caller.input}\n</user_request>`
 

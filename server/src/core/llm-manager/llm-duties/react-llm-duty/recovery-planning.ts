@@ -264,10 +264,10 @@ export async function runRecoveryPlanningPhase(
   const previousToolArtifacts =
     (await caller.getPreviousToolArtifacts?.())?.trim() || ''
   const previousToolArtifactsSection = previousToolArtifacts
-    ? `<previous_tool_artifacts>
+    ? `<previous_tool_outputs>
 Use these exact outputLogPath values with ${READ_TOOL_ARTIFACT_FUNCTION} when a previous tool result is truncated or missing detail. Do not invent output file paths.
 ${previousToolArtifacts}
-</previous_tool_artifacts>
+</previous_tool_outputs>
 
 `
     : ''

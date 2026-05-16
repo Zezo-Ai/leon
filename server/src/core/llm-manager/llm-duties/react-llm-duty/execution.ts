@@ -123,7 +123,7 @@ async function buildPreviousToolArtifactsExecutionSection(
     (await caller.getPreviousToolArtifacts?.())?.trim() || ''
 
   return previousToolArtifacts
-    ? `\n\n<previous_tool_artifacts>\nUse these exact outputLogPath values with ${READ_TOOL_ARTIFACT_FUNCTION} when a previous tool result is truncated or missing detail. Do not invent output file paths.\n${previousToolArtifacts}\n</previous_tool_artifacts>`
+    ? `\n\n<previous_tool_outputs>\nUse these exact outputLogPath values with ${READ_TOOL_ARTIFACT_FUNCTION} when a previous tool result is truncated or missing detail. Do not invent output file paths.\n${previousToolArtifacts}\n</previous_tool_outputs>`
     : ''
 }
 
