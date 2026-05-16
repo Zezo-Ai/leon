@@ -32,20 +32,21 @@ const coreMocks = vi.hoisted(() => ({
         toolkitName: 'Operating System Control',
         toolkitDescription: 'Control the operating system.',
         toolkitIconName: 'terminal',
-        toolId: 'bash',
-        toolName: 'Bash',
+        toolId: 'shell',
+        toolName: 'Shell',
         toolDescription: 'Execute shell commands.',
         toolIconName: 'terminal'
       }
     ]),
     getToolFunctions: vi.fn((toolkitId: string, toolId: string) => {
-      if (toolkitId !== 'operating_system_control' || toolId !== 'bash') {
+      if (toolkitId !== 'operating_system_control' || toolId !== 'shell') {
         return null
       }
 
       return {
-        executeBashCommand: {
-          description: 'Execute a bash command and return the result.',
+        executeCommand: {
+          description:
+            'Execute a command in the active platform shell and return the result.',
           parameters: {
             type: 'object',
             properties: {
@@ -58,7 +59,7 @@ const coreMocks = vi.hoisted(() => ({
     }),
     resolveToolById: vi.fn((toolId: string, toolkitId?: string) => {
       if (
-        toolId !== 'bash' ||
+        toolId !== 'shell' ||
         (toolkitId && toolkitId !== 'operating_system_control')
       ) {
         return null
@@ -68,8 +69,8 @@ const coreMocks = vi.hoisted(() => ({
         toolkitId: 'operating_system_control',
         toolkitName: 'Operating System Control',
         toolkitIconName: 'terminal',
-        toolId: 'bash',
-        toolName: 'Bash',
+        toolId: 'shell',
+        toolName: 'Shell',
         toolDescription: 'Execute shell commands.',
         toolIconName: 'terminal'
       }
@@ -87,6 +88,9 @@ const coreMocks = vi.hoisted(() => ({
   },
   conversationLogger: {
     loadAll: vi.fn(async () => [])
+  },
+  toolCallLogger: {
+    getRecentArtifactManifest: vi.fn(() => '')
   },
   llmProvider: {
     consumeLastProviderErrorMessage: vi.fn(() => null),
@@ -146,6 +150,7 @@ vi.mock('@/core', () => ({
   CONTEXT_MANAGER: coreMocks.contextManager,
   SELF_MODEL_MANAGER: coreMocks.selfModelManager,
   CONVERSATION_LOGGER: coreMocks.conversationLogger,
+  TOOL_CALL_LOGGER: coreMocks.toolCallLogger,
   BRAIN: coreMocks.brain,
   SOCKET_SERVER: {
     socket: coreMocks.socket,
@@ -268,6 +273,7 @@ beforeEach(() => {
   coreMocks.contextManager.getContextFileContent.mockReturnValue(null)
   coreMocks.contextManager.getManifest.mockReturnValue('')
   coreMocks.selfModelManager.getSnapshot.mockReturnValue('')
+  coreMocks.toolCallLogger.getRecentArtifactManifest.mockReturnValue('')
   coreMocks.llmProvider.consumeLastProviderErrorMessage.mockReturnValue(null)
 })
 
@@ -307,7 +313,7 @@ describe('ReActLLMDuty agent loop', () => {
     const result = await runExecutionStepDirect(
       caller,
       {
-        function: 'functions.executeBashCommand',
+        function: 'functions.executeCommand',
         label: 'Install smooth cursor plugin'
       },
       [],
@@ -465,7 +471,7 @@ describe('ReActLLMDuty agent loop', () => {
     })
   })
 
-  it('attempts Agent Skill selection on a clear metadata match', async () => {
+  it('preserves an Agent Skill id selected in a plan step', async () => {
     const agentSkillContext = {
       id: 'tiny-web-crawler',
       name: 'tiny-web-crawler',
@@ -474,34 +480,24 @@ describe('ReActLLMDuty agent loop', () => {
       skillPath: '/tmp/tiny-web-crawler/SKILL.md',
       instructions: '# Tiny Web Crawler'
     }
-    const callLLMWithTools = vi
-      .fn()
-      .mockResolvedValueOnce({
-        toolCall: {
-          functionName: 'select_agent_skill',
-          arguments: JSON.stringify({
-            skill_id: 'tiny-web-crawler',
-            reason: 'The request asks to crawl and fetch web page content.'
-          })
-        }
-      })
-      .mockResolvedValueOnce({
-        toolCall: {
-          functionName: 'create_plan',
-          arguments: JSON.stringify({
-            type: 'plan',
-            steps: [
-              {
-                function: 'operating_system_control.bash.executeBashCommand',
-                label: 'Fetch target page'
-              }
-            ],
-            summary: 'Fetching the target page...',
-            answer: null,
-            intent: null
-          })
-        }
-      })
+    const callLLMWithTools = vi.fn().mockResolvedValueOnce({
+      toolCall: {
+        functionName: 'create_plan',
+        arguments: JSON.stringify({
+          type: 'plan',
+          steps: [
+            {
+              function: 'operating_system_control.shell.executeCommand',
+              label: 'Fetch target page',
+              agent_skill_id: 'tiny-web-crawler'
+            }
+          ],
+          summary: 'Fetching the target page...',
+          answer: null,
+          intent: null
+        })
+      }
+    })
     const caller = {
       callLLM: vi.fn(),
       callLLMText: vi.fn(),
@@ -529,20 +525,18 @@ describe('ReActLLMDuty agent loop', () => {
       []
     )
 
-    expect(callLLMWithTools).toHaveBeenCalledTimes(2)
+    expect(callLLMWithTools).toHaveBeenCalledOnce()
     expect(callLLMWithTools.mock.calls[0]?.[2]?.[0]?.function.name).toBe(
-      'select_agent_skill'
-    )
-    expect(callLLMWithTools.mock.calls[1]?.[2]?.[0]?.function.name).toBe(
       'create_plan'
     )
-    expect(caller.setAgentSkillContext).toHaveBeenCalledWith(agentSkillContext)
+    expect(caller.setAgentSkillContext).not.toHaveBeenCalled()
     expect(result).toEqual({
       type: 'plan',
       steps: [
         {
-          function: 'operating_system_control.bash.executeBashCommand',
-          label: 'Fetch target page'
+          function: 'operating_system_control.shell.executeCommand',
+          label: 'Fetch target page',
+          agentSkillId: 'tiny-web-crawler'
         }
       ],
       summary: 'Fetching the target page...'
@@ -693,7 +687,7 @@ describe('ReActLLMDuty agent loop', () => {
         type: 'plan',
         steps: [
           {
-            function: 'operating_system_control.bash.executeBashCommand',
+            function: 'operating_system_control.shell.executeCommand',
             label: 'Fetch target page'
           }
         ],
@@ -706,7 +700,7 @@ describe('ReActLLMDuty agent loop', () => {
       return {
         type: 'executed',
         execution: {
-          function: 'operating_system_control.bash.executeBashCommand',
+          function: 'operating_system_control.shell.executeCommand',
           status: 'success',
           observation: 'Fetched with skill script.',
           stepLabel: 'Fetch target page'
@@ -729,13 +723,13 @@ describe('ReActLLMDuty agent loop', () => {
     // handoff Leon should forward into the final-answer phase.
     logUnitProgress('tool handoff scenario', {
       input: 'There is a file waiting for you. Do what it asks you to do.',
-      stepFunction: 'operating_system_control.bash.executeBashCommand'
+      stepFunction: 'operating_system_control.shell.executeCommand'
     })
     phaseMocks.runPlanningPhase.mockResolvedValue({
       type: 'plan',
       steps: [
         {
-          function: 'operating_system_control.bash.executeBashCommand',
+          function: 'operating_system_control.shell.executeCommand',
           label: 'List project root'
         }
       ],
@@ -744,7 +738,7 @@ describe('ReActLLMDuty agent loop', () => {
     phaseMocks.runExecutionStep.mockResolvedValue({
       type: 'executed',
       execution: {
-        function: 'operating_system_control.bash.executeBashCommand',
+        function: 'operating_system_control.shell.executeCommand',
         status: 'success',
         observation: 'package.json\nserver\nbridges',
         stepLabel: 'List project root',
@@ -784,7 +778,7 @@ describe('ReActLLMDuty agent loop', () => {
     )
     expect(result?.data.executionHistory).toEqual([
       {
-        function: 'operating_system_control.bash.executeBashCommand',
+        function: 'operating_system_control.shell.executeCommand',
         status: 'success',
         observation: 'package.json\nserver\nbridges',
         stepLabel: 'List project root',
@@ -802,7 +796,7 @@ describe('ReActLLMDuty agent loop', () => {
 
     let savedContinuation: SavedContinuationState | null = null
     const fileCreationStep = {
-      function: 'operating_system_control.bash.executeBashCommand',
+      function: 'operating_system_control.shell.executeCommand',
       label: 'Create file'
     }
 
@@ -830,7 +824,7 @@ describe('ReActLLMDuty agent loop', () => {
         return {
           type: 'executed',
           execution: {
-            function: 'operating_system_control.bash.executeBashCommand',
+            function: 'operating_system_control.shell.executeCommand',
             status: 'success',
             observation: 'Created /home/louis/Downloads/test.txt',
             stepLabel: 'Create file',
