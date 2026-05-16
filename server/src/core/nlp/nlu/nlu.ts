@@ -904,29 +904,40 @@ export default class NLU {
           toolExecutions
         })
       )
-      POST_TURN_MAINTENANCE_QUEUE.enqueue(
-        'owner profile sync',
-        () => syncOwnerProfileFromTurn(
-          utterance,
-          String(output),
-          toolExecutions
-        ).then(() => undefined)
-      )
-
-      if (!hasExplicitMemoryWrite) {
+      if (hasExplicitMemoryWrite) {
         POST_TURN_MAINTENANCE_QUEUE.enqueue(
-          'persistent memory extraction',
-          () => MEMORY_MANAGER.savePersistentMemoryCandidatesFromTurn(
+          'owner profile sync',
+          () => syncOwnerProfileFromTurn(
             utterance,
             String(output),
-            sentAt
-          )
-            .then(() => undefined)
+            toolExecutions
+          ).then(() => undefined)
         )
-      } else {
         LogHelper.title('NLU')
         LogHelper.debug(
           'Skipping automatic persistent extraction: explicit memory.write already executed in this turn'
+        )
+      } else {
+        POST_TURN_MAINTENANCE_QUEUE.enqueue(
+          'persistent memory extraction',
+          async () => {
+            const savedCount =
+              await MEMORY_MANAGER.savePersistentMemoryCandidatesFromTurn(
+                utterance,
+                String(output),
+                sentAt
+              )
+
+            if (savedCount === 0) {
+              return
+            }
+
+            await syncOwnerProfileFromTurn(
+              utterance,
+              String(output),
+              toolExecutions
+            )
+          }
         )
       }
     }
