@@ -637,10 +637,6 @@ export default class SelfModelManager {
       return true
     }
 
-    if (normalizeText(input.assistantMessage).length >= 192) {
-      return true
-    }
-
     return state.turnsSinceReflection >= 3
   }
 
