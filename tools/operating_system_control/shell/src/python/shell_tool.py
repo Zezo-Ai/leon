@@ -127,6 +127,7 @@ class ShellTool(BaseTool):
 
                 return {
                     "success": True,
+                    "commandSucceeded": True,
                     "stdout": "Command executed in a visible terminal. Review that terminal for command output.",
                     "stderr": "",
                     "returncode": 0,
@@ -139,7 +140,7 @@ class ShellTool(BaseTool):
                     binary_name=binary_name,
                     args=args,
                     options={
-                        "sync": True,
+                        "sync": False,
                         "cwd": cwd or os.getcwd(),
                         "timeout": timeout_seconds,
                     },
@@ -149,6 +150,7 @@ class ShellTool(BaseTool):
 
             return {
                 "success": True,
+                "commandSucceeded": True,
                 "stdout": result_output.strip(),
                 "stderr": "",
                 "returncode": 0,
@@ -196,25 +198,25 @@ class ShellTool(BaseTool):
             if "failed with exit code" in error_message:
                 exit_code_match = re.search(r"exit code (\d+)", error_message)
                 exit_code = int(exit_code_match.group(1)) if exit_code_match else -1
-                stderr_match = re.search(r"exit code \d+: (.+)$", error_message)
+                stderr_match = re.search(r"exit code \d+: ([\s\S]*)$", error_message)
                 stderr = stderr_match.group(1) if stderr_match else error_message
                 failure_output = (
                     f"Command failed in the visible terminal with exit code {exit_code}. Review that terminal for details."
                     if requires_visible_terminal
                     else stderr
                 )
-                attempts.append(
-                    {
-                        "attempt": attempt,
-                        "timeoutMs": timeout_milliseconds,
-                        "durationMs": duration_milliseconds,
-                        "status": "error",
-                        "error": failure_output,
-                    }
-                )
+                attempt_result = {
+                    "attempt": attempt,
+                    "timeoutMs": timeout_milliseconds,
+                    "durationMs": duration_milliseconds,
+                    "status": "error",
+                    "error": failure_output,
+                }
+                attempts.append(attempt_result)
 
                 return {
                     "success": False,
+                    "commandSucceeded": False,
                     "stdout": "",
                     "stderr": failure_output,
                     "returncode": exit_code,

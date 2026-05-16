@@ -10,6 +10,7 @@ const REQUIRED_SETTINGS: string[] = []
 
 interface ShellResult {
   success: boolean
+  commandSucceeded?: boolean
   error?: string
   stdout: string
   stderr: string
@@ -190,6 +191,7 @@ export default class ShellTool extends Tool {
 
         return {
           success: true,
+          commandSucceeded: true,
           stdout:
             'Command executed in a visible terminal. Review that terminal for command output.',
           stderr: '',
@@ -203,7 +205,7 @@ export default class ShellTool extends Tool {
         binaryName: shellInvocation.binaryName,
         args: shellInvocation.args,
         options: {
-          sync: true,
+          sync: false,
           cwd,
           timeout: timeoutMs
         },
@@ -218,6 +220,7 @@ export default class ShellTool extends Tool {
 
       return {
         success: true,
+        commandSucceeded: true,
         stdout: resultOutput.trim(),
         stderr: '',
         returncode: 0,
@@ -264,23 +267,27 @@ export default class ShellTool extends Tool {
             : exitCodeMatch && exitCodeMatch[1]
               ? parseInt(exitCodeMatch[1], 10)
               : -1
-        const stderrMatch = errorMessage.match(/exit code \d+: (.+)$/)
-        const stderr = processError.stderr ||
-          (stderrMatch && stderrMatch[1] ? stderrMatch[1] : errorMessage)
+        const stderrMatch = errorMessage.match(/exit code \d+: ([\s\S]*)$/)
+        const parsedErrorOutput =
+          stderrMatch && stderrMatch[1] ? stderrMatch[1].trim() : errorMessage
+        const stderr =
+          processError.stderr || (processError.stdout ? '' : parsedErrorOutput)
         const failureOutput = ShellTool.joinOutput([
           processError.stdout,
           stderr
         ]) || errorMessage
-        attempts.push({
+        const attemptResult: ShellAttempt = {
           attempt,
           timeoutMs,
           durationMs,
-          status: 'error',
-          error: failureOutput
-        })
+          status: 'error'
+        }
+        attemptResult.error = failureOutput
+        attempts.push(attemptResult)
 
         return {
           success: false,
+          commandSucceeded: false,
           error: requiresVisibleTerminal
             ? `Command failed in the visible terminal with exit code ${exitCode}. Review that terminal for details.`
             : failureOutput,

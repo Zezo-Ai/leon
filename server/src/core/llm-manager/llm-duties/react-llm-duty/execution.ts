@@ -844,6 +844,37 @@ function emitToolPreparationProgressToWebApp(params: {
   })
 }
 
+function emitToolExecutionOutputDeltaToWebApp(params: {
+  toolkitId: string
+  toolId: string
+  functionName: string
+  toolGroupId: string
+  output: string
+  stepLabel?: string
+}): void {
+  const output = params.output
+  if (!output.trim()) {
+    return
+  }
+
+  SOCKET_SERVER.emitAnswerToChatClients({
+    answer: output,
+    isToolOutput: true,
+    toolDisplayMode: 'activity_card',
+    toolPhase: 'output_delta',
+    ...getToolDisplayContext(
+      params.toolkitId,
+      params.toolId,
+      params.functionName
+    ),
+    toolGroupId: params.toolGroupId,
+    functionName: params.functionName,
+    status: 'running',
+    outputDelta: output,
+    ...(params.stepLabel ? { stepLabel: params.stepLabel } : {})
+  })
+}
+
 function emitToolPreparationOwnerMessage(
   key: string,
   toolName: string
@@ -2523,7 +2554,11 @@ export async function runToolExecution(
     functionName: string
     toolInput: string
     parsedInput?: Record<string, unknown>
-    onProgress?: (progress: { message: string, key?: string }) => void
+    onProgress?: (progress: {
+      message: string
+      key?: string
+      data?: Record<string, unknown>
+    }) => void
   } = {
     toolId,
     toolkitId,
@@ -2637,6 +2672,22 @@ export async function runToolExecution(
   let didNotifyOwnerPreparationReady = false
   let didObservePreparationFailure = false
   toolExecutionInput.onProgress = (progress): void => {
+    if (progress.key === 'bridges.tools.command_output_delta') {
+      const output =
+        typeof progress.data?.['output'] === 'string'
+          ? progress.data['output']
+          : progress.message
+      emitToolExecutionOutputDeltaToWebApp({
+        toolkitId,
+        toolId,
+        functionName,
+        toolGroupId,
+        output,
+        ...(stepLabel ? { stepLabel } : {})
+      })
+      return
+    }
+
     emitToolPreparationProgressToWebApp({
       toolkitId,
       toolId,
@@ -2695,23 +2746,23 @@ export async function runToolExecution(
     typeof nestedResult?.['error'] === 'string'
       ? nestedResult['error']
       : null
-  const hasDomainFailure =
+  const hasObservedToolFailure =
     toolExecutionResult.status === 'success' &&
     (toolOutputSuccess === false || nestedResultSuccess === false)
-  const effectiveStatus = hasDomainFailure
-    ? 'error'
+  const effectiveStatus = hasObservedToolFailure
+    ? 'observed'
     : toolExecutionResult.status
   const effectiveMessage =
-    (hasDomainFailure && (nestedResultError || toolOutputError)) ||
+    (hasObservedToolFailure && (nestedResultError || toolOutputError)) ||
     toolExecutionResult.message
 
   LogHelper.title(`${DUTY_NAME} / execution`)
-  if (hasDomainFailure) {
+  if (hasObservedToolFailure) {
     LogHelper.warning(
-      'Tool result normalized to [error]: tool output reported success=false'
+      'Tool result kept as [observed]: tool output reported success=false'
     )
   }
-  if (effectiveStatus !== 'success') {
+  if (effectiveStatus === 'error') {
     LogHelper.debug(
       `Tool result: ${qualifiedName} [${effectiveStatus}] — ${effectiveMessage}`
     )
@@ -2756,7 +2807,7 @@ export async function runToolExecution(
 
   // Check for missing settings
   const missingSettings =
-    effectiveStatus === 'error'
+    effectiveStatus !== 'success'
       ? ((toolOutput['missing_settings'] as
           | string[]
           | undefined) ??
@@ -2765,7 +2816,7 @@ export async function runToolExecution(
           | undefined))
       : undefined
   const settingsPath =
-    effectiveStatus === 'error'
+    effectiveStatus !== 'success'
       ? ((toolOutput['settings_path'] as
           | string
           | undefined) ??
@@ -2801,9 +2852,9 @@ export async function runToolExecution(
       : {}),
     message: effectiveMessage,
     data: toolExecutionResult.data,
-    ...(hasDomainFailure
+    ...(hasObservedToolFailure
       ? {
-          tool_output_failure: {
+          observed_tool_failure: {
             success: nestedResultSuccess ?? toolOutputSuccess,
             error: nestedResultError || toolOutputError || effectiveMessage
           }

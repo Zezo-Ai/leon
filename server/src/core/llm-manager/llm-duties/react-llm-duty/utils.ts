@@ -299,11 +299,15 @@ function formatObservationSummary(
   }
 
   const toolFailure =
-    parsed['tool_output_failure'] &&
-    typeof parsed['tool_output_failure'] === 'object' &&
-    !Array.isArray(parsed['tool_output_failure'])
-      ? (parsed['tool_output_failure'] as Record<string, unknown>)
-      : null
+    parsed['observed_tool_failure'] &&
+    typeof parsed['observed_tool_failure'] === 'object' &&
+    !Array.isArray(parsed['observed_tool_failure'])
+      ? (parsed['observed_tool_failure'] as Record<string, unknown>)
+      : parsed['tool_output_failure'] &&
+          typeof parsed['tool_output_failure'] === 'object' &&
+          !Array.isArray(parsed['tool_output_failure'])
+        ? (parsed['tool_output_failure'] as Record<string, unknown>)
+        : null
   const toolFailureError =
     toolFailure && typeof toolFailure['error'] === 'string'
       ? clipText(toolFailure['error'] as string, 160)

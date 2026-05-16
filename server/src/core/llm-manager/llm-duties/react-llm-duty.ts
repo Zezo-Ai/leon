@@ -935,6 +935,97 @@ export class ReActLLMDuty extends LLMDuty {
           }
         }
 
+        if (
+          stepResult.execution.status === 'observed' &&
+          pendingSteps.length === 0
+        ) {
+          const selfObservationResult = await runExecutionSelfObservationPhase(
+            caller,
+            executionHistory
+          )
+
+          if (selfObservationResult?.type === 'handoff') {
+            if (currentStepIndex < trackedSteps.length) {
+              trackedSteps[currentStepIndex]!.status = 'completed'
+            }
+            currentExecutingFunction = null
+            emitPlanWidget(
+              trackedSteps,
+              currentStepIndex,
+              planWidgetIdValue,
+              true,
+              currentExecutingFunction
+            )
+
+            return await finalizeFromSignal(selfObservationResult.signal)
+          }
+
+          if (
+            selfObservationResult?.type === 'replan' &&
+            selfObservationResult.steps.length > 0
+          ) {
+            if (replanCount >= MAX_REPLANS) {
+              LogHelper.title(this.name)
+              LogHelper.warning(
+                'Observed-output replanning skipped: max re-plans reached'
+              )
+              stepResult.execution.status = 'error'
+            } else {
+              replanCount += 1
+              stepResult.execution.status = 'error'
+              pendingSteps = selfObservationResult.steps.map((step) => ({
+                function: step.function,
+                label: step.label,
+                ...(step.agentSkillId ? { agentSkillId: step.agentSkillId } : {})
+              }))
+
+              LogHelper.title(this.name)
+              LogHelper.debug(
+                `Observed-output re-plan ${replanCount}/${MAX_REPLANS}: ${pendingSteps.map((s) => s.function).join(' -> ')}`
+              )
+              if (selfObservationResult.reason) {
+                LogHelper.debug(
+                  `Observed-output reason: "${selfObservationResult.reason}"`
+                )
+                const normalizedReason = selfObservationResult.reason
+                  .trim()
+                  .replace(/[.?!]+$/g, '')
+                await this.emitProgress(
+                  normalizedReason ? `${normalizedReason}...` : 'Working...'
+                )
+              }
+
+              if (currentStepIndex < trackedSteps.length) {
+                trackedSteps[currentStepIndex]!.status = 'error'
+              }
+              const appendedSteps: TrackedPlanStep[] = pendingSteps.map((s) => ({
+                label: s.label,
+                status: 'pending' as PlanStepStatus
+              }))
+              if (appendedSteps.length > 0) {
+                appendedSteps[0]!.status = 'in_progress'
+              }
+              trackedSteps = [
+                ...trackedSteps.slice(0, currentStepIndex + 1),
+                ...appendedSteps
+              ]
+              currentStepIndex += 1
+
+              currentExecutingFunction = null
+              emitPlanWidget(
+                trackedSteps,
+                null,
+                planWidgetIdValue,
+                true,
+                currentExecutingFunction
+              )
+              continue
+            }
+          } else {
+            stepResult.execution.status = 'error'
+          }
+        }
+
         if (stepResult.execution.status === 'error') {
           const shouldUseFocusedRecovery =
             replanCount >= MAX_REPLANS &&

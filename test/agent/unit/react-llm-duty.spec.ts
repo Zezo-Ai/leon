@@ -783,6 +783,139 @@ describe('ReActLLMDuty agent loop', () => {
     ])
   })
 
+  it('finalizes an observed tool result when self-observation says it satisfies the request', async () => {
+    phaseMocks.runPlanningPhase.mockResolvedValue({
+      type: 'plan',
+      steps: [
+        {
+          function: 'operating_system_control.shell.executeCommand',
+          label: 'Run scanner'
+        }
+      ],
+      summary: 'Running the scanner...'
+    })
+    phaseMocks.runExecutionStep.mockResolvedValue({
+      type: 'executed',
+      execution: {
+        function: 'operating_system_control.shell.executeCommand',
+        status: 'observed',
+        observation: JSON.stringify({
+          status: 'observed',
+          data: {
+            output: {
+              result: {
+                success: false,
+                stdout: 'Scan completed with useful findings.',
+                returncode: 5
+              }
+            }
+          }
+        }),
+        stepLabel: 'Run scanner',
+        requestedToolInput: '{"command":"scanner --target example.test"}'
+      }
+    })
+    phaseMocks.runExecutionSelfObservationPhase.mockResolvedValue({
+      type: 'handoff',
+      signal: {
+        intent: 'answer',
+        draft: 'Report the scan findings.',
+        source: 'self_observation'
+      }
+    })
+    phaseMocks.runFinalAnswerPhase.mockResolvedValue(
+      'The scan completed and returned useful findings.'
+    )
+
+    const duty = await createDuty('Run the scanner and tell me what it finds.')
+    const result = await duty.execute()
+
+    expect(phaseMocks.runExecutionSelfObservationPhase).toHaveBeenCalledOnce()
+    expect(phaseMocks.runRecoveryPlanningPhase).not.toHaveBeenCalled()
+    expect(result?.output).toBe(
+      'The scan completed and returned useful findings.'
+    )
+    expect(result?.data.executionHistory).toEqual([
+      expect.objectContaining({
+        function: 'operating_system_control.shell.executeCommand',
+        status: 'observed',
+        stepLabel: 'Run scanner'
+      })
+    ])
+  })
+
+  it('replans from an observed tool result when self-observation says more work is needed', async () => {
+    phaseMocks.runPlanningPhase.mockResolvedValue({
+      type: 'plan',
+      steps: [
+        {
+          function: 'operating_system_control.shell.executeCommand',
+          label: 'Run invalid command'
+        }
+      ],
+      summary: 'Running the command...'
+    })
+    phaseMocks.runExecutionStep
+      .mockResolvedValueOnce({
+        type: 'executed',
+        execution: {
+          function: 'operating_system_control.shell.executeCommand',
+          status: 'observed',
+          observation: JSON.stringify({
+            status: 'observed',
+            observed_tool_failure: {
+              success: false,
+              error: 'Invalid option'
+            }
+          }),
+          stepLabel: 'Run invalid command',
+          requestedToolInput: '{"command":"scanner --bad-option"}'
+        }
+      })
+      .mockResolvedValueOnce({
+        type: 'executed',
+        execution: {
+          function: 'operating_system_control.shell.executeCommand',
+          status: 'success',
+          observation: 'Command completed with corrected options.',
+          stepLabel: 'Run corrected command',
+          requestedToolInput: '{"command":"scanner --good-option"}'
+        }
+      })
+    phaseMocks.runExecutionSelfObservationPhase
+      .mockResolvedValueOnce({
+        type: 'replan',
+        reason: 'Correcting the command options...',
+        steps: [
+          {
+            function: 'operating_system_control.shell.executeCommand',
+            label: 'Run corrected command'
+          }
+        ]
+      })
+      .mockResolvedValueOnce(null)
+    phaseMocks.runFinalAnswerPhase.mockResolvedValue(
+      'The corrected command completed.'
+    )
+
+    const duty = await createDuty('Run the scanner.')
+    const result = await duty.execute()
+
+    expect(phaseMocks.runExecutionStep).toHaveBeenCalledTimes(2)
+    expect(phaseMocks.runExecutionSelfObservationPhase).toHaveBeenCalledTimes(2)
+    expect(result?.output).toBe('The corrected command completed.')
+    expect(result?.data.executionHistory).toEqual([
+      expect.objectContaining({
+        status: 'error',
+        stepLabel: 'Run invalid command'
+      }),
+      expect.objectContaining({
+        status: 'success',
+        stepLabel: 'Run corrected command'
+      })
+    ])
+  })
+
   it('keeps a selected Agent Skill active during execution', async () => {
     const agentSkillContext = {
       id: 'tiny-web-crawler',
