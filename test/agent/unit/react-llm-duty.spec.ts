@@ -92,6 +92,9 @@ const coreMocks = vi.hoisted(() => ({
   toolCallLogger: {
     getRecentArtifactManifest: vi.fn(() => '')
   },
+  postTurnMaintenanceQueue: {
+    enqueue: vi.fn()
+  },
   llmProvider: {
     consumeLastProviderErrorMessage: vi.fn(() => null),
     prompt: vi.fn(),
@@ -152,6 +155,7 @@ vi.mock('@/core', () => ({
   CONVERSATION_LOGGER: coreMocks.conversationLogger,
   TOOL_CALL_LOGGER: coreMocks.toolCallLogger,
   BRAIN: coreMocks.brain,
+  POST_TURN_MAINTENANCE_QUEUE: coreMocks.postTurnMaintenanceQueue,
   SOCKET_SERVER: {
     socket: coreMocks.socket,
     emitToChatClients: coreMocks.socket.emit,
@@ -299,6 +303,7 @@ describe('ReActLLMDuty agent loop', () => {
       callLLMText: vi.fn(),
       callLLMWithTools,
       supportsNativeTools: true,
+      isLocalProvider: false,
       input: 'Then do it',
       history,
       agentSkillCatalog: '',
@@ -355,6 +360,7 @@ describe('ReActLLMDuty agent loop', () => {
       callLLMText: vi.fn(),
       callLLMWithTools: vi.fn(),
       supportsNativeTools: true,
+      isLocalProvider: false,
       input: 'Then do it',
       history,
       agentSkillCatalog: '',
@@ -396,6 +402,7 @@ describe('ReActLLMDuty agent loop', () => {
       callLLMText: vi.fn(),
       callLLMWithTools,
       supportsNativeTools: true,
+      isLocalProvider: false,
       input: 'Awesome, thanks',
       history: [],
       agentSkillCatalog:
@@ -440,6 +447,7 @@ describe('ReActLLMDuty agent loop', () => {
       callLLMText: vi.fn(),
       callLLMWithTools: vi.fn(),
       supportsNativeTools: false,
+      isLocalProvider: true,
       input: 'Good morning Leon',
       history: [],
       agentSkillCatalog: '',
@@ -468,6 +476,109 @@ describe('ReActLLMDuty agent loop', () => {
         draft: 'Good morning. I am here and ready.',
         source: 'planning'
       }
+    })
+  })
+
+  it('recovers a local plan step that uses function_name', async () => {
+    const callLLM = vi.fn(async () => ({
+      output: {
+        type: 'plan',
+        steps: [
+          {
+            function_name: 'operating_system_control.shell.executeCommand',
+            label: 'Run shell command'
+          }
+        ],
+        summary: 'Running the shell command...',
+        answer: null,
+        intent: null
+      }
+    }))
+    const caller = {
+      callLLM,
+      callLLMText: vi.fn(),
+      callLLMWithTools: vi.fn(),
+      supportsNativeTools: false,
+      isLocalProvider: true,
+      input: 'Run a command',
+      history: [],
+      agentSkillCatalog: '',
+      setAgentSkillContext: vi.fn(),
+      getAgentSkillContext: vi.fn(),
+      getContextFileContent: vi.fn(() => null),
+      getContextManifest: vi.fn(() => ''),
+      getSelfModelSnapshot: vi.fn(() => ''),
+      consumeProviderErrorMessage: vi.fn(() => null)
+    }
+
+    const result = await runPlanningPhaseDirect(
+      caller,
+      {
+        text: '- operating_system_control.shell.executeCommand (command): Execute a command.',
+        mode: 'function'
+      },
+      []
+    )
+
+    expect(result).toEqual({
+      type: 'plan',
+      steps: [
+        {
+          function: 'operating_system_control.shell.executeCommand',
+          label: 'Run shell command'
+        }
+      ],
+      summary: 'Running the shell command...'
+    })
+  })
+
+  it('recovers exact catalog function names from local planning text', async () => {
+    const callLLM = vi.fn(async () => ({
+      output:
+        'I will use search_web.grok.search first, then operating_system_control.shell.executeCommand.'
+    }))
+    const caller = {
+      callLLM,
+      callLLMText: vi.fn(),
+      callLLMWithTools: vi.fn(),
+      supportsNativeTools: false,
+      isLocalProvider: true,
+      input: 'Search and run a command',
+      history: [],
+      agentSkillCatalog: '',
+      setAgentSkillContext: vi.fn(),
+      getAgentSkillContext: vi.fn(),
+      getContextFileContent: vi.fn(() => null),
+      getContextManifest: vi.fn(() => ''),
+      getSelfModelSnapshot: vi.fn(() => ''),
+      consumeProviderErrorMessage: vi.fn(() => null)
+    }
+
+    const result = await runPlanningPhaseDirect(
+      caller,
+      {
+        text: [
+          '- search_web.grok.search (query): Search both web and X.',
+          '- operating_system_control.shell.executeCommand (command): Execute a command.'
+        ].join('\n'),
+        mode: 'function'
+      },
+      []
+    )
+
+    expect(result).toEqual({
+      type: 'plan',
+      steps: [
+        {
+          function: 'search_web.grok.search',
+          label: 'Run search'
+        },
+        {
+          function: 'operating_system_control.shell.executeCommand',
+          label: 'Run executeCommand'
+        }
+      ],
+      summary: 'Running the recovered tool plan...'
     })
   })
 
@@ -503,6 +614,7 @@ describe('ReActLLMDuty agent loop', () => {
       callLLMText: vi.fn(),
       callLLMWithTools,
       supportsNativeTools: true,
+      isLocalProvider: false,
       input:
         'Please crawl from https://example.com, fetch readable content, and follow relevant links to find pricing.',
       history: [],
@@ -551,6 +663,7 @@ describe('ReActLLMDuty agent loop', () => {
       callLLMText,
       callLLMWithTools,
       supportsNativeTools: true,
+      isLocalProvider: false,
       input: 'Summarize the completed research.',
       history: [],
       agentSkillCatalog: '',

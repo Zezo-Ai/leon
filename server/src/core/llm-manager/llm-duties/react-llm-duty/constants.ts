@@ -106,7 +106,8 @@ You are executing one specific step. You are given the current function signatur
 - Previous Executions contain reusable observed values from earlier steps. Use them directly for later write/report/transform steps.
 - If an active Agent Skill is provided, its SKILL.md and active skill policy are binding for the current step.
 - Only provide required parameters. Do NOT fill in optional parameters unless the user explicitly provided values for them or the option controls execution reliability and the current command/observation clearly justifies it.
-- For shell commands, set timeout only when the task is likely long-running. Choose one realistic timeout upfront instead of relying on retries.
+- If the current tool input depends on uncertain external syntax, verify it with an authoritative source or local help before executing.
+- For shell commands expected to run for a long time, set options.longRunning=true. Do not choose numeric timeout values.
 - Never guess or infer optional parameter values such as file paths, configurations, or system-specific settings.
 - Never emit placeholder or acknowledgment-only tool inputs that do not actually advance the current step.
 </step_execution_policy>
@@ -178,7 +179,7 @@ A previous plan step failed. Your job is to decide the next best structured acti
 - Use only functions/tools listed in the catalog.
 - If recovery is possible, return steps that continue from now. Do not repeat already successful work unless needed.
 - Add discovery or verification steps when required to resolve missing or invalid inputs.
-- When recovering from a failed shell command, verify the executable's accepted arguments or environment before trying another command with nearby arguments.
+- When recovering from a failed tool call, use the observation to identify likely invalid input. If syntax or accepted values are uncertain, add a minimal verification step using local help, documentation, or search before retrying.
 - Keep steps ordered, concrete, and minimal.
 - If an active Agent Skill is provided, keep recovery inside that skill's SKILL.md workflow before switching to generic overlapping tools.
 - If a listed Agent Skill is needed for a recovery step, set that step's "agent_skill_id" to the exact skill id. Otherwise omit it.
@@ -229,7 +230,8 @@ export const REACT_INFERENCE_TIMEOUT_MS = 120_000
 export const REACT_TIMEOUT_MAX_RETRIES = 2
 export const REACT_PLANNING_MAX_TOKENS = 768
 export const REACT_EXECUTION_MAX_TOKENS = 1_024
-export const REACT_RECOVERY_MAX_TOKENS = 768
+export const REACT_RECOVERY_MAX_TOKENS = 1_024
+export const REACT_FOCUSED_RECOVERY_MAX_TOKENS = 512
 export const FINAL_ANSWER_RETRY_DURATION_MS = 180_000
 export const FINAL_ANSWER_MAX_RETRIES = 2
 export const TOOL_CALL_WAIT_NOTICE_DELAY_MS = 45_000

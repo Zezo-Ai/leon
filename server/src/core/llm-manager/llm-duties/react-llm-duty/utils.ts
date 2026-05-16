@@ -462,24 +462,33 @@ export function parseStepsFromArgs(
   rawSteps: Record<string, unknown>[]
 ): PlanStep[] {
   return rawSteps
-    .filter(
-      (s) =>
-        typeof s['function'] === 'string' &&
-        (s['function'] as string).trim()
-    )
-    .map((s) => ({
-      function: (s['function'] as string).trim(),
-      label:
-        typeof s['label'] === 'string' && (s['label'] as string).trim()
-          ? (s['label'] as string).trim()
-          : (s['function'] as string).trim(),
-      ...(
-        typeof s['agent_skill_id'] === 'string' &&
-        (s['agent_skill_id'] as string).trim()
-          ? { agentSkillId: (s['agent_skill_id'] as string).trim() }
-          : {}
-      )
-    }))
+    .map((s) => {
+      const functionName =
+        typeof s['function'] === 'string' && s['function'].trim()
+          ? s['function'].trim()
+          : typeof s['function_name'] === 'string' && s['function_name'].trim()
+            ? s['function_name'].trim()
+            : ''
+
+      if (!functionName) {
+        return null
+      }
+
+      return {
+        function: functionName,
+        label:
+          typeof s['label'] === 'string' && (s['label'] as string).trim()
+            ? (s['label'] as string).trim()
+            : functionName,
+        ...(
+          typeof s['agent_skill_id'] === 'string' &&
+          (s['agent_skill_id'] as string).trim()
+            ? { agentSkillId: (s['agent_skill_id'] as string).trim() }
+            : {}
+        )
+      }
+    })
+    .filter((step): step is PlanStep => Boolean(step))
 }
 
 /**

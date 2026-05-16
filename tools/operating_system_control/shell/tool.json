@@ -25,21 +25,9 @@
               "cwd": {
                 "type": "string"
               },
-              "timeout": {
-                "type": "number",
-                "description": "Total allowed runtime. Use seconds by default. Set for commands likely to run longer than the default."
-              },
-              "timeoutUnit": {
-                "type": "string",
-                "enum": [
-                  "seconds",
-                  "milliseconds"
-                ],
-                "description": "Explicit unit for timeout. Use seconds for intentionally long tasks."
-              },
-              "timeoutRetries": {
-                "type": "number",
-                "description": "Timeout-only retries. For expected long runs, prefer one realistic timeout with 0 retries."
+              "longRunning": {
+                "type": "boolean",
+                "description": "Set true only for commands expected to run for a long time. Uses a deterministic 24-hour timeout."
               },
               "captureOutput": {
                 "type": "boolean"

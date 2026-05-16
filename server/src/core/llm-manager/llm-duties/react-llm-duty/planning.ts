@@ -119,6 +119,84 @@ function shouldAttemptForcedPlanFallback(planResult: PlanResult): boolean {
   )
 }
 
+function extractCatalogFunctionNames(catalog: Catalog): string[] {
+  const functionNames: string[] = []
+
+  for (const line of catalog.text.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed.startsWith('- ')) {
+      continue
+    }
+
+    const body = trimmed.slice(2).trim()
+    const nameEndIndex = body.indexOf(' ')
+    const functionName =
+      nameEndIndex === -1 ? body : body.slice(0, nameEndIndex)
+
+    if (
+      functionName.includes('.') &&
+      !functionNames.includes(functionName)
+    ) {
+      functionNames.push(functionName)
+    }
+  }
+
+  return functionNames
+}
+
+function buildRecoveredPlanStepLabel(functionName: string): string {
+  const lastSegment = functionName.split('.').at(-1) || 'tool'
+  return `Run ${lastSegment}`
+}
+
+function recoverPlanFromFunctionMentions(
+  rawText: string,
+  catalog: Catalog
+): PlanResult | null {
+  const text = rawText.trim()
+  if (!text) {
+    return null
+  }
+
+  const mentionedFunctions = extractCatalogFunctionNames(catalog)
+    .map((functionName) => ({
+      functionName,
+      index: text.indexOf(functionName)
+    }))
+    .filter((match) => match.index >= 0)
+    .sort((a, b) => a.index - b.index)
+
+  if (mentionedFunctions.length === 0) {
+    return null
+  }
+
+  const seen = new Set<string>()
+  const steps = mentionedFunctions
+    .filter((match) => {
+      if (seen.has(match.functionName)) {
+        return false
+      }
+
+      seen.add(match.functionName)
+      return true
+    })
+    .map((match) => ({
+      function: match.functionName,
+      label: buildRecoveredPlanStepLabel(match.functionName)
+    }))
+
+  LogHelper.title(`${DUTY_NAME} / planning`)
+  LogHelper.debug(
+    `Planning: recovered plan from function mentions: ${steps.map((step) => step.function).join(' -> ')}`
+  )
+
+  return {
+    type: 'plan',
+    steps,
+    summary: 'Running the recovered tool plan...'
+  }
+}
+
 export async function runPlanningPhase(
   caller: LLMCaller,
   catalog: Catalog,
@@ -198,6 +276,18 @@ export async function runPlanningPhase(
         'Planning: forced plan-only fallback produced executable steps'
       )
       return forcedInterpreted
+    }
+
+    const rawForcedOutput =
+      typeof forcedPlanResult?.output === 'string'
+        ? forcedPlanResult.output
+        : ''
+    const recoveredForcedPlan = recoverPlanFromFunctionMentions(
+      rawForcedOutput,
+      catalog
+    )
+    if (recoveredForcedPlan) {
+      return recoveredForcedPlan
     }
 
     LogHelper.debug(
@@ -420,6 +510,14 @@ export async function runPlanningPhase(
         return textFallbackPlan
       }
 
+      const recoveredTextPlan = recoverPlanFromFunctionMentions(
+        textFallback,
+        catalog
+      )
+      if (recoveredTextPlan) {
+        return recoveredTextPlan
+      }
+
       if (
         textFallback &&
         shouldTreatPlanningTextAsFinalAnswer(textFallback)
@@ -508,6 +606,14 @@ export async function runPlanningPhase(
       return textFallbackPlan
     }
 
+    const recoveredTextPlan = recoverPlanFromFunctionMentions(
+      textFallback,
+      catalog
+    )
+    if (recoveredTextPlan) {
+      return recoveredTextPlan
+    }
+
     if (
       textFallbackHandoffDraft
     ) {
@@ -540,6 +646,11 @@ export async function runPlanningPhase(
           }
         }
         return parsedRawPlan
+      }
+
+      const recoveredRawPlan = recoverPlanFromFunctionMentions(raw, catalog)
+      if (recoveredRawPlan) {
+        return recoveredRawPlan
       }
 
       if (rawHandoffDraft) {
@@ -636,6 +747,11 @@ export async function runPlanningPhase(
       }
 
       return parsedRawPlan
+    }
+
+    const recoveredRawPlan = recoverPlanFromFunctionMentions(raw, catalog)
+    if (recoveredRawPlan) {
+      return recoveredRawPlan
     }
 
     const rawHandoffDraft = extractPlanningTextHandoffDraft(raw)

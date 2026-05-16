@@ -171,10 +171,6 @@ const REACT_HISTORY_COMPACTION_STATE_FILENAME =
   '.react-history-compaction-state.json'
 const REACT_SESSION_STATE_FILENAME_SEPARATOR = '--'
 const REACT_PROMPTS_LOG_DIR = path.join(PROFILE_LOGS_PATH, 'prompts')
-const LOCAL_REACT_MIN_REASONING_PHASES = new Set<ReactPhase>([
-  'execution',
-  'recovery'
-])
 const REPEATED_EXECUTION_LOOP_THRESHOLD = 2
 
 function isLocalAgentProvider(): boolean {
@@ -184,21 +180,9 @@ function isLocalAgentProvider(): boolean {
 }
 
 function getEffectiveReasoningMode(
-  phase: ReactPhase,
+  _phase: ReactPhase,
   requestedMode: LLMReasoningMode
 ): LLMReasoningMode {
-  if (!isLocalAgentProvider()) {
-    return requestedMode
-  }
-
-  if (LOCAL_REACT_MIN_REASONING_PHASES.has(phase)) {
-    return 'off'
-  }
-
-  if (phase === 'planning' && requestedMode === 'on') {
-    return 'guarded'
-  }
-
   return requestedMode
 }
 
@@ -669,6 +653,8 @@ export class ReActLLMDuty extends LLMDuty {
       this.logTitle('execution')
       LogHelper.debug('Phase 2: Execution loop...')
 
+      let focusedRecoveryAfterReplanLimitUsed = false
+
       while (pendingSteps.length > 0 && executionCount < MAX_EXECUTIONS) {
         const currentStep = pendingSteps.shift()!
         executionCount += 1
@@ -950,7 +936,10 @@ export class ReActLLMDuty extends LLMDuty {
         }
 
         if (stepResult.execution.status === 'error') {
-          if (replanCount >= MAX_REPLANS) {
+          const shouldUseFocusedRecovery =
+            replanCount >= MAX_REPLANS &&
+            !focusedRecoveryAfterReplanLimitUsed
+          if (replanCount >= MAX_REPLANS && !shouldUseFocusedRecovery) {
             LogHelper.title(this.name)
             LogHelper.warning(
               'Recovery replanning skipped: max re-plans reached'
@@ -976,13 +965,21 @@ export class ReActLLMDuty extends LLMDuty {
 
           let recoveryPlanResult = null
           try {
+            if (shouldUseFocusedRecovery) {
+              focusedRecoveryAfterReplanLimitUsed = true
+              LogHelper.title(this.name)
+              LogHelper.debug(
+                'Max re-plans reached; trying focused recovery before stopping'
+              )
+            }
             recoveryPlanResult = await runRecoveryPlanningPhase(
               caller,
               catalog,
               history,
               executionHistory,
               currentStep,
-              pendingSteps
+              pendingSteps,
+              { focusedOnly: shouldUseFocusedRecovery }
             )
           } catch (error) {
             LogHelper.title(this.name)
@@ -1991,6 +1988,7 @@ export class ReActLLMDuty extends LLMDuty {
       callLLMText: this.callLLMText.bind(this),
       callLLMWithTools: this.callLLMWithTools.bind(this),
       supportsNativeTools: this.supportsNativeTools,
+      isLocalProvider: isLocalAgentProvider(),
       input: inputOverride ?? this.input,
       history,
       get agentSkillContext(): AgentSkillContext | null {
@@ -2072,8 +2070,7 @@ export class ReActLLMDuty extends LLMDuty {
         ? false
         : (options?.emitReasoning ?? phasePolicy.emitReasoning)
     const shouldStream =
-      (options?.streamToProvider ?? phasePolicy.streamToProvider) &&
-      getLLMProviderName() !== LLMProviders.Local
+      options?.streamToProvider ?? phasePolicy.streamToProvider
     const reasoningGenerationId = shouldEmitReasoning
       ? this.getReasoningGenerationId(
           phase,
@@ -2210,8 +2207,7 @@ export class ReActLLMDuty extends LLMDuty {
     const shouldStreamToUser =
       options?.streamToUser ?? shouldStream ?? phasePolicy.streamToUser
     const shouldStreamEffective =
-      (options?.streamToProvider ?? phasePolicy.streamToProvider) &&
-      getLLMProviderName() !== LLMProviders.Local
+      options?.streamToProvider ?? phasePolicy.streamToProvider
     const reasoningGenerationId = shouldEmitReasoning
       ? this.getReasoningGenerationId(
           phase,
@@ -2387,8 +2383,7 @@ export class ReActLLMDuty extends LLMDuty {
     const shouldStreamToUserEffective =
       options?.streamToUser ?? shouldStreamToUser ?? phasePolicy.streamToUser
     const shouldStreamEffective =
-      (options?.streamToProvider ?? phasePolicy.streamToProvider) &&
-      getLLMProviderName() !== LLMProviders.Local
+      options?.streamToProvider ?? phasePolicy.streamToProvider
 
     const toolNames = tools.map((t) => t.function.name).join(', ')
     const choiceLabel =

@@ -2,7 +2,11 @@ import { LogHelper } from '@/helpers/log-helper'
 import type { OpenAITool } from '@/core/llm-manager/types'
 import type { MessageLog } from '@/types'
 
-import { RECOVERY_PLAN_SYSTEM_PROMPT, DUTY_NAME } from './constants'
+import {
+  RECOVERY_PLAN_SYSTEM_PROMPT,
+  DUTY_NAME,
+  REACT_FOCUSED_RECOVERY_MAX_TOKENS
+} from './constants'
 import type {
   Catalog,
   ExecutionRecord,
@@ -32,6 +36,37 @@ import {
   PLAN_STEP_SCHEMA
 } from './plan-contract'
 import { buildPhaseSystemPrompt } from './phase-policy'
+
+const FOCUSED_RECOVERY_INPUT_MAX_CHARS = 1_200
+const FOCUSED_RECOVERY_OBSERVATION_MAX_CHARS = 2_000
+
+function clipFocusedRecoveryValue(value: string, maxChars: number): string {
+  const normalized = value.trim()
+  if (normalized.length <= maxChars) {
+    return normalized
+  }
+
+  return `${normalized.slice(0, maxChars - 3).trimEnd()}...`
+}
+
+function formatFocusedRecoveryCandidateSteps(
+  failedStep: PlanStep,
+  pendingSteps: PlanStep[]
+): string {
+  const seenFunctions = new Set<string>()
+  const candidates = [failedStep, ...pendingSteps].filter((step) => {
+    if (seenFunctions.has(step.function)) {
+      return false
+    }
+
+    seenFunctions.add(step.function)
+    return true
+  })
+
+  return candidates
+    .map((step, index) => `- ${index + 1}. ${step.function} | "${step.label}"`)
+    .join('\n')
+}
 
 function buildRecoveryPromptSections(params: {
   prompt: string
@@ -93,14 +128,117 @@ function createRecoveryHandoff(
   }
 }
 
+async function runFocusedRecoveryPlanningPhase(
+  caller: LLMCaller,
+  failedStep: PlanStep,
+  pendingSteps: PlanStep[],
+  failedExecution?: ExecutionRecord
+): Promise<PlanResult | null> {
+  const recoverySystemPrompt = buildPhaseSystemPrompt(
+    RECOVERY_PLAN_SYSTEM_PROMPT,
+    'recovery'
+  )
+  const failedInput = failedExecution?.requestedToolInput
+    ? clipFocusedRecoveryValue(
+        failedExecution.requestedToolInput,
+        FOCUSED_RECOVERY_INPUT_MAX_CHARS
+      )
+    : 'No failed input was recorded.'
+  const failedObservation = failedExecution?.observation
+    ? clipFocusedRecoveryValue(
+        failedExecution.observation,
+        FOCUSED_RECOVERY_OBSERVATION_MAX_CHARS
+      )
+    : 'No observation was recorded.'
+  const candidateStepsSection = formatFocusedRecoveryCandidateSteps(
+    failedStep,
+    pendingSteps
+  )
+  const prompt = `<failed_step>
+Function: ${failedStep.function}
+Label: ${failedStep.label}
+Input: ${failedInput}
+Observation: ${failedObservation}
+</failed_step>
+
+<candidate_next_functions>
+${candidateStepsSection}
+</candidate_next_functions>
+
+<user_request>
+${caller.input}
+</user_request>
+
+<task>
+Return a minimal recovery plan from the failed step.
+Use only candidate_next_functions.
+If the failed input can be corrected or verified, return a plan step using the failed function with a changed objective.
+If no candidate function can make progress, return a final handoff.
+</task>`
+
+  LogHelper.title(`${DUTY_NAME} / recovery`)
+  LogHelper.debug('Trying focused recovery planning after primary recovery failed')
+
+  const jsonModeResult = await caller.callLLM(
+    prompt,
+    recoverySystemPrompt,
+    PLAN_RESPONSE_SCHEMA,
+    undefined,
+    buildRecoveryPromptSections({
+      prompt,
+      systemPrompt: recoverySystemPrompt,
+      includeSchema: true
+    }),
+    {
+      phase: 'recovery',
+      reasoningMode: 'off',
+      emitReasoning: false,
+      streamToProvider: false,
+      maxTokens: REACT_FOCUSED_RECOVERY_MAX_TOKENS
+    }
+  )
+
+  if (!jsonModeResult) {
+    const providerError = caller.consumeProviderErrorMessage()
+    if (providerError) {
+      return createRecoveryHandoff(providerError, 'error')
+    }
+
+    return null
+  }
+
+  const parsed = parseOutput(jsonModeResult.output)
+  return (
+    (parsed
+      ? extractPlanResultFromCreatePlanArgs(parsed, {
+          allowLegacySummaryAsFinal: true,
+          source: 'recovery'
+        })
+      : null) || extractPlanFromParsed(parsed, 'recovery')
+  )
+}
+
 export async function runRecoveryPlanningPhase(
   caller: LLMCaller,
   catalog: Catalog,
   history: MessageLog[],
   executionHistory: ExecutionRecord[],
   failedStep: PlanStep,
-  pendingSteps: PlanStep[]
+  pendingSteps: PlanStep[],
+  options: {
+    focusedOnly?: boolean
+  } = {}
 ): Promise<PlanResult | null> {
+  const failedExecution = executionHistory[executionHistory.length - 1]
+  if (options.focusedOnly) {
+    return runFocusedRecoveryPlanningPhase(
+      caller,
+      failedStep,
+      pendingSteps,
+      failedExecution
+    )
+  }
+
   const catalogNote =
     catalog.mode === 'tool'
       ? '\nNote: The catalog lists tools, not individual functions. Use the format toolkit_id.tool_id in your plan steps.'
@@ -121,7 +259,6 @@ export async function runRecoveryPlanningPhase(
   )
   const agentSkillSection =
     activeAgentSkillSection || buildAgentSkillDiscoverySection(caller)
-  const failedExecution = executionHistory[executionHistory.length - 1]
   const historySection = formatExecutionHistory(executionHistory)
   const pendingStepsSection =
     pendingSteps.length > 0
@@ -385,5 +522,10 @@ Create a revised plan from this point to complete the user request.
     return createRecoveryHandoff(rawHandoffDraft, 'answer')
   }
 
-  return null
+  return runFocusedRecoveryPlanningPhase(
+    caller,
+    failedStep,
+    pendingSteps,
+    failedExecution
+  )
 }
