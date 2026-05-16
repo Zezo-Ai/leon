@@ -21,7 +21,8 @@ import {
   SELF_MODEL_MANAGER,
   CONVERSATION_LOGGER,
   BRAIN,
-  SOCKET_SERVER
+  SOCKET_SERVER,
+  TOOL_CALL_LOGGER
 } from '@/core'
 import {
   LLMDuties,
@@ -1989,6 +1990,8 @@ export class ReActLLMDuty extends LLMDuty {
       getContextManifest: CONTEXT_MANAGER.getManifest.bind(CONTEXT_MANAGER),
       getSelfModelSnapshot:
         SELF_MODEL_MANAGER.getSnapshot.bind(SELF_MODEL_MANAGER),
+      getPreviousToolArtifacts:
+        TOOL_CALL_LOGGER.getRecentArtifactManifest.bind(TOOL_CALL_LOGGER),
       consumeProviderErrorMessage:
         LLM_PROVIDER.consumeLastProviderErrorMessage.bind(LLM_PROVIDER)
     }
