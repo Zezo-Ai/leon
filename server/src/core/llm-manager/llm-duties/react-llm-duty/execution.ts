@@ -999,6 +999,7 @@ Use only the user request and collected observations to decide whether the reque
 - Treat inferred runtime signals (timezone, locale, VPN/proxy, IP/location hints) as environment hints, not confirmed owner facts.
 - If the remaining gap is a missing owner fact or a missing dedicated retrieval step before a write/report step, choose "replan" instead of assuming.
 - If the current best answer would still rely on weak hints or unresolved uncertainty that context or memory could reduce, choose "replan" and add grounding steps instead of handing off an answer.
+- If the current best answer would rely on mutable, current, exact, or environment-specific facts that are not present in observations, choose "replan" and add the smallest useful grounding or verification steps.
 - If your best draft would mention a next step, remaining work, or that something still needs to be done, choose "replan" instead of "handoff".
 - For "replan", "reason" must be a short progress update in present progressive form, written in neutral or first-person phrasing, and end with "...". Example: "Checking additional context files...".
 - For "replan", every step label must be a short user-facing action, start with a verb, and stay under 8 words.
