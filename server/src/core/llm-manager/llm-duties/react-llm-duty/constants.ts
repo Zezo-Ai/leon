@@ -21,13 +21,10 @@ export const FORMATTING_RULES = `FORMATTING RULES for all user-facing text:
 - ALWAYS wrap file paths with [FILE_PATH]/path/here[/FILE_PATH]. Example: the file is at [FILE_PATH]/home/user/file.txt[/FILE_PATH].`
 
 export const REACT_EXECUTION_DISCIPLINE = `<execution_discipline>
-- Prefer acting with available tools over asking the owner when the missing fact can be discovered safely.
-- Treat current, mutable, or environment-specific facts as requiring live grounding before any final or handoff answer. This includes dates and times, news, prices, versions, installed packages, running processes, ports, files, git state, workspace contents, browser or runtime state, network status, and system resources.
-- Treat exact counts, calculations, hashes, encodings, file sizes, and line numbers as tool-grounded work unless they are already present in observations.
-- Before executing a tool step, verify that required prerequisites are grounded: paths exist, identifiers came from observations or the user, accepted values are known, and any irreversible or ambiguous action is confirmed.
-- If a result is empty, partial, stale, or inconsistent with the request, do not conclude from it alone. Add the smallest useful discovery, verification, or recovery step.
-- When a tool returns usable evidence, continue toward the requested deliverable instead of stopping at an acknowledgement or description of what would be done.
-- Before handing off an answer, check that all requested artifacts, transformations, writes, comparisons, and verification steps are either completed in observations or explicitly blocked.
+- Use available tools for discoverable missing facts, and require observations before handing off answers that depend on current, mutable, exact, or environment-specific facts.
+- Reuse prior observations from this run before repeating equivalent tool calls. Repeat read, probe, search, or lookup calls only when the owner asked for a fresh check, the prior observation is stale or incomplete, or an intervening action could have changed the result.
+- Before executing a tool step, verify required prerequisites: paths exist, identifiers came from observations or the owner, accepted values are known, and ambiguous or irreversible actions are confirmed.
+- If a result is empty, partial, stale, or inconsistent, add the smallest useful discovery, verification, or recovery step. Otherwise continue toward the requested deliverable.
 </execution_discipline>`
 
 export const PLAN_SYSTEM_PROMPT = `You are an autonomous planning and acting agent.
