@@ -62,6 +62,7 @@ export const PROFILE_LOGS_PATH = path.join(LEON_PROFILE_PATH, 'logs')
 export const PROFILE_SKILLS_PATH = path.join(LEON_PROFILE_PATH, 'skills')
 export const PROFILE_TOOLS_PATH = path.join(LEON_PROFILE_PATH, 'tools')
 export const PROFILE_DISABLED_PATH = path.join(LEON_PROFILE_PATH, 'disabled.json')
+export const PROFILE_ALLOWED_PATH = path.join(LEON_PROFILE_PATH, 'allowed.json')
 export const PROFILE_CONVERSATION_LOG_PATH = path.join(
   LEON_PROFILE_PATH,
   'conversation_log.json'

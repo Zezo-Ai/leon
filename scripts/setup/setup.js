@@ -9,6 +9,7 @@ import {
   MODELS_PATH,
   PROFILE_CONTEXT_PATH,
   PROFILE_AGENT_SKILLS_PATH,
+  PROFILE_ALLOWED_PATH,
   PROFILE_LOGS_PATH,
   PROFILE_MEMORY_PATH,
   PROFILE_DISABLED_PATH,
@@ -94,6 +95,13 @@ async function ensureLeonHomeStructure() {
   if (!fs.existsSync(PROFILE_DISABLED_PATH)) {
     await fs.promises.writeFile(
       PROFILE_DISABLED_PATH,
+      JSON.stringify({ skills: [], tools: [] }, null, 2)
+    )
+  }
+
+  if (!fs.existsSync(PROFILE_ALLOWED_PATH)) {
+    await fs.promises.writeFile(
+      PROFILE_ALLOWED_PATH,
       JSON.stringify({ skills: [], tools: [] }, null, 2)
     )
   }

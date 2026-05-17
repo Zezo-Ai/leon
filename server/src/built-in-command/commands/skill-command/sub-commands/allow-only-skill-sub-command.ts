@@ -7,13 +7,12 @@ import { createListResult } from '@/built-in-command/built-in-command-renderer'
 import { ProfileHelper } from '@/helpers/profile-helper'
 
 import {
-  createSkillToggleSuccessResult,
+  createSkillAllowOnlySuccessResult,
   getSkillSubcommandUsage,
   getSortedSkillAutocompleteEntries,
   matchesRequestedSkill,
   resolveSkillEntry,
-  SKILL_DISABLE_SUBCOMMAND,
-  SKILL_REMOVE_ALLOW_ONLY_COMMAND_FORMAT,
+  SKILL_ALLOW_ONLY_SUBCOMMAND,
   SKILL_ROOT_COMMAND_FORMAT,
   toSkillSuggestion
 } from '../skill-command-helpers'
@@ -23,10 +22,10 @@ import type {
   SkillSubCommandExecutionContext
 } from './skill-sub-command'
 
-export class DisableSkillSubCommand implements SkillSubCommand {
-  public readonly name = SKILL_DISABLE_SUBCOMMAND
-  public readonly description = 'Disable an enabled skill.'
-  public readonly iconName = 'ri-checkbox-blank-circle-line'
+export class AllowOnlySkillSubCommand implements SkillSubCommand {
+  public readonly name = SKILL_ALLOW_ONLY_SUBCOMMAND
+  public readonly description = 'Add a skill to the allow-only list.'
+  public readonly iconName = 'ri-shield-check-line'
 
   public getSuggestion(input: {
     commandPrefix: string
@@ -49,7 +48,9 @@ export class DisableSkillSubCommand implements SkillSubCommand {
   }): BuiltInCommandAutocompleteItem[] {
     const requestedSkillName = input.context.args.slice(1).join(' ')
 
-    return getSortedSkillAutocompleteEntries()
+    return getSortedSkillAutocompleteEntries({
+      includeDisabled: true
+    })
       .filter((entry) =>
         matchesRequestedSkill(entry, requestedSkillName)
       )
@@ -69,7 +70,9 @@ export class DisableSkillSubCommand implements SkillSubCommand {
   public async execute(
     context: SkillSubCommandExecutionContext
   ): Promise<BuiltInCommandExecutionResult> {
-    const skillEntry = resolveSkillEntry(context.rawSkillName)
+    const skillEntry = resolveSkillEntry(context.rawSkillName, {
+      includeDisabled: true
+    })
 
     if (!context.rawSkillName.trim()) {
       return {
@@ -103,27 +106,8 @@ export class DisableSkillSubCommand implements SkillSubCommand {
       }
     }
 
-    if (
-      ProfileHelper.hasSkillAllowlist() &&
-      ProfileHelper.isSkillAllowed(skillEntry.skillName)
-    ) {
-      return {
-        status: 'error',
-        result: createListResult({
-          title: 'Skill In Allow-Only List',
-          tone: 'error',
-          items: [
-            {
-              label: `Use ${SKILL_REMOVE_ALLOW_ONLY_COMMAND_FORMAT} to make "${skillEntry.commandName}" unavailable.`,
-              tone: 'error'
-            }
-          ]
-        })
-      }
-    }
+    await ProfileHelper.allowOnlySkill(skillEntry.skillName)
 
-    await ProfileHelper.disableSkill(skillEntry.skillName)
-
-    return createSkillToggleSuccessResult('disabled', skillEntry)
+    return createSkillAllowOnlySuccessResult('allowed', skillEntry)
   }
 }

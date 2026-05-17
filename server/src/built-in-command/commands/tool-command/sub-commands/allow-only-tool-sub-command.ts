@@ -7,13 +7,12 @@ import { createListResult } from '@/built-in-command/built-in-command-renderer'
 import { ProfileHelper } from '@/helpers/profile-helper'
 
 import {
-  createToolToggleSuccessResult,
+  createToolAllowOnlySuccessResult,
   getSortedToolAutocompleteEntries,
   getToolSubcommandUsage,
   matchesRequestedTool,
   resolveToolEntry,
-  TOOL_DISABLE_SUBCOMMAND,
-  TOOL_REMOVE_ALLOW_ONLY_COMMAND_FORMAT,
+  TOOL_ALLOW_ONLY_SUBCOMMAND,
   TOOL_ROOT_COMMAND_FORMAT,
   toToolSuggestion
 } from '../tool-command-helpers'
@@ -23,10 +22,10 @@ import type {
   ToolSubCommandExecutionContext
 } from './tool-sub-command'
 
-export class DisableToolSubCommand implements ToolSubCommand {
-  public readonly name = TOOL_DISABLE_SUBCOMMAND
-  public readonly description = 'Disable an enabled tool.'
-  public readonly iconName = 'ri-checkbox-blank-circle-line'
+export class AllowOnlyToolSubCommand implements ToolSubCommand {
+  public readonly name = TOOL_ALLOW_ONLY_SUBCOMMAND
+  public readonly description = 'Add a tool to the allow-only list.'
+  public readonly iconName = 'ri-shield-check-line'
 
   public getSuggestion(input: {
     commandPrefix: string
@@ -49,7 +48,9 @@ export class DisableToolSubCommand implements ToolSubCommand {
   }): BuiltInCommandAutocompleteItem[] {
     const requestedToolName = input.context.args.slice(1).join(' ')
 
-    return getSortedToolAutocompleteEntries()
+    return getSortedToolAutocompleteEntries({
+      includeDisabled: true
+    })
       .filter((entry) => matchesRequestedTool(entry, requestedToolName))
       .map((entry) =>
         toToolSuggestion(
@@ -67,7 +68,9 @@ export class DisableToolSubCommand implements ToolSubCommand {
   public async execute(
     context: ToolSubCommandExecutionContext
   ): Promise<BuiltInCommandExecutionResult> {
-    const toolEntry = resolveToolEntry(context.rawToolName)
+    const toolEntry = resolveToolEntry(context.rawToolName, {
+      includeDisabled: true
+    })
 
     if (!context.rawToolName.trim()) {
       return {
@@ -101,27 +104,8 @@ export class DisableToolSubCommand implements ToolSubCommand {
       }
     }
 
-    if (
-      ProfileHelper.hasToolAllowlist() &&
-      ProfileHelper.isToolAllowed(toolEntry.toolId, toolEntry.toolkitId)
-    ) {
-      return {
-        status: 'error',
-        result: createListResult({
-          title: 'Tool In Allow-Only List',
-          tone: 'error',
-          items: [
-            {
-              label: `Use ${TOOL_REMOVE_ALLOW_ONLY_COMMAND_FORMAT} to make "${toolEntry.qualifiedName}" unavailable.`,
-              tone: 'error'
-            }
-          ]
-        })
-      }
-    }
+    await ProfileHelper.allowOnlyTool(toolEntry.qualifiedName)
 
-    await ProfileHelper.disableTool(toolEntry.qualifiedName)
-
-    return createToolToggleSuccessResult('disabled', toolEntry)
+    return createToolAllowOnlySuccessResult('allowed', toolEntry)
   }
 }
