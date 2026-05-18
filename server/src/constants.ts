@@ -34,6 +34,12 @@ const PRODUCTION_ENV = 'production'
 const DEVELOPMENT_ENV = 'development'
 const TESTING_ENV = 'testing'
 
+function isEnabledByDefault(envVarName: string): boolean {
+  const value = process.env[envVarName]?.trim().toLowerCase()
+
+  return value !== 'false' && value !== '0'
+}
+
 export const GITHUB_URL = 'https://github.com/leon-ai/leon'
 export const API_VERSION = 'v1'
 export const WEB_APP_DEV_SERVER_PORT = 5_173
@@ -491,7 +497,10 @@ export const LLM_SKILL_ROUTER_DUTY_SKILL_LIST_PATH = path.join(
 export const HAS_LLM = true
 export const LEON_ROUTING_MODE = process.env['LEON_ROUTING_MODE'] || 'smart'
 export const LEON_MOOD = process.env['LEON_MOOD'] || 'auto'
-export const LEON_PULSE_ENABLED = true
+export const LEON_PULSE_ENABLED = isEnabledByDefault('LEON_PULSE_ENABLED')
+export const LEON_PRIVATE_DIARY_ENABLED = isEnabledByDefault(
+  'LEON_PRIVATE_DIARY_ENABLED'
+)
 // Every 30 minutes
 export const LEON_PULSE_INTERVAL_MS = 30 * 60 * 1_000
 export const SHOULD_START_PYTHON_TCP_SERVER = HAS_STT || HAS_TTS

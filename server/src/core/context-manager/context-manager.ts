@@ -66,6 +66,7 @@ const CONTEXT_REFRESH_WORKER_DIST_PATH = path.join(
   'context-refresh-worker.js'
 )
 const CONTEXT_REFRESH_WORKER_MAX_BUFFER = 1024 * 1024 * 8
+const DISABLE_ALL_CONTEXT_FILES_VALUE = '*'
 const RETIRED_CONTEXT_FILES = [
   'LOCAL_ECOSYSTEM.md',
   'NETWORK.md',
@@ -101,11 +102,15 @@ export default class ContextManager {
       getLocalLLMName: () => LLM_PROVIDER.localLLMName
     }
   )
-  private readonly disabledContextFiles = this.parseContextFileList(
-    LEON_DISABLED_CONTEXT_FILES
-  )
+  private readonly hasDisabledAllContextFiles =
+    this.hasDisableAllContextFilesValue(LEON_DISABLED_CONTEXT_FILES)
+  private readonly disabledContextFiles = this.hasDisabledAllContextFiles
+    ? new Set(this.allContextFiles.map((definition) => definition.filename))
+    : this.parseContextFileList(LEON_DISABLED_CONTEXT_FILES)
   private readonly contextFiles: ContextFile[] = this.allContextFiles.filter(
-    (definition) => !this.disabledContextFiles.has(definition.filename)
+    (definition) =>
+      !this.hasDisabledAllContextFiles &&
+      !this.disabledContextFiles.has(definition.filename)
   )
 
   public constructor() {
@@ -743,6 +748,12 @@ export default class ContextManager {
         .map((value) => this.normalizeFilename(value))
         .filter((value) => value.length > 0)
     )
+  }
+
+  private hasDisableAllContextFilesValue(rawFileList: string): boolean {
+    return rawFileList
+      .split(/[,;\n]/)
+      .some((value) => value.trim() === DISABLE_ALL_CONTEXT_FILES_VALUE)
   }
 
   private cleanupDisabledContextFiles(): void {
