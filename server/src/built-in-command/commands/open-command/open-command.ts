@@ -43,8 +43,8 @@ export class OpenCommand extends BuiltInCommand {
   protected override description =
     'Open a Leon config, secrets, profile, or home path.'
   protected override icon_name = 'ri-folder-open-line'
-  protected override supported_usages = ['/open <config|secrets|profile|home>']
-  protected override help_usage = '/open <config|secrets|profile|home>'
+  protected override supported_usages = ['/open', '/open <target>']
+  protected override help_usage = '/open <target>'
 
   public constructor() {
     super('open')
