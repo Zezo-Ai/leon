@@ -8,7 +8,7 @@ import { promisify } from 'node:util'
 import {
   CODEBASE_CONTEXT_PATH,
   CODEBASE_PATH,
-  LEON_DISABLED_CONTEXT_FILES,
+  LEON_CONTEXT_DISABLED_FILES,
   NODE_RUNTIME_BIN_PATH,
   PROFILE_CONTEXT_PATH,
   TSX_CLI_PATH
@@ -103,10 +103,10 @@ export default class ContextManager {
     }
   )
   private readonly hasDisabledAllContextFiles =
-    this.hasDisableAllContextFilesValue(LEON_DISABLED_CONTEXT_FILES)
+    this.hasDisableAllContextFilesValue(LEON_CONTEXT_DISABLED_FILES)
   private readonly disabledContextFiles = this.hasDisabledAllContextFiles
     ? new Set(this.allContextFiles.map((definition) => definition.filename))
-    : this.parseContextFileList(LEON_DISABLED_CONTEXT_FILES)
+    : this.parseContextFileList(LEON_CONTEXT_DISABLED_FILES)
   private readonly contextFiles: ContextFile[] = this.allContextFiles.filter(
     (definition) =>
       !this.hasDisabledAllContextFiles &&
@@ -741,19 +741,18 @@ export default class ContextManager {
     }
   }
 
-  private parseContextFileList(rawFileList: string): Set<string> {
+  private parseContextFileList(rawFileList: string[]): Set<string> {
     return new Set(
       rawFileList
-        .split(/[,;\n]/)
         .map((value) => this.normalizeFilename(value))
         .filter((value) => value.length > 0)
     )
   }
 
-  private hasDisableAllContextFilesValue(rawFileList: string): boolean {
-    return rawFileList
-      .split(/[,;\n]/)
-      .some((value) => value.trim() === DISABLE_ALL_CONTEXT_FILES_VALUE)
+  private hasDisableAllContextFilesValue(rawFileList: string[]): boolean {
+    return rawFileList.some(
+      (value) => value.trim() === DISABLE_ALL_CONTEXT_FILES_VALUE
+    )
   }
 
   private cleanupDisabledContextFiles(): void {

@@ -43,6 +43,7 @@ import {
   LANG,
   HAS_STT,
   HAS_TTS,
+  HAS_WAKE_WORD,
   SHOULD_START_PYTHON_TCP_SERVER,
   LEON_ROUTING_MODE,
   WORKFLOW_LLM_TARGET,
@@ -411,7 +412,7 @@ function checkTCPServerAssets() {
     )
   }
 
-  if (process.env['LEON_WAKE_WORD'] === 'true') {
+  if (HAS_WAKE_WORD) {
     if (!fs.existsSync(PYTHON_TCP_SERVER_WAKE_WORD_MODEL_PATH)) {
       addFailure(
         result,
@@ -437,7 +438,7 @@ function checkTCPServerAssets() {
   if (result.ok) {
     addDetail(
       result,
-      `STT=${HAS_STT ? 'enabled' : 'disabled'}, TTS=${HAS_TTS ? 'enabled' : 'disabled'}, wake_word=${process.env['LEON_WAKE_WORD'] === 'true' ? 'enabled' : 'disabled'}`
+      `STT=${HAS_STT ? 'enabled' : 'disabled'}, TTS=${HAS_TTS ? 'enabled' : 'disabled'}, wake_word=${HAS_WAKE_WORD ? 'enabled' : 'disabled'}`
     )
   }
 

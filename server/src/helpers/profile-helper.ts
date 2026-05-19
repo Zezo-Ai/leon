@@ -1,16 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import {
-  PROFILE_ALLOWED_PATH,
-  PROFILE_DISABLED_PATH
-} from '@/constants'
+import { CONFIG_MANAGER } from '@/config'
 import { PROFILE_DOT_ENV_PATH } from '@/leon-roots'
-
-interface ProfileAccessConfig {
-  skills?: string[]
-  tools?: string[]
-}
 
 const ENV_LINE_SEPARATOR_PATTERN = /\r?\n/
 const ENV_VARIABLE_NAME_PATTERN = /^[A-Z0-9_]+$/
@@ -35,50 +27,6 @@ function getEnvVariableName(line: string): string | null {
   return ENV_VARIABLE_NAME_PATTERN.test(variableName) ? variableName : null
 }
 
-function readAccessConfig(configPath: string): ProfileAccessConfig {
-  if (!fs.existsSync(configPath)) {
-    return {}
-  }
-
-  try {
-    return JSON.parse(
-      fs.readFileSync(configPath, 'utf8')
-    ) as ProfileAccessConfig
-  } catch {
-    return {}
-  }
-}
-
-function readDisabledConfig(): ProfileAccessConfig {
-  return readAccessConfig(PROFILE_DISABLED_PATH)
-}
-
-function readAllowedConfig(): ProfileAccessConfig {
-  return readAccessConfig(PROFILE_ALLOWED_PATH)
-}
-
-async function writeAccessConfig(
-  configPath: string,
-  config: ProfileAccessConfig
-): Promise<void> {
-  await fs.promises.mkdir(path.dirname(configPath), {
-    recursive: true
-  })
-
-  await fs.promises.writeFile(
-    configPath,
-    `${JSON.stringify(config, null, 2)}\n`
-  )
-}
-
-async function writeDisabledConfig(config: ProfileAccessConfig): Promise<void> {
-  await writeAccessConfig(PROFILE_DISABLED_PATH, config)
-}
-
-async function writeAllowedConfig(config: ProfileAccessConfig): Promise<void> {
-  await writeAccessConfig(PROFILE_ALLOWED_PATH, config)
-}
-
 function normalizeAccessIds(ids: unknown): Set<string> {
   if (!Array.isArray(ids)) {
     return new Set()
@@ -90,10 +38,6 @@ function normalizeAccessIds(ids: unknown): Set<string> {
       .map((id) => id.trim())
       .filter((id) => id.length > 0)
   )
-}
-
-function serializeAccessIds(ids: Set<string>): string[] {
-  return [...ids].sort((firstId, secondId) => firstId.localeCompare(secondId))
 }
 
 function hasAccessList(ids: Set<string>): boolean {
@@ -117,28 +61,36 @@ export class ProfileHelper {
    * Get disabled skill ids from the active profile.
    */
   public static getDisabledSkills(): Set<string> {
-    return normalizeAccessIds(readDisabledConfig().skills)
+    return normalizeAccessIds(
+      CONFIG_MANAGER.getConfig().availability.skills.disabled
+    )
   }
 
   /**
    * Get disabled tool ids from the active profile.
    */
   public static getDisabledTools(): Set<string> {
-    return normalizeAccessIds(readDisabledConfig().tools)
+    return normalizeAccessIds(
+      CONFIG_MANAGER.getConfig().availability.tools.disabled
+    )
   }
 
   /**
    * Get allowed skill ids from the active profile.
    */
   public static getAllowedSkills(): Set<string> {
-    return normalizeAccessIds(readAllowedConfig().skills)
+    return normalizeAccessIds(
+      CONFIG_MANAGER.getConfig().availability.skills.allowed
+    )
   }
 
   /**
    * Get allowed tool ids from the active profile.
    */
   public static getAllowedTools(): Set<string> {
-    return normalizeAccessIds(readAllowedConfig().tools)
+    return normalizeAccessIds(
+      CONFIG_MANAGER.getConfig().availability.tools.allowed
+    )
   }
 
   /**
@@ -214,16 +166,14 @@ export class ProfileHelper {
    * @param skillName The skill id
    */
   public static async disableSkill(skillName: string): Promise<void> {
-    const disabledConfig = readDisabledConfig()
-    const disabledSkills = normalizeAccessIds(disabledConfig.skills)
+    const disabledSkills = this.getDisabledSkills()
 
     disabledSkills.add(skillName)
 
-    await writeDisabledConfig({
-      ...disabledConfig,
-      skills: serializeAccessIds(disabledSkills),
-      tools: serializeAccessIds(normalizeAccessIds(disabledConfig.tools))
-    })
+    await CONFIG_MANAGER.setStringList(
+      ['availability', 'skills', 'disabled'],
+      disabledSkills
+    )
   }
 
   /**
@@ -231,16 +181,14 @@ export class ProfileHelper {
    * @param skillName The skill id
    */
   public static async enableSkill(skillName: string): Promise<void> {
-    const disabledConfig = readDisabledConfig()
-    const disabledSkills = normalizeAccessIds(disabledConfig.skills)
+    const disabledSkills = this.getDisabledSkills()
 
     disabledSkills.delete(skillName)
 
-    await writeDisabledConfig({
-      ...disabledConfig,
-      skills: serializeAccessIds(disabledSkills),
-      tools: serializeAccessIds(normalizeAccessIds(disabledConfig.tools))
-    })
+    await CONFIG_MANAGER.setStringList(
+      ['availability', 'skills', 'disabled'],
+      disabledSkills
+    )
   }
 
   /**
@@ -248,16 +196,14 @@ export class ProfileHelper {
    * @param skillName The skill id
    */
   public static async allowOnlySkill(skillName: string): Promise<void> {
-    const allowedConfig = readAllowedConfig()
-    const allowedSkills = normalizeAccessIds(allowedConfig.skills)
+    const allowedSkills = this.getAllowedSkills()
 
     allowedSkills.add(skillName)
 
-    await writeAllowedConfig({
-      ...allowedConfig,
-      skills: serializeAccessIds(allowedSkills),
-      tools: serializeAccessIds(normalizeAccessIds(allowedConfig.tools))
-    })
+    await CONFIG_MANAGER.setStringList(
+      ['availability', 'skills', 'allowed'],
+      allowedSkills
+    )
   }
 
   /**
@@ -265,16 +211,14 @@ export class ProfileHelper {
    * @param skillName The skill id
    */
   public static async removeAllowOnlySkill(skillName: string): Promise<void> {
-    const allowedConfig = readAllowedConfig()
-    const allowedSkills = normalizeAccessIds(allowedConfig.skills)
+    const allowedSkills = this.getAllowedSkills()
 
     allowedSkills.delete(skillName)
 
-    await writeAllowedConfig({
-      ...allowedConfig,
-      skills: serializeAccessIds(allowedSkills),
-      tools: serializeAccessIds(normalizeAccessIds(allowedConfig.tools))
-    })
+    await CONFIG_MANAGER.setStringList(
+      ['availability', 'skills', 'allowed'],
+      allowedSkills
+    )
   }
 
   /**
@@ -293,16 +237,14 @@ export class ProfileHelper {
    * @param toolId The qualified tool id
    */
   public static async disableTool(toolId: string): Promise<void> {
-    const disabledConfig = readDisabledConfig()
-    const disabledTools = normalizeAccessIds(disabledConfig.tools)
+    const disabledTools = this.getDisabledTools()
 
     disabledTools.add(toolId)
 
-    await writeDisabledConfig({
-      ...disabledConfig,
-      skills: serializeAccessIds(normalizeAccessIds(disabledConfig.skills)),
-      tools: serializeAccessIds(disabledTools)
-    })
+    await CONFIG_MANAGER.setStringList(
+      ['availability', 'tools', 'disabled'],
+      disabledTools
+    )
   }
 
   /**
@@ -310,16 +252,14 @@ export class ProfileHelper {
    * @param toolId The qualified tool id
    */
   public static async enableTool(toolId: string): Promise<void> {
-    const disabledConfig = readDisabledConfig()
-    const disabledTools = normalizeAccessIds(disabledConfig.tools)
+    const disabledTools = this.getDisabledTools()
 
     disabledTools.delete(toolId)
 
-    await writeDisabledConfig({
-      ...disabledConfig,
-      skills: serializeAccessIds(normalizeAccessIds(disabledConfig.skills)),
-      tools: serializeAccessIds(disabledTools)
-    })
+    await CONFIG_MANAGER.setStringList(
+      ['availability', 'tools', 'disabled'],
+      disabledTools
+    )
   }
 
   /**
@@ -327,16 +267,14 @@ export class ProfileHelper {
    * @param toolId The qualified tool id
    */
   public static async allowOnlyTool(toolId: string): Promise<void> {
-    const allowedConfig = readAllowedConfig()
-    const allowedTools = normalizeAccessIds(allowedConfig.tools)
+    const allowedTools = this.getAllowedTools()
 
     allowedTools.add(toolId)
 
-    await writeAllowedConfig({
-      ...allowedConfig,
-      skills: serializeAccessIds(normalizeAccessIds(allowedConfig.skills)),
-      tools: serializeAccessIds(allowedTools)
-    })
+    await CONFIG_MANAGER.setStringList(
+      ['availability', 'tools', 'allowed'],
+      allowedTools
+    )
   }
 
   /**
@@ -344,16 +282,14 @@ export class ProfileHelper {
    * @param toolId The qualified tool id
    */
   public static async removeAllowOnlyTool(toolId: string): Promise<void> {
-    const allowedConfig = readAllowedConfig()
-    const allowedTools = normalizeAccessIds(allowedConfig.tools)
+    const allowedTools = this.getAllowedTools()
 
     allowedTools.delete(toolId)
 
-    await writeAllowedConfig({
-      ...allowedConfig,
-      skills: serializeAccessIds(normalizeAccessIds(allowedConfig.skills)),
-      tools: serializeAccessIds(allowedTools)
-    })
+    await CONFIG_MANAGER.setStringList(
+      ['availability', 'tools', 'allowed'],
+      allowedTools
+    )
   }
 
   /**

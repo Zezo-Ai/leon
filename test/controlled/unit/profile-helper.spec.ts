@@ -2,22 +2,19 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import YAML from 'yaml'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const profilePaths = {
-  allowedPath: '',
-  disabledPath: '',
+  configPath: '',
   dotEnvPath: ''
 }
 
 async function loadProfileHelper(): Promise<
   typeof import('@/helpers/profile-helper').ProfileHelper
 > {
-  vi.doMock('@/constants', () => ({
-    PROFILE_ALLOWED_PATH: profilePaths.allowedPath,
-    PROFILE_DISABLED_PATH: profilePaths.disabledPath
-  }))
   vi.doMock('@/leon-roots', () => ({
+    PROFILE_CONFIG_PATH: profilePaths.configPath,
     PROFILE_DOT_ENV_PATH: profilePaths.dotEnvPath
   }))
 
@@ -26,8 +23,17 @@ async function loadProfileHelper(): Promise<
   return module.ProfileHelper
 }
 
-function writeJSONFile(filePath: string, data: unknown): void {
-  fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`)
+function writeAvailabilityConfig(availability: unknown): void {
+  fs.writeFileSync(
+    profilePaths.configPath,
+    YAML.stringify({
+      availability
+    })
+  )
+}
+
+function readAvailabilityConfig(): unknown {
+  return YAML.parse(fs.readFileSync(profilePaths.configPath, 'utf8')).availability
 }
 
 describe('ProfileHelper', () => {
@@ -35,8 +41,7 @@ describe('ProfileHelper', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'leon-profile-helper-'))
-    profilePaths.allowedPath = path.join(tmpDir, 'allowed.json')
-    profilePaths.disabledPath = path.join(tmpDir, 'disabled.json')
+    profilePaths.configPath = path.join(tmpDir, 'config.yml')
     profilePaths.dotEnvPath = path.join(tmpDir, '.env')
     vi.resetModules()
   })
@@ -58,13 +63,15 @@ describe('ProfileHelper', () => {
   })
 
   it('treats empty allowed lists as unrestricted', async () => {
-    writeJSONFile(profilePaths.allowedPath, {
-      skills: [],
-      tools: []
-    })
-    writeJSONFile(profilePaths.disabledPath, {
-      skills: ['date_time_skill'],
-      tools: ['coding_development.codex']
+    writeAvailabilityConfig({
+      skills: {
+        allowed: [],
+        disabled: ['date_time_skill']
+      },
+      tools: {
+        allowed: [],
+        disabled: ['coding_development.codex']
+      }
     })
 
     const ProfileHelper = await loadProfileHelper()
@@ -80,13 +87,15 @@ describe('ProfileHelper', () => {
   })
 
   it('restricts access when allowed lists contain ids', async () => {
-    writeJSONFile(profilePaths.allowedPath, {
-      skills: ['coding_agent_router_skill'],
-      tools: ['coding_development.codex']
-    })
-    writeJSONFile(profilePaths.disabledPath, {
-      skills: [],
-      tools: []
+    writeAvailabilityConfig({
+      skills: {
+        allowed: ['coding_agent_router_skill'],
+        disabled: []
+      },
+      tools: {
+        allowed: ['coding_development.codex'],
+        disabled: []
+      }
     })
 
     const ProfileHelper = await loadProfileHelper()
@@ -104,13 +113,15 @@ describe('ProfileHelper', () => {
   })
 
   it('ignores disabled ids while allow-only lists are active', async () => {
-    writeJSONFile(profilePaths.allowedPath, {
-      skills: ['coding_agent_router_skill'],
-      tools: ['coding_development.codex']
-    })
-    writeJSONFile(profilePaths.disabledPath, {
-      skills: ['coding_agent_router_skill'],
-      tools: ['coding_development.codex']
+    writeAvailabilityConfig({
+      skills: {
+        allowed: ['coding_agent_router_skill'],
+        disabled: ['coding_agent_router_skill']
+      },
+      tools: {
+        allowed: ['coding_development.codex'],
+        disabled: ['coding_development.codex']
+      }
     })
 
     const ProfileHelper = await loadProfileHelper()
@@ -124,13 +135,15 @@ describe('ProfileHelper', () => {
   })
 
   it('keeps enable commands scoped to disabled lists', async () => {
-    writeJSONFile(profilePaths.allowedPath, {
-      skills: ['existing_skill'],
-      tools: ['coding_development.opencode']
-    })
-    writeJSONFile(profilePaths.disabledPath, {
-      skills: ['coding_agent_router_skill'],
-      tools: ['coding_development.codex']
+    writeAvailabilityConfig({
+      skills: {
+        allowed: ['existing_skill'],
+        disabled: ['coding_agent_router_skill']
+      },
+      tools: {
+        allowed: ['coding_development.opencode'],
+        disabled: ['coding_development.codex']
+      }
     })
 
     const ProfileHelper = await loadProfileHelper()
@@ -138,28 +151,28 @@ describe('ProfileHelper', () => {
     await ProfileHelper.enableSkill('coding_agent_router_skill')
     await ProfileHelper.enableTool('coding_development.codex')
 
-    expect(
-      JSON.parse(fs.readFileSync(profilePaths.disabledPath, 'utf8'))
-    ).toEqual({
-      skills: [],
-      tools: []
-    })
-    expect(
-      JSON.parse(fs.readFileSync(profilePaths.allowedPath, 'utf8'))
-    ).toEqual({
-      skills: ['existing_skill'],
-      tools: ['coding_development.opencode']
+    expect(readAvailabilityConfig()).toEqual({
+      skills: {
+        allowed: ['existing_skill'],
+        disabled: []
+      },
+      tools: {
+        allowed: ['coding_development.opencode'],
+        disabled: []
+      }
     })
   })
 
   it('keeps disable commands scoped to disabled lists', async () => {
-    writeJSONFile(profilePaths.allowedPath, {
-      skills: ['coding_agent_router_skill'],
-      tools: ['coding_development.codex']
-    })
-    writeJSONFile(profilePaths.disabledPath, {
-      skills: [],
-      tools: []
+    writeAvailabilityConfig({
+      skills: {
+        allowed: ['coding_agent_router_skill'],
+        disabled: []
+      },
+      tools: {
+        allowed: ['coding_development.codex'],
+        disabled: []
+      }
     })
 
     const ProfileHelper = await loadProfileHelper()
@@ -167,28 +180,28 @@ describe('ProfileHelper', () => {
     await ProfileHelper.disableSkill('coding_agent_router_skill')
     await ProfileHelper.disableTool('coding_development.codex')
 
-    expect(
-      JSON.parse(fs.readFileSync(profilePaths.allowedPath, 'utf8'))
-    ).toEqual({
-      skills: ['coding_agent_router_skill'],
-      tools: ['coding_development.codex']
-    })
-    expect(
-      JSON.parse(fs.readFileSync(profilePaths.disabledPath, 'utf8'))
-    ).toEqual({
-      skills: ['coding_agent_router_skill'],
-      tools: ['coding_development.codex']
+    expect(readAvailabilityConfig()).toEqual({
+      skills: {
+        allowed: ['coding_agent_router_skill'],
+        disabled: ['coding_agent_router_skill']
+      },
+      tools: {
+        allowed: ['coding_development.codex'],
+        disabled: ['coding_development.codex']
+      }
     })
   })
 
   it('adds and removes items from allow-only lists', async () => {
-    writeJSONFile(profilePaths.allowedPath, {
-      skills: ['existing_skill'],
-      tools: ['coding_development.opencode']
-    })
-    writeJSONFile(profilePaths.disabledPath, {
-      skills: ['coding_agent_router_skill'],
-      tools: ['coding_development.codex']
+    writeAvailabilityConfig({
+      skills: {
+        allowed: ['existing_skill'],
+        disabled: ['coding_agent_router_skill']
+      },
+      tools: {
+        allowed: ['coding_development.opencode'],
+        disabled: ['coding_development.codex']
+      }
     })
 
     const ProfileHelper = await loadProfileHelper()
@@ -196,27 +209,29 @@ describe('ProfileHelper', () => {
     await ProfileHelper.allowOnlySkill('coding_agent_router_skill')
     await ProfileHelper.allowOnlyTool('coding_development.codex')
 
-    expect(
-      JSON.parse(fs.readFileSync(profilePaths.allowedPath, 'utf8'))
-    ).toEqual({
-      skills: ['coding_agent_router_skill', 'existing_skill'],
-      tools: ['coding_development.codex', 'coding_development.opencode']
-    })
-    expect(
-      JSON.parse(fs.readFileSync(profilePaths.disabledPath, 'utf8'))
-    ).toEqual({
-      skills: ['coding_agent_router_skill'],
-      tools: ['coding_development.codex']
+    expect(readAvailabilityConfig()).toEqual({
+      skills: {
+        allowed: ['coding_agent_router_skill', 'existing_skill'],
+        disabled: ['coding_agent_router_skill']
+      },
+      tools: {
+        allowed: ['coding_development.codex', 'coding_development.opencode'],
+        disabled: ['coding_development.codex']
+      }
     })
 
     await ProfileHelper.removeAllowOnlySkill('existing_skill')
     await ProfileHelper.removeAllowOnlyTool('coding_development.opencode')
 
-    expect(
-      JSON.parse(fs.readFileSync(profilePaths.allowedPath, 'utf8'))
-    ).toEqual({
-      skills: ['coding_agent_router_skill'],
-      tools: ['coding_development.codex']
+    expect(readAvailabilityConfig()).toEqual({
+      skills: {
+        allowed: ['coding_agent_router_skill'],
+        disabled: ['coding_agent_router_skill']
+      },
+      tools: {
+        allowed: ['coding_development.codex'],
+        disabled: ['coding_development.codex']
+      }
     })
   })
 })

@@ -20,7 +20,14 @@ import {
   PYTORCH_TORCH_PATH,
   PYTHON_TCP_SERVER_ENTRY_PATH,
   PYTHON_TCP_SERVER_RUNTIME_BIN_PATH,
-  SHOULD_START_PYTHON_TCP_SERVER
+  SHOULD_START_PYTHON_TCP_SERVER,
+  HAS_STT,
+  HAS_TTS,
+  HAS_WAKE_WORD,
+  STT_PROVIDER,
+  TTS_PROVIDER,
+  PYTHON_TCP_SERVER_HOST,
+  PYTHON_TCP_SERVER_PORT
 } from '@/constants'
 import {
   PYTHON_TCP_CLIENT,
@@ -86,6 +93,13 @@ async function bootstrap(): Promise<void> {
     LogHelper.info(`Running command: ${tcpServerCmd}`)
 
     const tcpServerEnv = { ...process.env }
+    tcpServerEnv['LEON_STT'] = HAS_STT ? 'true' : 'false'
+    tcpServerEnv['LEON_STT_PROVIDER'] = STT_PROVIDER || ''
+    tcpServerEnv['LEON_TTS'] = HAS_TTS ? 'true' : 'false'
+    tcpServerEnv['LEON_TTS_PROVIDER'] = TTS_PROVIDER || ''
+    tcpServerEnv['LEON_WAKE_WORD'] = HAS_WAKE_WORD ? 'true' : 'false'
+    tcpServerEnv['LEON_PY_TCP_SERVER_HOST'] = PYTHON_TCP_SERVER_HOST
+    tcpServerEnv['LEON_PY_TCP_SERVER_PORT'] = String(PYTHON_TCP_SERVER_PORT)
 
     if (SystemHelper.isLinux()) {
       const torchLibPath = `${PYTORCH_TORCH_PATH}/lib`
