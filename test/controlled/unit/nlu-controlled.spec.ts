@@ -77,6 +77,9 @@ const coreMocks = vi.hoisted(() => ({
   },
   pulseManager: {
     observeOwnerUtterance: vi.fn(async () => undefined)
+  },
+  postTurnMaintenanceQueue: {
+    enqueue: vi.fn()
   }
 }))
 
@@ -87,6 +90,13 @@ const dutyMocks = vi.hoisted(() => ({
 }))
 
 const skillHelperMocks = vi.hoisted(() => ({
+  getSkillDescriptorSync: vi.fn((skillName: string) => {
+    return testState.skillConfigs[skillName]
+      ? {
+          id: skillName
+        }
+      : null
+  }),
   getNewSkillConfig: vi.fn(async (skillName: string) => {
     return testState.skillConfigs[skillName] || null
   }),
@@ -259,7 +269,27 @@ vi.mock('@/core', () => ({
   LLM_PROVIDER: coreMocks.llmProvider,
   TOOL_CALL_LOGGER: coreMocks.toolCallLogger,
   SELF_MODEL_MANAGER: coreMocks.selfModelManager,
-  PULSE_MANAGER: coreMocks.pulseManager
+  PULSE_MANAGER: coreMocks.pulseManager,
+  POST_TURN_MAINTENANCE_QUEUE: coreMocks.postTurnMaintenanceQueue
+}))
+
+vi.mock('@/core/config-states/config-state', () => ({
+  CONFIG_STATE: {
+    getRoutingModeState: (): { getRoutingMode: () => string } => ({
+      getRoutingMode: (): string => 'controlled'
+    }),
+    getModelState: (): {
+      getWorkflowTarget: () => { isEnabled: boolean }
+      getAgentTarget: () => { isEnabled: boolean }
+    } => ({
+      getWorkflowTarget: (): { isEnabled: boolean } => ({
+        isEnabled: true
+      }),
+      getAgentTarget: (): { isEnabled: boolean } => ({
+        isEnabled: true
+      })
+    })
+  }
 }))
 
 vi.mock('@/helpers/skill-domain-helper', () => ({

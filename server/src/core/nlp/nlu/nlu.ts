@@ -236,9 +236,22 @@ export default class NLU {
         return null
       }
 
-      const skillResult = skillRouterResult?.output as unknown as string
+      const skillResult = String(skillRouterResult?.output || '').trim()
 
       if (skillResult && skillResult !== 'None') {
+        const skillDescriptor = SkillDomainHelper.getSkillDescriptorSync(
+          skillResult
+        )
+
+        if (!skillDescriptor) {
+          LogHelper.title('NLU')
+          LogHelper.warning(
+            `Skill router selected unavailable skill "${skillResult}"; ignoring it.`
+          )
+
+          return null
+        }
+
         return skillResult as NLPSkill
       }
 

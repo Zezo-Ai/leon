@@ -485,7 +485,7 @@ export const PYTHON_TCP_SERVER_PORT = PROFILE_CONFIG.python_tcp_server.port
 export const IS_TELEMETRY_ENABLED = PROFILE_CONFIG.telemetry_enabled
 
 export const LLM_SKILL_ROUTER_DUTY_SKILL_LIST_PATH = path.join(
-  MODELS_PATH,
+  LEON_PROFILE_PATH,
   'leon-skill-list.nlp'
 )
 
