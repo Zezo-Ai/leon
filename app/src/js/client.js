@@ -2,7 +2,7 @@ import { io } from 'socket.io-client'
 
 import Chatbot from './chatbot'
 import VoiceEnergy from './voice-energy'
-import { INIT_MESSAGES } from './constants'
+import { ASR_DISABLED_MESSAGE, INIT_MESSAGES } from './constants'
 import handleSuggestions from './suggestion-handler.js'
 
 export default class Client {
@@ -133,7 +133,7 @@ export default class Client {
 
   asrStartRecording() {
     if (!window.leonConfigInfo.stt.enabled) {
-      console.warn('ASR is not enabled')
+      alert(ASR_DISABLED_MESSAGE)
       return
     }
 

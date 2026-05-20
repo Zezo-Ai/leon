@@ -46,9 +46,7 @@ import setupNinja from './setup-ninja'
 import setupLlamaCPP from './setup-llama-cpp'
 import setupLocalLLM from './setup-local-llm'
 import setupQMDLLM from './setup-qmd-llm'
-import setupNVIDIALibs from './setup-nvidia-libs.js'
-import setupPyTorch from './setup-pytorch.js'
-import setupTCPServerModels from './setup-tcp-server-models'
+import setupVoiceResources from './setup-voice-resources.js'
 import inspectLocalAICapability from './local-ai-capability'
 import {
   inspectLocalAISetupState,
@@ -351,10 +349,8 @@ async function syncLLMSetupChoice(preferences) {
       }
 
       if (preferences.setupVoice) {
-        currentStep = 'setupNVIDIALibs'
-        await setupNVIDIALibs()
-        currentStep = 'setupPyTorch'
-        await setupPyTorch()
+        currentStep = 'setupVoiceResources'
+        await setupVoiceResources()
       } else {
         SetupUI.info('I will skip voice setup for now. You can add it later.')
       }
@@ -365,11 +361,7 @@ async function syncLLMSetupChoice(preferences) {
       )
     }
 
-    // Install voice models only when voice support is enabled.
-    if (preferences.setupVoice) {
-      currentStep = 'setupTCPServerModels'
-      await setupTCPServerModels()
-    } else {
+    if (!preferences.setupVoice) {
       SetupUI.info('I will skip voice model downloads for now.')
     }
 
