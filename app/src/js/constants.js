@@ -19,4 +19,4 @@ That's where people will help shape the ecosystem and build what comes next.`
 ]
 
 export const ASR_DISABLED_MESSAGE =
-  'Voice mode is not enabled yet. Run /voice setup from the chat, wait for the resources to install, then restart Leon.'
+  'Voice mode is not enabled yet. Run /voice setup from the chat, wait for the resources to install, then restart Leon by using /restart.'

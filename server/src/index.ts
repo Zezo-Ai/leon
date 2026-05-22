@@ -42,6 +42,7 @@ import {
 import { shouldIgnoreTCPServerError } from '@/utilities'
 import { Updater } from '@/updater'
 import { Telemetry } from '@/telemetry'
+import { setShutdownHandler } from '@/core/server-lifecycle'
 import { LangHelper } from '@/helpers/lang-helper'
 import { LogHelper } from '@/helpers/log-helper'
 import { RuntimeHelper } from '@/helpers/runtime-helper'
@@ -240,7 +241,13 @@ async function bootstrap(): Promise<void> {
       1_000 * 3_600 * 6
     )
   }
+  let isShuttingDown = false
   const shutdown = (exitCode = 0): void => {
+    if (isShuttingDown) {
+      return
+    }
+
+    isShuttingDown = true
     LLM_PROVIDER.dispose()
 
     if (global.pythonTCPServerProcess?.pid) {
@@ -256,7 +263,9 @@ async function bootstrap(): Promise<void> {
     }, 1_000)
   }
 
-  ;['exit', 'SIGINT', 'SIGUSR1', 'SIGUSR2', 'SIGTERM', 'SIGHUP'].forEach(
+  setShutdownHandler(shutdown)
+
+  ;['SIGINT', 'SIGUSR1', 'SIGUSR2', 'SIGTERM', 'SIGHUP'].forEach(
     (eventType) => {
       process.on(eventType, () => {
         shutdown(0)

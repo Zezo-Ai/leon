@@ -4,16 +4,18 @@ import {
   type BuiltInCommandExecutionResult
 } from '@/built-in-command/built-in-command'
 import { createListResult } from '@/built-in-command/built-in-command-renderer'
-import { requestShutdown } from '@/core/server-lifecycle'
+import {
+  LEON_RESTART_EXIT_CODE,
+  requestShutdown
+} from '@/core/server-lifecycle'
 
-export class StopCommand extends BuiltInCommand {
-  protected override description = 'Stop the current Leon server.'
-  protected override icon_name = 'ri-stop-circle-line'
-  protected override supported_usages = ['/stop', '/kill']
-  protected override aliases = ['kill']
+export class RestartCommand extends BuiltInCommand {
+  protected override description = 'Restart the current Leon server.'
+  protected override icon_name = 'ri-restart-line'
+  protected override supported_usages = ['/restart']
 
   public constructor() {
-    super('stop')
+    super('restart')
   }
 
   public override async execute(
@@ -23,17 +25,17 @@ export class StopCommand extends BuiltInCommand {
 
     // Give the response a brief moment to reach the client first.
     setTimeout(() => {
-      requestShutdown(0)
+      requestShutdown(LEON_RESTART_EXIT_CODE)
     }, 250)
 
     return {
       status: 'completed',
       result: createListResult({
-        title: 'Server Stopping',
+        title: 'Server Restarting',
         tone: 'info',
         items: [
           {
-            label: 'Leon is stopping now.'
+            label: 'Leon is restarting now.'
           }
         ]
       })

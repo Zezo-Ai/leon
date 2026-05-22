@@ -4,6 +4,7 @@ import { HelpCommand } from '@/built-in-command/commands/help-command/help-comma
 import { ModelCommand } from '@/built-in-command/commands/model-command/model-command'
 import { MoodCommand } from '@/built-in-command/commands/mood-command/mood-command'
 import { OpenCommand } from '@/built-in-command/commands/open-command/open-command'
+import { RestartCommand } from '@/built-in-command/commands/restart-command/restart-command'
 import { RoutingCommand } from '@/built-in-command/commands/routing-command/routing-command'
 import { SessionCommand } from '@/built-in-command/commands/session-command/session-command'
 import { SkillCommand } from '@/built-in-command/commands/skill-command/skill-command'
@@ -20,6 +21,7 @@ const WHITELISTED_BUILT_IN_COMMAND_NAMES = [
   'download',
   'mood',
   'model',
+  'restart',
   'session',
   'skill',
   'stop',
@@ -34,6 +36,7 @@ const BUILT_IN_COMMANDS = [
   new DownloadCommand(),
   new MoodCommand(),
   new ModelCommand(),
+  new RestartCommand(),
   new SessionCommand(),
   new SkillCommand(),
   new StopCommand(),
