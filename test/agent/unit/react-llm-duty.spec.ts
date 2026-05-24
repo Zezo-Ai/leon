@@ -479,6 +479,47 @@ describe('ReActLLMDuty agent loop', () => {
     })
   })
 
+  it('routes remote no-tool planning text to final answer handoff', async () => {
+    const callLLMWithTools = vi.fn(async () => ({
+      textContent: 'Hey. I am here. What do you need?'
+    }))
+    const caller = {
+      callLLM: vi.fn(),
+      callLLMText: vi.fn(),
+      callLLMWithTools,
+      supportsNativeTools: true,
+      isLocalProvider: false,
+      input: 'Hi there',
+      history: [],
+      agentSkillCatalog: '',
+      setAgentSkillContext: vi.fn(),
+      getAgentSkillContext: vi.fn(),
+      getContextFileContent: vi.fn(() => null),
+      getContextManifest: vi.fn(() => ''),
+      getSelfModelSnapshot: vi.fn(() => ''),
+      consumeProviderErrorMessage: vi.fn(() => null)
+    }
+
+    const result = await runPlanningPhaseDirect(
+      caller,
+      {
+        text: 'mock catalog',
+        mode: 'function'
+      },
+      []
+    )
+
+    expect(caller.callLLM).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      type: 'handoff',
+      signal: {
+        intent: 'answer',
+        draft: 'Hey. I am here. What do you need?',
+        source: 'planning'
+      }
+    })
+  })
+
   it('recovers a local plan step that uses function_name', async () => {
     const callLLM = vi.fn(async () => ({
       output: {

@@ -16,6 +16,7 @@ import type {
 } from './types'
 import { formatExecutionHistory, parseOutput, parseToolCallArguments } from './utils'
 import {
+  buildOwnerProfileSummarySection,
   buildSelfModelSection
 } from './phase-helpers'
 import { buildPhaseSystemPrompt } from './phase-policy'
@@ -127,6 +128,7 @@ Provide a clear, helpful, and complete response to the user based on the observa
 <source_priority>
 - Execution history and observations are the factual source of truth.
 - The owner request defines the required deliverable.
+- Owner Profile Summary may personalize relevant wording or supply stable owner facts, but must not override execution observations.
 - Leon Self-Model context may shape continuity and phrasing, but not facts.
 </source_priority>
 
@@ -140,6 +142,7 @@ Provide a clear, helpful, and complete response to the user based on the observa
 - Add only the minimum uncertainty or boundary note needed for honesty.
 - Avoid both clipped one-liners and long over-explanations.
 - Do not turn a simple answer into a long boundary essay unless the user asked for detail.
+- Do not surface private owner details from Owner Profile Summary unless they directly help answer the current request.
 - Use history, observations, handoffs, and self-model for facts and continuity, not as phrasing templates.
 </answer_rules>
 
@@ -153,6 +156,7 @@ ${FORMATTING_RULES}`
 <source_priority>
 - The handoff intent is binding.
 - Execution history is the factual source of truth when available.
+- Owner Profile Summary may personalize relevant wording or supply stable owner facts, but must not override execution observations or handoff intent.
 - The handoff draft carries semantic meaning, constraints, and commitments, but it is not final wording.
 - Persona, mood, and self-model may shape phrasing only. They must not override intent, facts, or constraints.
 </source_priority>
@@ -178,6 +182,7 @@ ${FORMATTING_RULES}`
 - Add only the minimum uncertainty or boundary note needed for honesty.
 - Avoid both clipped one-liners and long over-explanations.
 - Do not turn a simple answer into a long boundary essay unless the owner asked for detail.
+- Do not surface private owner details from Owner Profile Summary unless they directly help answer the current request.
 - Use history, observations, handoffs, and self-model for facts and continuity, not as phrasing templates.
 - If a Leon Self-Model Snapshot is provided and it clearly supports one useful low-risk follow-up, you may end with one concise optional suggestion or question.
 - Return plain text only.
@@ -189,8 +194,8 @@ ${FORMATTING_RULES}`
     'final_answer'
   )
   const prompt = handoffSignal
-    ? `<self_model>\n${buildSelfModelSection(caller.getSelfModelSnapshot())}\n</self_model>\n\n<execution_history>\n${historySection}\n</execution_history>\n\n<user_request>\n${caller.input}\n</user_request>\n\n<handoff>\nIntent: ${handoffSignal.intent}\nDraft: ${handoffSignal.draft}\nSource: ${handoffSignal.source}\n</handoff>\n\n<task>\nProduce the final user-facing response.\n</task>`
-    : `<self_model>\n${buildSelfModelSection(caller.getSelfModelSnapshot())}\n</self_model>\n\n<execution_history>\n${historySection}\n</execution_history>\n\n<user_request>\n${caller.input}\n</user_request>\n\n<task>\nBased on the execution results above, provide a final answer to the user.\n</task>`
+    ? `<self_model>\n${buildSelfModelSection(caller.getSelfModelSnapshot())}\n</self_model>\n\n<owner_profile_summary>\n${buildOwnerProfileSummarySection(caller)}\n</owner_profile_summary>\n\n<execution_history>\n${historySection}\n</execution_history>\n\n<user_request>\n${caller.input}\n</user_request>\n\n<handoff>\nIntent: ${handoffSignal.intent}\nDraft: ${handoffSignal.draft}\nSource: ${handoffSignal.source}\n</handoff>\n\n<task>\nProduce the final user-facing response.\n</task>`
+    : `<self_model>\n${buildSelfModelSection(caller.getSelfModelSnapshot())}\n</self_model>\n\n<owner_profile_summary>\n${buildOwnerProfileSummarySection(caller)}\n</owner_profile_summary>\n\n<execution_history>\n${historySection}\n</execution_history>\n\n<user_request>\n${caller.input}\n</user_request>\n\n<task>\nBased on the execution results above, provide a final answer to the user.\n</task>`
   const systemPrompt = handoffSignal ? handoffSystemPrompt : defaultSystemPrompt
 
   const buildFinalAnswerPromptSections = (

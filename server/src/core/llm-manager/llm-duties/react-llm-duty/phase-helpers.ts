@@ -16,6 +16,10 @@ import type {
 } from './types'
 import { parseToolCallArguments } from './utils'
 
+const OWNER_CONTEXT_FILENAME = 'OWNER.md'
+const OWNER_PROFILE_SUMMARY_MAX_CHARS = 320
+const TOOLKIT_CONTEXT_SUMMARY_MAX_CHARS = 180
+
 export interface DuplicateInputMatch {
   stepNumber: number
   stepLabel: string | null
@@ -204,6 +208,33 @@ export function buildPreviouslyUsedInputsSection(
   return `\nPreviously executed inputs for this function in this run:\n${previousInputs.join('\n')}\nDo not reuse the exact same tool_input unless the current step explicitly asks to repeat it.`
 }
 
+function extractContextSummary(content: string, maxChars: number): string | null {
+  const firstSummaryLine = content
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.startsWith('>'))
+  const fallbackLine = content
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+  const summarySource = firstSummaryLine || fallbackLine || ''
+  if (!summarySource) {
+    return null
+  }
+
+  const normalized = summarySource
+    .replace(/^>\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!normalized) {
+    return null
+  }
+
+  return normalized.length > maxChars
+    ? `${normalized.slice(0, maxChars - 3).trimEnd()}...`
+    : normalized
+}
+
 export function buildToolkitContextSection(
   caller: LLMCaller,
   toolkitId: string
@@ -218,31 +249,13 @@ export function buildToolkitContextSection(
         return null
       }
 
-      const firstSummaryLine = content
-        .split('\n')
-        .map((line) => line.trim())
-        .find((line) => line.startsWith('>'))
-      const fallbackLine = content
-        .split('\n')
-        .map((line) => line.trim())
-        .find((line) => line.length > 0)
-      const summarySource = firstSummaryLine || fallbackLine || ''
-      if (!summarySource) {
+      const clipped = extractContextSummary(
+        content,
+        TOOLKIT_CONTEXT_SUMMARY_MAX_CHARS
+      )
+      if (!clipped) {
         return null
       }
-
-      const normalized = summarySource
-        .replace(/^>\s*/, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-      if (!normalized) {
-        return null
-      }
-
-      const clipped =
-        normalized.length > 180
-          ? `${normalized.slice(0, 177).trimEnd()}...`
-          : normalized
 
       return `- ${filename}: ${clipped}`
     })
@@ -264,6 +277,19 @@ export function buildToolkitContextSection(
   }
 
   return `Toolkit Context Summary:\n${toolkitContext}`
+}
+
+export function buildOwnerProfileSummarySection(caller: LLMCaller): string {
+  const content = caller.getContextFileContent(OWNER_CONTEXT_FILENAME)?.trim() || ''
+  const summary = content
+    ? extractContextSummary(content, OWNER_PROFILE_SUMMARY_MAX_CHARS)
+    : null
+
+  if (!summary) {
+    return 'Owner Profile Summary: none'
+  }
+
+  return `Owner Profile Summary:\n- ${OWNER_CONTEXT_FILENAME}: ${summary}`
 }
 
 export function buildContextManifestSection(manifest: string): string {

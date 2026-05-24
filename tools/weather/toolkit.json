@@ -3,7 +3,9 @@
   "name": "Weather",
   "description": "Tools for weather lookup and forecasts.",
   "icon_name": "sun-cloudy-line",
-  "context_files": [],
+  "context_files": [
+    "OWNER.md"
+  ],
   "tools": [
     "openmeteo"
   ]

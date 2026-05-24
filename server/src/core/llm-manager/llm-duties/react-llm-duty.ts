@@ -172,6 +172,16 @@ function getDefaultMaxTokensForPhase(phase: ReactPhase): number | undefined {
   return undefined
 }
 
+const REACT_PROMPT_CACHE_KEY_PREFIX = 'leon-react'
+
+function getPromptCacheKeyForPhase(phase: ReactPhase): string {
+  return `${REACT_PROMPT_CACHE_KEY_PREFIX}-${phase}`
+}
+
+function shouldUseOpenAIResponseTuning(phase: ReactPhase): boolean {
+  return phase !== 'final_answer'
+}
+
 const REACT_CONTINUATION_STATE_FILENAME = '.react-execution-continuation-state.json'
 const REACT_HISTORY_COMPACTION_STATE_FILENAME =
   '.react-history-compaction-state.json'
@@ -2168,6 +2178,7 @@ export class ReActLLMDuty extends LLMDuty {
         : (options?.emitReasoning ?? phasePolicy.emitReasoning)
     const shouldStream =
       options?.streamToProvider ?? phasePolicy.streamToProvider
+    const shouldUseResponseTuning = shouldUseOpenAIResponseTuning(phase)
     const reasoningGenerationId = shouldEmitReasoning
       ? this.getReasoningGenerationId(
           phase,
@@ -2196,6 +2207,15 @@ export class ReActLLMDuty extends LLMDuty {
       maxRetries: REACT_TIMEOUT_MAX_RETRIES,
       maxTokens: options?.maxTokens ?? getDefaultMaxTokensForPhase(phase),
       shouldStream,
+      ...(shouldUseResponseTuning
+        ? { promptCacheKey: getPromptCacheKeyForPhase(phase) }
+        : {}),
+      ...(shouldUseResponseTuning && phasePolicy.textVerbosity
+        ? { textVerbosity: phasePolicy.textVerbosity }
+        : {}),
+      ...(shouldUseResponseTuning && shouldEmitReasoning && phasePolicy.reasoningSummary
+        ? { reasoningSummary: phasePolicy.reasoningSummary }
+        : {}),
       ...(shouldEmitReasoning && reasoningGenerationId
         ? {
             onReasoningToken: (reasoningChunk: string): void => {
@@ -2305,6 +2325,7 @@ export class ReActLLMDuty extends LLMDuty {
       options?.streamToUser ?? shouldStream ?? phasePolicy.streamToUser
     const shouldStreamEffective =
       options?.streamToProvider ?? phasePolicy.streamToProvider
+    const shouldUseResponseTuning = shouldUseOpenAIResponseTuning(phase)
     const reasoningGenerationId = shouldEmitReasoning
       ? this.getReasoningGenerationId(
           phase,
@@ -2335,6 +2356,15 @@ export class ReActLLMDuty extends LLMDuty {
       maxRetries: REACT_TIMEOUT_MAX_RETRIES,
       maxTokens: options?.maxTokens ?? getDefaultMaxTokensForPhase(phase),
       shouldStream: shouldStreamEffective,
+      ...(shouldUseResponseTuning
+        ? { promptCacheKey: getPromptCacheKeyForPhase(phase) }
+        : {}),
+      ...(shouldUseResponseTuning && phasePolicy.textVerbosity
+        ? { textVerbosity: phasePolicy.textVerbosity }
+        : {}),
+      ...(shouldUseResponseTuning && shouldEmitReasoning && phasePolicy.reasoningSummary
+        ? { reasoningSummary: phasePolicy.reasoningSummary }
+        : {}),
       ...(shouldEmitReasoning && reasoningGenerationId
         ? {
             onReasoningToken: (reasoningChunk: string): void => {
@@ -2481,6 +2511,7 @@ export class ReActLLMDuty extends LLMDuty {
       options?.streamToUser ?? shouldStreamToUser ?? phasePolicy.streamToUser
     const shouldStreamEffective =
       options?.streamToProvider ?? phasePolicy.streamToProvider
+    const shouldUseResponseTuning = shouldUseOpenAIResponseTuning(phase)
 
     const toolNames = tools.map((t) => t.function.name).join(', ')
     const choiceLabel =
@@ -2588,6 +2619,15 @@ export class ReActLLMDuty extends LLMDuty {
         maxRetries: REACT_TIMEOUT_MAX_RETRIES,
         maxTokens: options?.maxTokens ?? getDefaultMaxTokensForPhase(phase),
         shouldStream: shouldStreamEffective,
+        ...(shouldUseResponseTuning
+          ? { promptCacheKey: getPromptCacheKeyForPhase(phase) }
+          : {}),
+        ...(shouldUseResponseTuning && phasePolicy.textVerbosity
+          ? { textVerbosity: phasePolicy.textVerbosity }
+          : {}),
+        ...(shouldUseResponseTuning && shouldEmitReasoning && phasePolicy.reasoningSummary
+          ? { reasoningSummary: phasePolicy.reasoningSummary }
+          : {}),
         ...(shouldEmitReasoning && reasoningGenerationId
           ? {
               onReasoningToken: (reasoningChunk: string): void => {

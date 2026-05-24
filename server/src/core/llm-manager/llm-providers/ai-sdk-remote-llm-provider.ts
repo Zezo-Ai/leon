@@ -389,23 +389,47 @@ export default class AISDKRemoteLLMProvider {
     return Math.max(minimum, Math.floor(budget))
   }
 
+  private getOpenAIReasoningEffort(
+    reasoningMode: LLMReasoningMode
+  ): string {
+    if (reasoningMode === 'off') {
+      return 'low'
+    }
+
+    return reasoningMode === 'guarded' ? 'low' : 'medium'
+  }
+
+  private buildOpenAICommonProviderOptions(
+    completionParams: CompletionParams
+  ): Record<string, unknown> {
+    return {
+      ...(completionParams.promptCacheKey
+        ? { promptCacheKey: completionParams.promptCacheKey }
+        : {}),
+      ...(completionParams.promptCacheRetention
+        ? { promptCacheRetention: completionParams.promptCacheRetention }
+        : {}),
+      ...(completionParams.textVerbosity
+        ? { textVerbosity: completionParams.textVerbosity }
+        : {}),
+      ...(completionParams.serviceTier
+        ? { serviceTier: completionParams.serviceTier }
+        : {})
+    }
+  }
+
   private buildManagedProviderOptions(
     reasoningMode: LLMReasoningMode,
     completionParams: CompletionParams
   ): Record<string, unknown> {
     if (this.config.flavor === 'openai-responses') {
-      if (reasoningMode === 'off') {
-        return {
-          openai: {
-            reasoningEffort: 'low'
-          }
-        }
-      }
-
       return {
         openai: {
-          reasoningEffort: reasoningMode === 'guarded' ? 'low' : 'medium',
-          reasoningSummary: 'detailed'
+          ...this.buildOpenAICommonProviderOptions(completionParams),
+          reasoningEffort: this.getOpenAIReasoningEffort(reasoningMode),
+          ...(reasoningMode !== 'off' && completionParams.reasoningSummary
+            ? { reasoningSummary: completionParams.reasoningSummary }
+            : {})
         }
       }
     }
@@ -446,7 +470,13 @@ export default class AISDKRemoteLLMProvider {
     }
 
     if (this.config.flavor === 'openai-compatible') {
-      return {}
+      return completionParams.textVerbosity
+        ? {
+            openaiCompatible: {
+              textVerbosity: completionParams.textVerbosity
+            }
+          }
+        : {}
     }
 
     if (this.config.flavor === 'anthropic') {
@@ -594,15 +624,20 @@ export default class AISDKRemoteLLMProvider {
         this.buildManagedProviderOptions(managedReasoningMode, completionParams)
       )
     } else if (this.config.flavor === 'openai-responses') {
+      const openAIOptions = this.buildOpenAICommonProviderOptions(
+        completionParams
+      )
       if (completionParams.disableThinking === true) {
         providerOptions['openai'] = {
-          reasoningEffort: 'low'
+          ...openAIOptions,
+          reasoningEffort: this.getOpenAIReasoningEffort('off')
         }
       } else {
-        // For OpenAI Responses models, request reasoning summaries so planning
-        // and recovery reasoning is visible in stream.
         providerOptions['openai'] = {
-          reasoningSummary: 'detailed'
+          ...openAIOptions,
+          ...(completionParams.reasoningSummary
+            ? { reasoningSummary: completionParams.reasoningSummary }
+            : {})
         }
       }
     } else if (this.config.flavor === 'openrouter') {
@@ -618,11 +653,17 @@ export default class AISDKRemoteLLMProvider {
     } else if (this.config.flavor === 'openai-compatible') {
       if (completionParams.disableThinking === true) {
         providerOptions['openaiCompatible'] = {
-          reasoningEffort: 'low'
+          reasoningEffort: 'low',
+          ...(completionParams.textVerbosity
+            ? { textVerbosity: completionParams.textVerbosity }
+            : {})
         }
       } else {
         providerOptions['openaiCompatible'] = {
-          reasoningEffort: 'high'
+          reasoningEffort: 'high',
+          ...(completionParams.textVerbosity
+            ? { textVerbosity: completionParams.textVerbosity }
+            : {})
         }
       }
     } else if (this.config.flavor === 'anthropic') {

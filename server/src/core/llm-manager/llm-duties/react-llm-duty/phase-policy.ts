@@ -1,5 +1,9 @@
 import { PERSONA } from '@/core'
-import type { LLMReasoningMode } from '@/core/llm-manager/types'
+import type {
+  LLMReasoningMode,
+  LLMReasoningSummary,
+  LLMTextVerbosity
+} from '@/core/llm-manager/types'
 
 import type { ReactPhase } from './types'
 
@@ -17,6 +21,10 @@ export interface ReactPhasePolicy {
   streamToUser: boolean
   // Forward streamed reasoning chunks to reasoning logs/UI widgets.
   emitReasoning: boolean
+  // Visible reasoning summary detail. This is observability, not reasoning depth.
+  reasoningSummary?: LLMReasoningSummary
+  // Provider-side response verbosity.
+  textVerbosity?: LLMTextVerbosity
 }
 
 const REACT_PHASE_POLICIES: Record<ReactPhase, ReactPhasePolicy> = {
@@ -27,7 +35,9 @@ const REACT_PHASE_POLICIES: Record<ReactPhase, ReactPhasePolicy> = {
     reasoningMode: 'on',
     streamToProvider: true,
     streamToUser: false,
-    emitReasoning: true
+    emitReasoning: true,
+    reasoningSummary: 'auto',
+    textVerbosity: 'low'
   },
   execution: {
     promptProfile: 'lean',
@@ -36,7 +46,9 @@ const REACT_PHASE_POLICIES: Record<ReactPhase, ReactPhasePolicy> = {
     reasoningMode: 'on',
     streamToProvider: true,
     streamToUser: false,
-    emitReasoning: true
+    emitReasoning: true,
+    reasoningSummary: 'auto',
+    textVerbosity: 'low'
   },
   recovery: {
     promptProfile: 'lean',
@@ -45,7 +57,9 @@ const REACT_PHASE_POLICIES: Record<ReactPhase, ReactPhasePolicy> = {
     reasoningMode: 'on',
     streamToProvider: true,
     streamToUser: false,
-    emitReasoning: true
+    emitReasoning: true,
+    reasoningSummary: 'detailed',
+    textVerbosity: 'low'
   },
   final_answer: {
     promptProfile: 'full',
@@ -83,5 +97,5 @@ export function formatPhasePolicyForLog(
   phase: ReactPhase,
   policy: ReactPhasePolicy
 ): string {
-  return `phase=${phase} | profile=${policy.promptProfile} | persona=${policy.includePersonality ? 'on' : 'off'} | mood=${policy.includeMood ? 'on' : 'off'} | thinking=${policy.reasoningMode} | budget=provider_default | provider_stream=${policy.streamToProvider ? 'on' : 'off'} | user_stream=${policy.streamToUser ? 'on' : 'off'} | reasoning=${policy.emitReasoning ? 'on' : 'off'}`
+  return `phase=${phase} | profile=${policy.promptProfile} | persona=${policy.includePersonality ? 'on' : 'off'} | mood=${policy.includeMood ? 'on' : 'off'} | thinking=${policy.reasoningMode} | budget=provider_default | provider_stream=${policy.streamToProvider ? 'on' : 'off'} | user_stream=${policy.streamToUser ? 'on' : 'off'} | reasoning=${policy.emitReasoning ? 'on' : 'off'} | reasoning_summary=${policy.reasoningSummary ?? 'off'} | verbosity=${policy.textVerbosity ?? 'default'}`
 }

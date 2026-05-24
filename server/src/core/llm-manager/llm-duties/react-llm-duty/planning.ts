@@ -22,7 +22,6 @@ import {
   extractPlanResultFromCreatePlanArgs
 } from './utils'
 import {
-  shouldTreatPlanningTextAsFinalAnswer,
   shouldTreatPlainPlanningTextAsFinalAnswer,
   extractPlanningMarkedFinalAnswer,
   extractPlanningTextHandoffDraft,
@@ -527,7 +526,7 @@ export async function runPlanningPhase(
 
       if (
         textFallback &&
-        shouldTreatPlanningTextAsFinalAnswer(textFallback)
+        shouldTreatPlainPlanningTextAsFinalAnswer(textFallback)
       ) {
         LogHelper.debug(
           markedTextFallbackFinalAnswer

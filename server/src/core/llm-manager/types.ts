@@ -86,6 +86,10 @@ export interface OpenAIToolCall {
 }
 
 export type LLMReasoningMode = 'off' | 'guarded' | 'on'
+export type LLMReasoningSummary = 'auto' | 'detailed'
+export type LLMTextVerbosity = 'low' | 'medium' | 'high'
+export type LLMPromptCacheRetention = 'in_memory' | '24h'
+export type LLMServiceTier = 'auto' | 'flex' | 'priority' | 'default'
 
 export interface LLMPromptAbortReason {
   shouldRetry: boolean
@@ -122,6 +126,11 @@ export interface CompletionParams {
    * This is more expressive than the legacy disableThinking boolean.
    */
   reasoningMode?: LLMReasoningMode
+  reasoningSummary?: LLMReasoningSummary | undefined
+  textVerbosity?: LLMTextVerbosity | undefined
+  promptCacheKey?: string | undefined
+  promptCacheRetention?: LLMPromptCacheRetention | undefined
+  serviceTier?: LLMServiceTier | undefined
   /**
    * Optional compatibility flag to relax a forced tool_choice into `auto`
    * for providers that reject specified tool_choice values.
