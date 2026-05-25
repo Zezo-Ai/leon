@@ -21,6 +21,15 @@ const DEFAULT_CONFIG: LeonConfig = {
     host: 'http://localhost',
     port: 5_366
   },
+  client_interface: {
+    allowed_origins: [],
+    auth: {
+      enabled: false,
+      token: {
+        env: 'LEON_CLIENT_INTERFACE_TOKEN'
+      }
+    }
+  },
   routing: {
     mode: 'smart'
   },
@@ -58,13 +67,6 @@ const DEFAULT_CONFIG: LeonConfig = {
   time_zone: null,
   after_speech_enabled: false,
   telemetry_enabled: true,
-  http: {
-    enabled: true,
-    lang: 'en-US',
-    api_key: {
-      env: 'LEON_HTTP_API_KEY'
-    }
-  },
   python_tcp_server: {
     host: '127.0.0.1',
     port: 5_367
@@ -315,8 +317,6 @@ class ConfigManager {
     process.env['LEON_AFTER_SPEECH'] = this.config.after_speech_enabled
       ? 'true'
       : 'false'
-    process.env['LEON_OVER_HTTP'] = this.config.http.enabled ? 'true' : 'false'
-    process.env['LEON_HTTP_API_LANG'] = this.config.http.lang
     process.env['LEON_TELEMETRY'] = this.config.telemetry_enabled
       ? 'true'
       : 'false'
