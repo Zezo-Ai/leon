@@ -31,6 +31,11 @@ type AISDKFlavor =
   | 'cerebras'
   | 'groq'
 
+interface AISDKProviderOptionsContext {
+  completionParams: CompletionParams
+  reasoningMode: LLMReasoningMode | null
+}
+
 interface AISDKRemoteProviderConfig {
   name: string
   providerName: string
@@ -42,6 +47,10 @@ interface AISDKRemoteProviderConfig {
   sendApiKeyAsBearer?: boolean
   headers?: (apiKey: string) => Record<string, string>
   transformRequestBody?: (args: Record<string, unknown>) => Record<string, unknown>
+  buildProviderOptions?: (
+    context: AISDKProviderOptionsContext
+  ) => Record<string, unknown>
+  shouldOmitTemperature?: (completionParams: CompletionParams) => boolean
 }
 
 interface CallState {
@@ -479,33 +488,6 @@ export default class AISDKRemoteLLMProvider {
         : {}
     }
 
-    if (this.config.flavor === 'anthropic') {
-      if (reasoningMode === 'on') {
-        const reasoningBudget = this.getReasoningBudget(
-          completionParams,
-          1024
-        )
-        return {
-          anthropic: {
-            thinking: {
-              type: 'enabled',
-              ...(typeof reasoningBudget === 'number'
-                ? { budgetTokens: reasoningBudget }
-                : {})
-            },
-            sendReasoning: true
-          }
-        }
-      }
-
-      return {
-        anthropic: {
-          thinking: { type: 'disabled' },
-          sendReasoning: true
-        }
-      }
-    }
-
     if (this.config.flavor === 'moonshotai') {
       if (reasoningMode === 'on') {
         const reasoningBudget = this.getReasoningBudget(
@@ -582,6 +564,8 @@ export default class AISDKRemoteLLMProvider {
     prompt: PromptOrChatHistory,
     completionParams: CompletionParams
   ): Record<string, unknown> {
+    const shouldOmitTemperature =
+      this.config.shouldOmitTemperature?.(completionParams) === true
     const options: Record<string, unknown> = {
       prompt: this.toTextPrompt(prompt, completionParams),
       ...(completionParams.signal ? { abortSignal: completionParams.signal } : {}),
@@ -589,6 +573,7 @@ export default class AISDKRemoteLLMProvider {
         ? { maxOutputTokens: completionParams.maxTokens }
         : {}),
       ...(this.config.flavor !== 'moonshotai' &&
+        !shouldOmitTemperature &&
         typeof completionParams.temperature === 'number'
         ? { temperature: completionParams.temperature }
         : {})
@@ -617,8 +602,14 @@ export default class AISDKRemoteLLMProvider {
     const managedReasoningMode = this.resolveManagedReasoningMode(
       completionParams
     )
+    const customProviderOptions = this.config.buildProviderOptions?.({
+      completionParams,
+      reasoningMode: managedReasoningMode
+    })
 
-    if (managedReasoningMode) {
+    if (customProviderOptions) {
+      Object.assign(providerOptions, customProviderOptions)
+    } else if (managedReasoningMode) {
       Object.assign(
         providerOptions,
         this.buildManagedProviderOptions(managedReasoningMode, completionParams)
@@ -666,16 +657,6 @@ export default class AISDKRemoteLLMProvider {
             : {})
         }
       }
-    } else if (this.config.flavor === 'anthropic') {
-      providerOptions['anthropic'] = completionParams.disableThinking === true
-        ? {
-            thinking: { type: 'disabled' },
-            sendReasoning: true
-          }
-        : {
-            thinking: { type: 'enabled' },
-            sendReasoning: true
-          }
     } else if (this.config.flavor === 'moonshotai') {
       providerOptions['moonshotai'] = completionParams.disableThinking === true
         ? {
