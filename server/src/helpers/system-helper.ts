@@ -1,9 +1,21 @@
 import os from 'node:os'
+import { execFileSync } from 'node:child_process'
 
 import type { Llama } from 'node-llama-cpp'
 
 import { OSTypes, CPUArchitectures } from '@/types'
 
+const BYTES_PER_GIB = 1_024 * 1_024 * 1_024
+const MACOS_DEFAULT_VM_STAT_PAGE_SIZE_BYTES = 16_384
+const MACOS_VM_STAT_TIMEOUT_MS = 3_000
+const MACOS_VM_STAT_PAGE_SIZE_REGEX = /page size of (\d+) bytes/
+const MACOS_VM_STAT_PAGE_LINE_REGEX = /^Pages ([^:]+):\s+(\d+)\./
+const MACOS_RECLAIMABLE_VM_STAT_PAGE_NAMES = [
+  'free',
+  'inactive',
+  'speculative',
+  'purgeable'
+]
 const MINIMUM_LOCAL_LLM_VRAM_GB = 6
 const MINIMUM_LOCAL_LLM_RAM_GB = 8
 
@@ -171,7 +183,7 @@ export class SystemHelper {
    * @example getTotalRAM() // 4
    */
   public static getTotalRAM(): number {
-    return Number((os.totalmem() / (1_024 * 1_024 * 1_024)).toFixed(2))
+    return Number((os.totalmem() / BYTES_PER_GIB).toFixed(2))
   }
 
   /**
@@ -179,7 +191,72 @@ export class SystemHelper {
    * @example getFreeRAM() // 6
    */
   public static getFreeRAM(): number {
-    return Number((os.freemem() / (1_024 * 1_024 * 1_024)).toFixed(2))
+    return Number((this.getFreeRAMInBytes() / BYTES_PER_GIB).toFixed(2))
+  }
+
+  /**
+   * Get the amount of free memory (in bytes) on the machine
+   * @example getFreeRAMInBytes() // 6442450944
+   */
+  public static getFreeRAMInBytes(): number {
+    if (this.isMacOS()) {
+      return this.getMacOSAvailableMemoryInBytes() || os.freemem()
+    }
+
+    return os.freemem()
+  }
+
+  /**
+   * Get macOS available memory from reclaimable vm_stat pages
+   * @example getMacOSAvailableMemoryInBytes() // 6442450944
+   */
+  private static getMacOSAvailableMemoryInBytes(): number | null {
+    try {
+      const output = execFileSync('vm_stat', {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: MACOS_VM_STAT_TIMEOUT_MS
+      })
+
+      return this.parseMacOSAvailableMemoryInBytes(output)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Parse macOS available memory from vm_stat output
+   * @example parseMacOSAvailableMemoryInBytes('Mach Virtual Memory Statistics: ...') // 6442450944
+   */
+  private static parseMacOSAvailableMemoryInBytes(
+    vmStatOutput: string
+  ): number | null {
+    const pageSizeMatch = vmStatOutput.match(MACOS_VM_STAT_PAGE_SIZE_REGEX)
+    const pageSize = pageSizeMatch?.[1]
+      ? Number(pageSizeMatch[1])
+      : MACOS_DEFAULT_VM_STAT_PAGE_SIZE_BYTES
+    const pageCounts = new Map<string, number>()
+
+    for (const line of vmStatOutput.split('\n')) {
+      const lineMatch = line.trim().match(MACOS_VM_STAT_PAGE_LINE_REGEX)
+
+      if (!lineMatch?.[1] || !lineMatch[2]) {
+        continue
+      }
+
+      pageCounts.set(lineMatch[1], Number(lineMatch[2]))
+    }
+
+    const reclaimablePages = MACOS_RECLAIMABLE_VM_STAT_PAGE_NAMES.reduce(
+      (totalPages, pageName) => totalPages + (pageCounts.get(pageName) || 0),
+      0
+    )
+
+    if (!Number.isFinite(pageSize) || reclaimablePages <= 0) {
+      return null
+    }
+
+    return reclaimablePages * pageSize
   }
 
   /**

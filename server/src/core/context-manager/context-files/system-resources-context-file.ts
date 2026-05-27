@@ -20,7 +20,7 @@ export class SystemResourcesContextFile extends ContextFile {
   public generate(): string {
     const generatedAt = DateHelper.getDateTime()
     const totalMemoryBytes = os.totalmem()
-    const freeMemoryBytes = os.freemem()
+    const freeMemoryBytes = SystemHelper.getFreeRAMInBytes()
     const usedMemoryBytes = Math.max(totalMemoryBytes - freeMemoryBytes, 0)
     const usedMemoryPct =
       totalMemoryBytes > 0
