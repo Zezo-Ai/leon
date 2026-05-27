@@ -462,6 +462,13 @@ export const LANG = PROFILE_CONFIG.language as LongLanguageCode
 
 export const HOST = PROFILE_CONFIG.server.host
 export const PORT = PROFILE_CONFIG.server.port
+export const CLIENT_INTERFACE_ALLOWED_ORIGINS =
+  PROFILE_CONFIG.client_interface.allowed_origins
+export const IS_CLIENT_INTERFACE_AUTH_ENABLED =
+  PROFILE_CONFIG.client_interface.auth.enabled
+export const CLIENT_INTERFACE_TOKEN = CONFIG_MANAGER.resolveSecretReference(
+  PROFILE_CONFIG.client_interface.auth.token
+)
 
 export const TIME_ZONE = PROFILE_CONFIG.time_zone ?? undefined
 
@@ -472,12 +479,6 @@ export const ASR_PROVIDER = PROFILE_CONFIG.voice.asr.provider
 export const HAS_TTS = PROFILE_CONFIG.voice.tts.enabled
 export const TTS_PROVIDER = PROFILE_CONFIG.voice.tts.provider
 export const HAS_WAKE_WORD = PROFILE_CONFIG.voice.wake_word_enabled
-
-export const HAS_OVER_HTTP = PROFILE_CONFIG.http.enabled
-export const HTTP_API_KEY = CONFIG_MANAGER.resolveSecretReference(
-  PROFILE_CONFIG.http.api_key
-)
-export const HTTP_API_LANG = PROFILE_CONFIG.http.lang
 
 export const PYTHON_TCP_SERVER_HOST = PROFILE_CONFIG.python_tcp_server.host
 export const PYTHON_TCP_SERVER_PORT = PROFILE_CONFIG.python_tcp_server.port

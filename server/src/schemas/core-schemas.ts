@@ -12,6 +12,10 @@ const strictObject = <T extends TProperties>(properties: T): TObject<T> =>
 const secretReference = strictObject({
   env: Type.String({ pattern: '^[A-Z0-9_]+$' })
 })
+const clientInterfaceAuth = strictObject({
+  enabled: Type.Boolean(),
+  token: secretReference
+})
 const accessList = strictObject({
   allowed: Type.Array(Type.String({ minLength: 1 }), {
     uniqueItems: true
@@ -37,6 +41,12 @@ export const configSchemaObject = strictObject({
   server: strictObject({
     host: Type.String({ minLength: 1 }),
     port: Type.Integer({ minimum: 1, maximum: 65_535 })
+  }),
+  client_interface: strictObject({
+    allowed_origins: Type.Array(Type.String({ minLength: 1 }), {
+      uniqueItems: true
+    }),
+    auth: clientInterfaceAuth
   }),
   routing: strictObject({
     mode: Type.Union([
@@ -96,12 +106,7 @@ export const configSchemaObject = strictObject({
   }),
   time_zone: optionalString,
   after_speech_enabled: Type.Boolean(),
-  telemetry_enabled: Type.Boolean(),
-  http: strictObject({
-    enabled: Type.Boolean(),
-    lang: Type.String({ minLength: 1 }),
-    api_key: secretReference
-  })
+  telemetry_enabled: Type.Boolean()
 })
 
 export type LeonConfigSchema = Static<typeof configSchemaObject>

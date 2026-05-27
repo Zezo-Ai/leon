@@ -5,6 +5,20 @@ import VoiceEnergy from './voice-energy'
 import { ASR_DISABLED_MESSAGE, INIT_MESSAGES } from './constants'
 import handleSuggestions from './suggestion-handler.js'
 
+const LEON_CLIENT_INTERFACE_PROTOCOL_VERSION = 1
+const LEON_EVENTS = {
+  init: 'leon:init',
+  utterance: 'leon:utterance',
+  ready: 'leon:ready',
+  answer: 'leon:answer',
+  isTyping: 'leon:is-typing',
+  suggest: 'leon:suggest',
+  llmToken: 'leon:llm-token',
+  llmReasoningToken: 'leon:llm-reasoning-token',
+  ownerUtterance: 'leon:owner-utterance',
+  error: 'leon:error'
+}
+
 export default class Client {
   constructor(client, serverUrl, input, options = {}) {
     this.client = client
@@ -155,11 +169,18 @@ export default class Client {
     }
 
     this.socket.on('connect', () => {
-      this.socket.emit('init', {
-        client: this.client,
+      this.socket.emit(LEON_EVENTS.init, {
+        protocolVersion: LEON_CLIENT_INTERFACE_PROTOCOL_VERSION,
+        client: {
+          id: this.client,
+          type: 'web_app',
+          name: 'Leon Web App'
+        },
         sessionId: this.activeSessionId,
         capabilities: {
-          supportsWidgets: true
+          supportsWidgets: true,
+          supportsTokenStreaming: true,
+          supportsVoice: true
         }
       })
     })
@@ -167,17 +188,14 @@ export default class Client {
     /**
      * Init status listeners
      */
-    this.socket.on('init-client-core-server-handshake', (status) => {
-      this.setInitStatus('clientCoreServerHandshake', status)
-    })
-    this.socket.on('init-tcp-server-boot', (status) => {
-      this.setInitStatus('tcpServerBoot', status)
-    })
     this.socket.on('init-llama-server-boot', (status) => {
       this.setInitStatus('llamaServerBoot', status)
     })
 
-    this.socket.on('ready', () => {
+    this.socket.on(LEON_EVENTS.ready, () => {
+      this.setInitStatus('clientCoreServerHandshake', 'success')
+      this.setInitStatus('tcpServerBoot', 'success')
+
       void this._chatbotInitPromise?.then(() => {
         setTimeout(() => {
           const body = document.querySelector('body')
@@ -188,7 +206,7 @@ export default class Client {
       })
     })
 
-    this.socket.on('answer', (data) => {
+    this.socket.on(LEON_EVENTS.answer, (data) => {
       /*if (this._isVoiceModeEnabled) {
         this.voiceEnergy.status = 'listening'
       }*/
@@ -307,7 +325,7 @@ export default class Client {
       void this.sessionPanel?.refresh()
     })
 
-    this.socket.on('suggest', (data) => {
+    this.socket.on(LEON_EVENTS.suggest, (data) => {
       setTimeout(() => {
         handleSuggestions(data, this.chatbot, this)
       }, 400)
@@ -319,11 +337,11 @@ export default class Client {
       })*/
     })
 
-    this.socket.on('is-typing', (data) => {
+    this.socket.on(LEON_EVENTS.isTyping, (data) => {
       this.chatbot.isTyping('leon', data)
     })
 
-    this.socket.on('owner-utterance', (data) => {
+    this.socket.on(LEON_EVENTS.ownerUtterance, (data) => {
       if (!data?.utterance) {
         return
       }
@@ -352,7 +370,7 @@ export default class Client {
       this.updateMood(mood)
     })
 
-    this.socket.on('llm-token', (data) => {
+    this.socket.on(LEON_EVENTS.llmToken, (data) => {
       if (this._isVoiceModeEnabled) {
         this.voiceEnergy.status = 'processing'
       }
@@ -394,7 +412,7 @@ export default class Client {
       this.chatbot.scrollDown()
     })
 
-    this.socket.on('llm-reasoning-token', (data) => {
+    this.socket.on(LEON_EVENTS.llmReasoningToken, (data) => {
       if (!data?.generationId || !data?.token) {
         return
       }
@@ -522,6 +540,10 @@ export default class Client {
       cb('audio-received')
     })
 
+    this.socket.on(LEON_EVENTS.error, (data) => {
+      console.error('Leon client interface error:', data)
+    })
+
     if (this.history !== null) {
       this.parsedHistory = JSON.parse(this.history)
     }
@@ -549,8 +571,7 @@ export default class Client {
     const sentAt =
       typeof options.sentAt === 'number' ? options.sentAt : Date.now()
 
-    this.socket.emit('utterance', {
-      client: this.client,
+    this.socket.emit(LEON_EVENTS.utterance, {
       value: trimmedValue,
       sentAt,
       sessionId: this.activeSessionId,

@@ -21,14 +21,12 @@ const syncedEnvKeys = [
   'LEON_TTS_PROVIDER',
   'LEON_TIME_ZONE',
   'LEON_AFTER_SPEECH',
-  'LEON_OVER_HTTP',
-  'LEON_HTTP_API_LANG',
   'LEON_TELEMETRY',
   'LEON_PY_TCP_SERVER_HOST',
   'LEON_PY_TCP_SERVER_PORT',
   'LEON_LLAMACPP_BASE_URL',
   'LEON_SGLANG_BASE_URL',
-  'LEON_HTTP_API_KEY',
+  'LEON_CLIENT_INTERFACE_TOKEN',
   'LEON_OPENAI_API_KEY'
 ]
 
@@ -79,7 +77,7 @@ describe('ConfigManager', () => {
   })
 
   it('returns profile config values and syncs runtime env mappings', async () => {
-    process.env['LEON_HTTP_API_KEY'] = 'http-secret'
+    process.env['LEON_CLIENT_INTERFACE_TOKEN'] = 'client-secret'
     process.env['LEON_OPENAI_API_KEY'] = 'openai-secret'
 
     const profileConfig = {
@@ -87,6 +85,15 @@ describe('ConfigManager', () => {
       server: {
         host: 'http://127.0.0.1',
         port: 5_499
+      },
+      client_interface: {
+        allowed_origins: ['http://localhost:1420'],
+        auth: {
+          enabled: true,
+          token: {
+            env: 'LEON_CLIENT_INTERFACE_TOKEN'
+          }
+        }
       },
       routing: {
         mode: 'controlled'
@@ -187,14 +194,7 @@ describe('ConfigManager', () => {
       },
       time_zone: 'Europe/Paris',
       after_speech_enabled: true,
-      telemetry_enabled: false,
-      http: {
-        enabled: false,
-        lang: 'fr-FR',
-        api_key: {
-          env: 'LEON_HTTP_API_KEY'
-        }
-      }
+      telemetry_enabled: false
     }
 
     fs.writeFileSync(profilePaths.configPath, YAML.stringify(profileConfig))
@@ -211,11 +211,10 @@ describe('ConfigManager', () => {
     expect(process.env['LEON_WORKFLOW_LLM']).toBe('openai/gpt-4.1-mini')
     expect(process.env['LEON_AGENT_LLM']).toBe('')
     expect(process.env['LEON_TIME_ZONE']).toBe('Europe/Paris')
-    expect(process.env['LEON_OVER_HTTP']).toBe('false')
     expect(process.env['LEON_PY_TCP_SERVER_PORT']).toBe('5477')
     expect(configManager.resolveSecretReference(
-      profileConfig.http.api_key
-    )).toBe('http-secret')
+      profileConfig.client_interface.auth.token
+    )).toBe('client-secret')
     expect(configManager.getProviderAPIKeyEnv('openai')).toBe(
       'LEON_OPENAI_API_KEY'
     )

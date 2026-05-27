@@ -263,8 +263,6 @@ async function migrateLegacyConfigValues(document, shouldOverwriteScalarValues) 
     ['LEON_TTS_PROVIDER', ['voice', 'tts', 'provider'], (value) => value.trim()],
     ['LEON_TIME_ZONE', ['time_zone'], toOptionalString],
     ['LEON_AFTER_SPEECH', ['after_speech_enabled'], toBoolean],
-    ['LEON_OVER_HTTP', ['http', 'enabled'], toBoolean],
-    ['LEON_HTTP_API_LANG', ['http', 'lang'], (value) => value.trim()],
     ['LEON_TELEMETRY', ['telemetry_enabled'], toBoolean],
     [
       'LEON_PY_TCP_SERVER_HOST',

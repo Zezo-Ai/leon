@@ -10,23 +10,23 @@ import { PROFILE_DOT_ENV_PATH } from '@/constants'
 dotenv.config({ path: PROFILE_DOT_ENV_PATH })
 
 /**
- * Generate HTTP API key script
+ * Generate Leon client interface token script
  * save it in the .env file
  */
-const generateHTTPAPIKey = () =>
+const generateClientInterfaceToken = () =>
   new Promise(async (resolve, reject) => {
-    LogHelper.info('Generating the HTTP API key...')
+    LogHelper.info('Generating my client interface token...')
 
     try {
       const shasum = crypto.createHash('sha1')
       const str = StringHelper.random(11)
-      const envVarKey = 'LEON_HTTP_API_KEY'
+      const envVarKey = 'LEON_CLIENT_INTERFACE_TOKEN'
 
       shasum.update(str)
       const sha1 = shasum.digest('hex')
 
       await ProfileHelper.updateDotEnvVariable(envVarKey, sha1)
-      LogHelper.success('HTTP API key generated')
+      LogHelper.success('Client interface token generated')
 
       resolve()
     } catch (e) {
@@ -39,10 +39,10 @@ export default () =>
   new Promise(async (resolve, reject) => {
     try {
       if (
-        !process.env.LEON_HTTP_API_KEY ||
-        process.env.LEON_HTTP_API_KEY === ''
+        !process.env.LEON_CLIENT_INTERFACE_TOKEN ||
+        process.env.LEON_CLIENT_INTERFACE_TOKEN === ''
       ) {
-        await generateHTTPAPIKey()
+        await generateClientInterfaceToken()
       }
 
       resolve()
