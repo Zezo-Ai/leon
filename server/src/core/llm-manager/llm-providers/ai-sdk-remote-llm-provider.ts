@@ -69,6 +69,9 @@ interface CallState {
   usedOutputTokens: number
 }
 
+const STRUCTURED_OUTPUT_JSON_INSTRUCTION =
+  'Return only valid JSON matching the requested schema.'
+
 export default class AISDKRemoteLLMProvider {
   protected readonly name: string
   protected readonly apiKey: string | undefined
@@ -265,10 +268,17 @@ export default class AISDKRemoteLLMProvider {
 
   private toTextPrompt(
     prompt: PromptOrChatHistory,
-    completionParams: CompletionParams
+    completionParams: CompletionParams,
+    requiresStructuredOutputInstruction = false
   ): Array<Record<string, unknown>> {
-    const normalizedSystemPrompt = String(completionParams.systemPrompt ?? '')
-      .trim()
+    const normalizedSystemPrompt = [
+      String(completionParams.systemPrompt ?? '').trim(),
+      requiresStructuredOutputInstruction
+        ? STRUCTURED_OUTPUT_JSON_INSTRUCTION
+        : ''
+    ]
+      .filter(Boolean)
+      .join('\n\n')
     const messages: Array<Record<string, unknown>> = []
 
     if (normalizedSystemPrompt) {
@@ -566,8 +576,13 @@ export default class AISDKRemoteLLMProvider {
   ): Record<string, unknown> {
     const shouldOmitTemperature =
       this.config.shouldOmitTemperature?.(completionParams) === true
+    const normalizedSchema = this.normalizeSchema(completionParams.data)
     const options: Record<string, unknown> = {
-      prompt: this.toTextPrompt(prompt, completionParams),
+      prompt: this.toTextPrompt(
+        prompt,
+        completionParams,
+        Boolean(normalizedSchema)
+      ),
       ...(completionParams.signal ? { abortSignal: completionParams.signal } : {}),
       ...(typeof completionParams.maxTokens === 'number'
         ? { maxOutputTokens: completionParams.maxTokens }
@@ -589,7 +604,6 @@ export default class AISDKRemoteLLMProvider {
       options['toolChoice'] = toolChoice
     }
 
-    const normalizedSchema = this.normalizeSchema(completionParams.data)
     if (normalizedSchema) {
       options['responseFormat'] = {
         type: 'json',
