@@ -1,0 +1,36 @@
+@use '_includes/reset'
+@use '_includes/variables'
+@use '_includes/themes'
+
+html
+  min-width: 320px
+  min-height: 100%
+  background-color: var(--color-background)
+  color: var(--color-text)
+  font-family: var(--font-family)
+  font-weight: var(--font-weight-regular)
+  -webkit-font-smoothing: antialiased
+  -moz-osx-font-smoothing: grayscale
+  -webkit-text-size-adjust: 100%
+
+body,
+#root
+  min-height: 100vh
+
+body
+  background-color: var(--color-background)
+  overflow: hidden
+
+::selection
+  background-color: var(--color-accent)
+  color: var(--color-accent-contrast)
+
+button,
+input,
+textarea
+  color: inherit
+
+button
+  border: 0
+  background: transparent
+  cursor: pointer

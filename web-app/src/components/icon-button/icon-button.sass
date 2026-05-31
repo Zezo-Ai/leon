@@ -1,0 +1,17 @@
+.icon-button
+  display: inline-grid
+  width: 32px
+  height: 32px
+  place-items: center
+  border-radius: var(--border-radius-md)
+  color: var(--color-text-secondary)
+  font-size: 24px
+  transition: color var(--transition-duration-main) var(--transition-timing-main), background-color var(--transition-duration-main) var(--transition-timing-main)
+
+  &:hover:not(:disabled)
+    background-color: var(--color-surface-hover)
+    color: var(--color-text)
+
+  &:disabled
+    color: var(--color-text-disabled)
+    cursor: not-allowed

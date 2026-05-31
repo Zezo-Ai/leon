@@ -1,0 +1,66 @@
+.dialog-backdrop
+  position: fixed
+  inset: 0
+  z-index: 20
+  display: grid
+  place-items: start center
+  padding-top: 112px
+  background-color: var(--color-overlay)
+  backdrop-filter: blur(10px)
+
+.dialog
+  width: min(560px, calc(100vw - 48px))
+  overflow: hidden
+  border: 1px solid var(--color-border-strong)
+  border-radius: var(--border-radius-lg)
+  background-color: var(--color-surface)
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .42)
+
+  header
+    display: flex
+    align-items: start
+    justify-content: space-between
+    gap: var(--space-lg)
+    padding: 28px 28px 24px
+
+    h2
+      color: var(--color-text)
+      font-size: 24px
+      font-weight: var(--font-weight-bold)
+      line-height: 30px
+
+    p
+      margin-top: var(--space-md)
+      color: var(--color-text-secondary)
+      font-size: var(--font-size-md)
+      line-height: var(--line-height-md)
+
+    button
+      color: var(--color-text)
+      font-size: 24px
+
+  .content
+    padding: 0 28px 28px
+
+  footer
+    display: flex
+    justify-content: end
+    gap: var(--space-sm)
+    padding: 24px 28px
+    border-top: 1px solid var(--color-border)
+    background-color: rgba(245, 245, 247, .04)
+
+  .button
+    min-width: 82px
+    height: 40px
+    padding: 0 var(--space-md)
+    border: 1px solid var(--color-border-strong)
+    border-radius: var(--border-radius-pill)
+    color: var(--color-text)
+    font-size: var(--font-size-md)
+    font-weight: var(--font-weight-semi-bold)
+
+    &.danger
+      border-color: transparent
+      background-color: var(--color-danger)
+      color: #FFFFFF

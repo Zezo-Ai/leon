@@ -1,0 +1,55 @@
+.task-list-item
+  position: relative
+  display: grid
+  grid-template-columns: 24px 1fr
+  gap: var(--space-sm)
+  color: var(--color-text-secondary)
+
+  &:not(:last-child)::after
+    position: absolute
+    top: 24px
+    bottom: -18px
+    left: 11px
+    width: 1px
+    background-color: rgba(245, 245, 247, .2)
+    content: ''
+
+  .marker
+    z-index: 1
+    display: grid
+    width: 22px
+    height: 22px
+    place-items: center
+    border-radius: var(--border-radius-pill)
+    background-color: var(--color-surface)
+    color: var(--color-text-secondary)
+    font-size: 14px
+
+  &.done .marker,
+  &.active .marker
+    background-color: var(--color-accent-soft)
+    color: var(--color-accent)
+
+  &.active .marker::before
+    width: 10px
+    height: 10px
+    border-radius: var(--border-radius-pill)
+    background-color: var(--color-accent)
+    content: ''
+
+  .content
+    display: grid
+    gap: var(--space-sm)
+
+    p
+      display: inline-flex
+      align-items: center
+      gap: var(--space-sm)
+      min-height: 22px
+      font-size: var(--font-size-md)
+      line-height: var(--line-height-md)
+
+    span
+      color: var(--color-text-tertiary)
+      font-size: var(--font-size-sm)
+      line-height: var(--line-height-sm)

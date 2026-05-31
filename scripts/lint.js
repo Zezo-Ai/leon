@@ -8,6 +8,8 @@ import buildAurora from './build-aurora.js'
 const globs = [
   'app/src/js/*.{ts,js}',
   'aurora/src/**/*.{ts,tsx,js,jsx}',
+  'web-app/src/**/*.{ts,tsx}',
+  'web-app/vite.config.ts',
   // TODO: deal with it once handling new hotword
   // '"hotword/index.{ts,js}"',
   'skills/**/*.{ts,js}',
@@ -30,6 +32,9 @@ const globs = [
       stdio: 'inherit'
     })
     await execa('tsc', ['--noEmit', '-p', 'tsconfig.json'], {
+      stdio: 'inherit'
+    })
+    await execa('tsc', ['--noEmit', '-p', 'web-app/tsconfig.json'], {
       stdio: 'inherit'
     })
 
