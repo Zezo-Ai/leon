@@ -1,5 +1,5 @@
-@import 'base.scss';
-@import 'listening.scss';
-@import 'idle.scss';
-@import 'processing.scss';
-@import 'talking.scss';
+@use 'base';
+@use 'listening';
+@use 'idle';
+@use 'processing';
+@use 'talking';

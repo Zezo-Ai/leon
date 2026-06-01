@@ -1,0 +1,8 @@
+@use 'sass:color';
+
+$voice-neon-pink-color: #ed297a;
+$voice-neon-blue-color: #1c75db;
+$voice-neon-shadow-color: color.mix(
+  $voice-neon-pink-color,
+  $voice-neon-blue-color
+);
