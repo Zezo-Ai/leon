@@ -13,6 +13,15 @@ import {
 } from '../server/src/leon-roots.ts'
 
 const APP_DEV_SERVER_PORT = 5_173
+const NODE_MODULES_PATH_SEGMENT = '/node_modules/'
+const REACT_VENDOR_PACKAGES = ['react', 'react-dom', 'scheduler']
+const REALTIME_VENDOR_PACKAGES = [
+  'socket.io-client',
+  'socket.io-parser',
+  'engine.io-client',
+  'engine.io-parser'
+]
+const UI_VENDOR_PACKAGE_PREFIXES = ['@ark-ui/', '@zag-js/', '@floating-ui/']
 
 dotenv.config({ path: PROFILE_DOT_ENV_PATH })
 
@@ -42,6 +51,26 @@ function readAppLeonConfig() {
   }
 }
 
+function normalizeModuleId(moduleId) {
+  return moduleId.replaceAll('\\', '/')
+}
+
+function isNodeModule(moduleId) {
+  return normalizeModuleId(moduleId).includes(NODE_MODULES_PATH_SEGMENT)
+}
+
+function includesVendorPackage(moduleId, packageName) {
+  return normalizeModuleId(moduleId).includes(
+    `${NODE_MODULES_PATH_SEGMENT}${packageName}/`
+  )
+}
+
+function includesVendorPackagePrefix(moduleId, packagePrefix) {
+  return normalizeModuleId(moduleId).includes(
+    `${NODE_MODULES_PATH_SEGMENT}${packagePrefix}`
+  )
+}
+
 // Map necessary Leon's env vars as Vite only expose VITE_*
 const leonConfig = readAppLeonConfig()
 process.env.VITE_LEON_NODE_ENV = process.env.LEON_NODE_ENV
@@ -68,7 +97,44 @@ export default defineConfig({
   },
   build: {
     outDir: '../dist',
-    emptyOutDir: true
+    emptyOutDir: true,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'react-vendor',
+              test: (moduleId) =>
+                REACT_VENDOR_PACKAGES.some((packageName) =>
+                  includesVendorPackage(moduleId, packageName)
+                ),
+              priority: 30
+            },
+            {
+              name: 'realtime-vendor',
+              test: (moduleId) =>
+                REALTIME_VENDOR_PACKAGES.some((packageName) =>
+                  includesVendorPackage(moduleId, packageName)
+                ),
+              priority: 20
+            },
+            {
+              name: 'ui-vendor',
+              test: (moduleId) =>
+                UI_VENDOR_PACKAGE_PREFIXES.some((packagePrefix) =>
+                  includesVendorPackagePrefix(moduleId, packagePrefix)
+                ),
+              priority: 10
+            },
+            {
+              name: 'vendor',
+              test: isNodeModule,
+              priority: 0
+            }
+          ]
+        }
+      }
+    }
   },
   server: {
     port: APP_DEV_SERVER_PORT
