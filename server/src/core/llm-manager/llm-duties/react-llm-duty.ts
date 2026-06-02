@@ -112,7 +112,7 @@ import type {
 import { widgetId, emitPlanWidget } from './react-llm-duty/plan-widget'
 import {
   getPhasePolicy,
-  formatPhasePolicyForLog
+  formatEffectivePhasePolicyForLog
 } from './react-llm-duty/phase-policy'
 import {
   buildCatalog,
@@ -2191,7 +2191,11 @@ export class ReActLLMDuty extends LLMDuty {
       channel: 'json',
       prompt,
       systemPrompt,
-      phasePolicySummary: formatPhasePolicyForLog(phase, phasePolicy),
+      phasePolicySummary: formatEffectivePhasePolicyForLog(phase, phasePolicy, {
+        reasoningMode,
+        streamToProvider: shouldStream,
+        emitReasoning: shouldEmitReasoning
+      }),
       shouldStream,
       schema,
       ...(promptSections ? { promptSections } : {}),
@@ -2338,7 +2342,12 @@ export class ReActLLMDuty extends LLMDuty {
       channel: 'text',
       prompt,
       systemPrompt,
-      phasePolicySummary: formatPhasePolicyForLog(phase, phasePolicy),
+      phasePolicySummary: formatEffectivePhasePolicyForLog(phase, phasePolicy, {
+        reasoningMode,
+        streamToProvider: shouldStreamEffective,
+        streamToUser: shouldStreamToUser,
+        emitReasoning: shouldEmitReasoning
+      }),
       shouldStream: shouldStreamEffective,
       ...(promptSections ? { promptSections } : {}),
       ...(history ? { history } : {})
@@ -2541,7 +2550,12 @@ export class ReActLLMDuty extends LLMDuty {
       ...(effectiveToolChoice !== undefined
         ? { toolChoice: effectiveToolChoice }
         : {}),
-      phasePolicySummary: formatPhasePolicyForLog(phase, phasePolicy),
+      phasePolicySummary: formatEffectivePhasePolicyForLog(phase, phasePolicy, {
+        reasoningMode,
+        streamToProvider: shouldStreamEffective,
+        streamToUser: shouldStreamToUserEffective,
+        emitReasoning: shouldEmitReasoning
+      }),
       shouldStream: shouldStreamEffective,
       ...(promptSections ? { promptSections } : {}),
       ...(history ? { history } : {})

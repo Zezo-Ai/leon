@@ -384,6 +384,44 @@ describe('ReActLLMDuty agent loop', () => {
     })
     expect(callLLM).toHaveBeenCalledOnce()
     expect(callLLM.mock.calls[0]?.[3]).toBe(history)
+    expect(callLLM.mock.calls[0]?.[5]).toMatchObject({
+      reasoningMode: 'off',
+      streamToProvider: false
+    })
+  })
+
+  it('lets final answer synthesis continue when self-observation fails', async () => {
+    const consumeProviderErrorMessage = vi.fn(
+      () => 'Provider timed out during self-observation.'
+    )
+    const caller = {
+      callLLM: vi.fn(async () => null),
+      callLLMText: vi.fn(),
+      callLLMWithTools: vi.fn(),
+      supportsNativeTools: true,
+      isLocalProvider: false,
+      input: 'Summarize the transcript',
+      history: [],
+      agentSkillCatalog: '',
+      setAgentSkillContext: vi.fn(),
+      getAgentSkillContext: vi.fn(),
+      getContextFileContent: vi.fn(() => null),
+      getContextManifest: vi.fn(() => ''),
+      getSelfModelSnapshot: vi.fn(() => ''),
+      consumeProviderErrorMessage
+    }
+
+    const result = await runExecutionSelfObservationPhaseDirect(caller, [
+      {
+        function: 'operating_system_control.file.read',
+        status: 'success',
+        observation: 'Transcript content was read.',
+        stepLabel: 'Read transcript'
+      }
+    ])
+
+    expect(result).toBeNull()
+    expect(consumeProviderErrorMessage).toHaveBeenCalledOnce()
   })
 
   it('skips Agent Skill selection when no name or metadata match is present', async () => {
