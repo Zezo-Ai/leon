@@ -1001,14 +1001,18 @@ Use only the user request and collected observations to decide whether the reque
     }),
     {
       phase: 'execution',
-      reasoningMode: 'off'
+      reasoningMode: 'off',
+      streamToProvider: false
     }
   )
 
   if (!completion) {
     const providerError = caller.consumeProviderErrorMessage()
     if (providerError) {
-      return createExecutionHandoff(providerError, 'error', 'self_observation')
+      LogHelper.title(`${DUTY_NAME} / execution`)
+      LogHelper.warning(
+        `Execution self-observation failed; continuing to final answer synthesis. ${providerError}`
+      )
     }
     return null
   }

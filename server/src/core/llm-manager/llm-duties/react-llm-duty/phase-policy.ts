@@ -99,3 +99,21 @@ export function formatPhasePolicyForLog(
 ): string {
   return `phase=${phase} | profile=${policy.promptProfile} | persona=${policy.includePersonality ? 'on' : 'off'} | mood=${policy.includeMood ? 'on' : 'off'} | thinking=${policy.reasoningMode} | budget=provider_default | provider_stream=${policy.streamToProvider ? 'on' : 'off'} | user_stream=${policy.streamToUser ? 'on' : 'off'} | reasoning=${policy.emitReasoning ? 'on' : 'off'} | reasoning_summary=${policy.reasoningSummary ?? 'off'} | verbosity=${policy.textVerbosity ?? 'default'}`
 }
+
+export function formatEffectivePhasePolicyForLog(
+  phase: ReactPhase,
+  policy: ReactPhasePolicy,
+  effective: {
+    reasoningMode: LLMReasoningMode
+    streamToProvider: boolean
+    streamToUser?: boolean
+    emitReasoning: boolean
+  }
+): string {
+  const effectiveUserStream =
+    typeof effective.streamToUser === 'boolean'
+      ? ` | effective_user_stream=${effective.streamToUser ? 'on' : 'off'}`
+      : ''
+
+  return `${formatPhasePolicyForLog(phase, policy)} | effective_thinking=${effective.reasoningMode} | effective_provider_stream=${effective.streamToProvider ? 'on' : 'off'}${effectiveUserStream} | effective_reasoning=${effective.emitReasoning ? 'on' : 'off'}`
+}
