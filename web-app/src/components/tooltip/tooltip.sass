@@ -1,0 +1,56 @@
+.tooltip
+  position: relative
+  display: inline-flex
+
+  .tooltip-content
+    position: absolute
+    z-index: 30
+    width: max-content
+    max-width: 220px
+    padding: 6px 10px
+    background: linear-gradient(var(--color-surface-elevated), var(--color-surface-elevated)) padding-box, var(--gradient-border) border-box
+    border: 1px solid transparent
+    border-radius: var(--border-radius-md)
+    color: var(--color-text)
+    font-size: var(--font-size-sm)
+    font-weight: var(--font-weight-semi-bold)
+    opacity: 0
+    pointer-events: none
+    transform: translate3d(0, 0, 0)
+    transition: opacity var(--transition-duration-main) var(--transition-timing-main), transform var(--transition-duration-main) var(--transition-timing-main)
+    white-space: nowrap
+
+  &.tooltip-open .tooltip-content
+    opacity: 1
+
+  &.tooltip-top .tooltip-content
+    bottom: calc(100% + var(--space-sm))
+    left: 50%
+    transform: translate3d(-50%, 4px, 0)
+
+  &.tooltip-top.tooltip-open .tooltip-content
+    transform: translate3d(-50%, 0, 0)
+
+  &.tooltip-right .tooltip-content
+    top: 50%
+    left: calc(100% + var(--space-sm))
+    transform: translate3d(-4px, -50%, 0)
+
+  &.tooltip-right.tooltip-open .tooltip-content
+    transform: translate3d(0, -50%, 0)
+
+  &.tooltip-bottom .tooltip-content
+    top: calc(100% + var(--space-sm))
+    left: 50%
+    transform: translate3d(-50%, -4px, 0)
+
+  &.tooltip-bottom.tooltip-open .tooltip-content
+    transform: translate3d(-50%, 0, 0)
+
+  &.tooltip-left .tooltip-content
+    top: 50%
+    right: calc(100% + var(--space-sm))
+    transform: translate3d(4px, -50%, 0)
+
+  &.tooltip-left.tooltip-open .tooltip-content
+    transform: translate3d(0, -50%, 0)

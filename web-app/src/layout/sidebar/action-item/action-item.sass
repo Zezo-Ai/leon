@@ -8,11 +8,11 @@
   color: var(--color-text-secondary)
   text-align: left
 
-  i
+  .action-item-icon
     color: var(--color-text)
     font-size: 24px
 
-  span
+  .action-item-label
     min-width: 0
     overflow: hidden
     font-size: var(--font-size-md)
@@ -20,7 +20,7 @@
     text-overflow: ellipsis
     white-space: nowrap
 
-  .addon
+  .action-item-addon
     overflow: visible
 
   &:hover:not(:disabled)
@@ -30,5 +30,5 @@
     color: var(--color-text-disabled)
     cursor: not-allowed
 
-    i
+    .action-item-icon
       color: var(--color-text-disabled)

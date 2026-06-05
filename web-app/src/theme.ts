@@ -12,10 +12,14 @@ export function applyTheme(theme: Theme): void {
   document.documentElement.dataset['theme'] = theme
 }
 
-export function applyStoredTheme(): void {
+export function getStoredTheme(): Theme {
   const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
 
-  applyTheme(isTheme(storedTheme) ? storedTheme : DEFAULT_THEME)
+  return isTheme(storedTheme) ? storedTheme : DEFAULT_THEME
+}
+
+export function applyStoredTheme(): void {
+  applyTheme(getStoredTheme())
 }
 
 export function saveTheme(theme: Theme): void {
