@@ -1,0 +1,21 @@
+.session-list
+  display: grid
+  min-height: 0
+  gap: var(--space-lg)
+
+  h2
+    padding: 0 var(--space-md)
+    color: var(--color-text)
+    font-size: var(--font-size-md)
+    font-weight: var(--font-weight-bold)
+    line-height: var(--line-height-md)
+
+  ul
+    display: grid
+    gap: 2px
+    overflow: auto
+    min-height: 0
+    scrollbar-width: none
+
+    &::-webkit-scrollbar
+      display: none

@@ -1,0 +1,25 @@
+.app-layout
+  min-height: 100vh
+  background-color: var(--color-background)
+
+  > main
+    position: relative
+    z-index: 2
+    display: grid
+    justify-items: center
+    height: 100vh
+    min-height: 100vh
+    margin-left: var(--sidebar-width)
+    overflow: auto
+    scrollbar-width: none
+
+    &::-webkit-scrollbar
+      display: none
+
+@media (max-width: 960px)
+  .app-layout
+    .sidebar
+      transform: translateX(calc(var(--sidebar-width) * -1))
+
+    > main
+      margin-left: 0

@@ -1,0 +1,32 @@
+.session-list-item
+  display: grid
+  grid-template-columns: 1fr 24px
+  align-items: center
+  gap: var(--space-sm)
+  width: 100%
+  min-height: 44px
+  padding: 0 var(--space-md)
+  border-radius: var(--border-radius-md)
+  color: var(--color-text-secondary)
+  text-align: left
+
+  .session-list-item-label
+    overflow: hidden
+    font-size: var(--font-size-md)
+    line-height: var(--line-height-md)
+    text-overflow: ellipsis
+    white-space: nowrap
+
+  .session-list-item-icon
+    justify-self: end
+    color: var(--color-text-tertiary)
+    font-size: 20px
+
+  &:hover,
+  &.session-list-item-active
+    background-color: var(--color-surface-hover)
+    color: var(--color-text)
+
+  &.session-list-item-active
+    background-color: rgba(28, 117, 219, .3)
+    font-weight: var(--font-weight-semi-bold)

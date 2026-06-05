@@ -1,0 +1,77 @@
+.sidebar
+  position: fixed
+  inset: 0 auto 0 0
+  z-index: 5
+  display: flex
+  flex-direction: column
+  gap: var(--space-xs)
+  width: var(--sidebar-width)
+  border-right: 1px solid var(--color-border)
+  background-color: var(--color-sidebar-background)
+  backdrop-filter: blur(18px)
+  overflow: hidden
+  transition: width var(--transition-duration-main) var(--transition-timing-main)
+
+  &.sidebar-collapsed
+    width: var(--sidebar-collapsed-width)
+
+  .sidebar-header
+    display: flex
+    align-items: center
+    justify-content: space-between
+    padding: var(--space-md)
+    gap: var(--space-md)
+
+  .sidebar-logo-slot
+    position: relative
+    display: inline-flex
+    flex: 0 0 auto
+    align-items: center
+    justify-content: center
+    min-width: 40px
+    min-height: 40px
+
+  .sidebar-logo-open-button
+    position: absolute
+    inset: 0
+    display: inline-flex
+    align-items: center
+    justify-content: center
+    opacity: 0
+    pointer-events: none
+    transition: opacity var(--transition-duration-main) var(--transition-timing-main)
+
+  .sidebar-controls
+    display: inline-flex
+    gap: 0
+
+  .sidebar-primary
+    display: grid
+    gap: var(--space-sm)
+
+  .sidebar-collapsed-unfold-hit
+    display: none
+
+  &.sidebar-collapsed
+    .sidebar-header
+      justify-content: center
+      padding: var(--space-md) var(--space-sm)
+
+    .sidebar-controls
+      display: none
+
+    .sidebar-logo-slot:hover,
+    .sidebar-logo-slot:focus-within
+      .logo
+        opacity: 0
+        pointer-events: none
+
+      .sidebar-logo-open-button
+        opacity: 1
+        pointer-events: auto
+
+    .sidebar-collapsed-unfold-hit
+      display: block
+      cursor: e-resize
+      flex: 1 1 auto
+      width: 100%

@@ -1,0 +1,40 @@
+.sidebar-footer
+  display: grid
+  gap: var(--space-xl)
+  margin: 0 calc(var(--space-lg) * -1) calc(var(--space-lg) * -1)
+  border-top: 1px solid var(--color-border)
+
+  .sidebar-footer-link
+    display: inline-flex
+    align-items: center
+    justify-self: center
+    gap: var(--space-sm)
+    padding-top: var(--space-xl)
+    color: var(--color-text-secondary)
+    font-size: var(--font-size-md)
+    line-height: var(--line-height-md)
+    text-decoration: none
+
+    .sidebar-footer-link-icon
+      color: var(--color-text)
+      font-size: 24px
+
+  .sidebar-footer-status
+    display: grid
+    grid-template-columns: 1fr 72px
+    min-height: 44px
+    border-top: 1px solid var(--color-border)
+
+  .sidebar-footer-status-label
+    align-self: center
+    padding-left: var(--space-lg)
+    color: var(--color-text-tertiary)
+    font-size: var(--font-size-sm)
+    line-height: var(--line-height-sm)
+
+  .sidebar-footer-status-button
+    display: grid
+    place-items: center
+    border-left: 1px solid var(--color-border)
+    color: var(--color-text)
+    font-size: 22px

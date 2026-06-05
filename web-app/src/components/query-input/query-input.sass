@@ -1,0 +1,52 @@
+.query-input
+  position: fixed
+  right: max(var(--space-xl), calc((100vw - var(--sidebar-width) - var(--content-width)) / 2))
+  bottom: var(--space-xl)
+  z-index: 3
+  display: grid
+  grid-template-columns: 40px 1fr 40px 48px
+  align-items: center
+  gap: var(--space-sm)
+  width: min(var(--content-width), calc(100vw - var(--sidebar-width) - (var(--space-xl) * 2)))
+  min-height: var(--query-input-height)
+  padding: 8px 10px 8px 20px
+  border: 1px solid var(--color-query-border)
+  border-radius: var(--border-radius-xl)
+  background: linear-gradient(var(--color-query-background), var(--color-query-background)) padding-box, var(--gradient-query) border-box
+  box-shadow: 0 22px 80px rgba(28, 117, 219, .12)
+  backdrop-filter: blur(18px)
+
+  input
+    width: 100%
+    border: 0
+    outline: 0
+    background: transparent
+    color: var(--color-text)
+    font-size: var(--font-size-md)
+    line-height: var(--line-height-md)
+
+    &::placeholder
+      color: var(--color-text-secondary)
+
+  button
+    display: grid
+    place-items: center
+    color: var(--color-text-secondary)
+    font-size: 28px
+
+  .add,
+  .voice
+    width: 40px
+    height: 40px
+
+  .send
+    width: 48px
+    height: 48px
+    border: 1px solid var(--color-border-strong)
+    border-radius: var(--border-radius-pill)
+
+@media (max-width: 960px)
+  .query-input
+    right: var(--space-lg)
+    left: var(--space-lg)
+    width: auto
