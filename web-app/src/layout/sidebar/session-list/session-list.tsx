@@ -105,6 +105,7 @@ export function SessionList({
           )
         })}
       </ul>
+      <div className="session-list-mask" aria-hidden="true" />
     </nav>
   )
 }
