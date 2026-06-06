@@ -3,7 +3,15 @@ import { clsx } from 'clsx'
 
 import './sidebar.sass'
 import { Button } from '../../components/button'
-import { getStoredTheme, saveTheme, type Theme } from '../../theme'
+import {
+  getStoredSidebarExpanded,
+  getStoredSoundsEnabled,
+  getStoredTheme,
+  saveSidebarExpanded,
+  saveSoundsEnabled,
+  saveTheme,
+  type Theme
+} from '../../theme'
 
 import { Logo } from './logo'
 import { Menu } from './menu'
@@ -14,15 +22,25 @@ const DARK_THEME_COLLAPSED_LOGO_SRC = '/img/logo-for-dark-bg.svg'
 const LIGHT_THEME_COLLAPSED_LOGO_SRC = '/img/logo-for-light-bg.svg'
 
 export function Sidebar() {
-  const [soundsEnabled, setSoundsEnabled] = useState(true)
+  const [soundsEnabled, setSoundsEnabled] = useState(getStoredSoundsEnabled)
   const [theme, setTheme] = useState<Theme>(getStoredTheme)
-  const [sidebarExpanded, setSidebarExpanded] = useState(true)
+  const [sidebarExpanded, setSidebarExpanded] = useState(getStoredSidebarExpanded)
 
   function toggleTheme(): void {
     const nextTheme = theme === 'dark' ? 'light' : 'dark'
 
     setTheme(nextTheme)
     saveTheme(nextTheme)
+  }
+
+  function updateSoundsEnabled(nextSoundsEnabled: boolean): void {
+    setSoundsEnabled(nextSoundsEnabled)
+    saveSoundsEnabled(nextSoundsEnabled)
+  }
+
+  function updateSidebarExpanded(nextSidebarExpanded: boolean): void {
+    setSidebarExpanded(nextSidebarExpanded)
+    saveSidebarExpanded(nextSidebarExpanded)
   }
 
   const logoSrc = sidebarExpanded
@@ -46,7 +64,7 @@ export function Sidebar() {
               iconName="sidebar-unfold"
               tooltipMessage="Open sidebar"
               tooltipPosition="right"
-              onClick={() => setSidebarExpanded(true)}
+              onClick={() => updateSidebarExpanded(true)}
             />
           </div>
         </div>
@@ -54,7 +72,7 @@ export function Sidebar() {
           <Button
             iconName={soundsEnabled ? 'volume-up' : 'volume-mute'}
             tooltipMessage={soundsEnabled ? 'Mute sounds' : 'Unmute sounds'}
-            onClick={() => setSoundsEnabled((enabled) => !enabled)}
+            onClick={() => updateSoundsEnabled(!soundsEnabled)}
           />
           <Button
             iconName={theme === 'dark' ? 'moon' : 'sun'}
@@ -64,7 +82,7 @@ export function Sidebar() {
           <Button
             iconName={sidebarExpanded ? 'sidebar-fold' : 'sidebar-unfold'}
             tooltipMessage={sidebarExpanded ? 'Close sidebar' : 'Open sidebar'}
-            onClick={() => setSidebarExpanded((expanded) => !expanded)}
+            onClick={() => updateSidebarExpanded(!sidebarExpanded)}
           />
         </div>
       </header>
@@ -73,7 +91,7 @@ export function Sidebar() {
         type="button"
         className="sidebar-collapsed-unfold-hit"
         aria-label="Open sidebar"
-        onClick={() => setSidebarExpanded(true)}
+        onClick={() => updateSidebarExpanded(true)}
       />
       {/* <SessionList /> */}
       <footer className="sidebar-footer-slot">
