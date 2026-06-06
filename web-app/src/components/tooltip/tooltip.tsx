@@ -55,6 +55,33 @@ export function Tooltip({
   const [tooltipStyle, setTooltipStyle] = useState<CSSProperties>()
   const triggerRef = useRef<HTMLSpanElement>(null)
 
+  function openTooltip(): void {
+    if (triggerRef.current === null) {
+      return
+    }
+
+    setTooltipStyle(getTooltipStyle(
+      triggerRef.current.getBoundingClientRect(),
+      position
+    ))
+    setOpen(true)
+  }
+
+  function closeTooltip(): void {
+    setOpen(false)
+  }
+
+  function closeTooltipAndBlurTrigger(): void {
+    closeTooltip()
+
+    if (
+      document.activeElement instanceof HTMLElement &&
+      triggerRef.current?.contains(document.activeElement)
+    ) {
+      document.activeElement.blur()
+    }
+  }
+
   useEffect(() => {
     if (!open || triggerRef.current === null) {
       return
@@ -86,19 +113,21 @@ export function Tooltip({
       <span
         ref={triggerRef}
         className="tooltip"
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onClick={() => setOpen(false)}
+        onMouseEnter={openTooltip}
+        onMouseLeave={closeTooltip}
+        onFocus={openTooltip}
+        onBlur={closeTooltip}
+        onClick={closeTooltipAndBlurTrigger}
       >
         {children}
       </span>
       {createPortal(
         <span
-          className={clsx('tooltip-content', `tooltip-content-${position}`, {
-            'tooltip-content-open': open
-          })}
+          className={clsx(
+            'tooltip-content',
+            `tooltip-content-${position}`,
+            { 'tooltip-content-open': open }
+          )}
           role="tooltip"
           style={tooltipStyle}
         >
