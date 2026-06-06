@@ -6,7 +6,7 @@ import { SessionListItem } from '../session-list-item'
 
 import './session-list.sass'
 
-const SESSION_ITEM_ESTIMATED_HEIGHT = 40
+const SESSION_ITEM_ESTIMATED_HEIGHT = 41
 const SESSION_LIST_OVERSCAN = 5
 
 interface ConversationSession {
