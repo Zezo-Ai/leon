@@ -16,6 +16,7 @@
     flex: 0 0 auto
     color: var(--color-text)
     font-size: var(--font-size-xl)
+    transform-origin: center
     transition: transform var(--transition-duration-main) var(--transition-timing-main), color var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
   .menu-item-label
@@ -68,7 +69,7 @@
     transform: rotate(-8deg) translate(1px, -1px)
 
   &.menu-item-animation-search:hover:not(:disabled):not([aria-disabled='true']) .menu-item-icon
-    transform: scale(1.06) translateX(1px)
+    transform: scale(1.1)
 
   &.menu-item-animation-settings:hover:not(:disabled):not([aria-disabled='true']) .menu-item-icon
     transform: rotate(90deg)
