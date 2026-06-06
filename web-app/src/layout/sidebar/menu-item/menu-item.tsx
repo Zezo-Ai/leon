@@ -65,7 +65,12 @@ export function MenuItem({
           {shortcutKeys.map((shortcutKey) => {
             if (typeof shortcutKey === 'string') {
               return (
-                <span className="menu-item-shortcut-key" key={shortcutKey}>
+                <span
+                  className={clsx('menu-item-shortcut-key', {
+                    'menu-item-shortcut-key-wide': shortcutKey.length > 3
+                  })}
+                  key={shortcutKey}
+                >
                   {shortcutKey}
                 </span>
               )
