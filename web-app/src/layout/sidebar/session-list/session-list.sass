@@ -1,5 +1,6 @@
 .session-list
   padding: var(--space-sm)
+  transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
   .session-list-title
     margin: 0 0 var(--space-sm)
@@ -14,3 +15,7 @@
     margin: 0
     padding: 0
     list-style: none
+
+@media (prefers-reduced-motion: reduce)
+  .session-list
+    transition: none

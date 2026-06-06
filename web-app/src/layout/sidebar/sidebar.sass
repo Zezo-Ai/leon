@@ -73,7 +73,7 @@
     overflow-y: auto
     scrollbar-color: var(--color-scrollbar-thumb) transparent
     scrollbar-width: thin
-    transition: box-shadow var(--transition-duration-main) var(--transition-timing-main), opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar)
+    transition: box-shadow var(--transition-duration-main) var(--transition-timing-main)
 
     &::-webkit-scrollbar
       width: 8px
@@ -118,8 +118,16 @@
 
   &.sidebar-content-collapsed
     .sidebar-scroll-area
-      display: none
-      pointer-events: none
+      flex: 0 0 auto
+      min-height: auto
+      overflow: visible
+      scrollbar-width: none
+
+      &::after
+        display: none
+
+      &::-webkit-scrollbar
+        display: none
 
     .sidebar-logo-slot:hover,
     .sidebar-logo-slot:focus-within
@@ -159,7 +167,15 @@
       pointer-events: none
 
     .sidebar-scroll-area
+      scrollbar-width: none
+
+      &::-webkit-scrollbar
+        display: none
+
+    .sidebar-scroll-area::after,
+    .session-list
       opacity: 0
+      pointer-events: none
 
 @media (prefers-reduced-motion: reduce)
   .sidebar,
