@@ -19,10 +19,38 @@
 
     &:hover,
     &.session-list-item-active
+      padding-right: 44px
       background-color: var(--color-surface-hover)
       color: var(--color-text)
     &:active
       background-color: var(--color-surface-active)
+
+  .session-list-item-actions
+    position: absolute
+    top: 50%
+    right: var(--space-sm)
+    display: inline-flex
+    opacity: 0
+    pointer-events: none
+    transform: translateY(-50%)
+    transition: opacity var(--transition-duration-main) var(--transition-timing-main)
+
+  &:hover,
+  &:focus-within
+    .session-list-item-link
+      padding-right: 44px
+      background-color: var(--color-surface-hover)
+
+    .session-list-item-actions
+      opacity: 1
+      pointer-events: auto
+
+  .session-list-item-active + .session-list-item-actions
+    opacity: 1
+    pointer-events: auto
+
+  .session-list-item-link:active
+    background-color: var(--color-surface-active)
 
   .session-list-item-title
     min-width: 0
@@ -34,4 +62,7 @@
 
 @media (prefers-reduced-motion: reduce)
   .session-list-item .session-list-item-link
+    transition: none
+
+  .session-list-item .session-list-item-actions
     transition: none

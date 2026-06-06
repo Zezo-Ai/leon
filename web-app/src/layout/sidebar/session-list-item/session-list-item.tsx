@@ -2,6 +2,8 @@ import type { CSSProperties } from 'react'
 import { Link } from '@tanstack/react-router'
 import { clsx } from 'clsx'
 
+import { Button } from '../../../components/button'
+
 import './session-list-item.sass'
 
 interface SessionListItemProps {
@@ -27,6 +29,11 @@ export function SessionListItem({
       >
         <span className="session-list-item-title">{title}</span>
       </Link>
+      <div className="session-list-item-actions">
+        <Button
+          iconName="more-2"
+        />
+      </div>
     </li>
   )
 }
