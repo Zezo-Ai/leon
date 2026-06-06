@@ -1,65 +1,78 @@
 .sidebar
+  --sidebar-collapsed-logo-width: 32px
+  --sidebar-open-button-width: 40px
   position: fixed
   inset: 0 auto 0 0
   z-index: 5
   display: flex
   flex-direction: column
-  gap: var(--space-xs)
+  gap: var(--space-sm)
   width: var(--sidebar-width)
   border-right: 1px solid var(--color-border)
   background-color: var(--color-sidebar-background)
   backdrop-filter: blur(18px)
   overflow: hidden
-  transition: width var(--transition-duration-main) var(--transition-timing-main)
+  transition: width var(--transition-duration-sidebar) var(--transition-timing-sidebar), background-color var(--transition-duration-sidebar) var(--transition-timing-sidebar), border-color var(--transition-duration-sidebar) var(--transition-timing-sidebar)
+  will-change: width
 
   &.sidebar-collapsed
     width: var(--sidebar-collapsed-width)
 
   .sidebar-header
+    position: relative
     display: flex
     align-items: center
-    justify-content: space-between
-    padding: var(--space-md)
-    gap: var(--space-md)
+    justify-content: flex-end
+    min-height: 72px
+    box-sizing: border-box
+    padding: var(--space-lg)
+    transition: gap var(--transition-duration-sidebar) var(--transition-timing-sidebar), padding var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
   .sidebar-logo-slot
-    position: relative
+    position: absolute
+    top: 50%
+    left: var(--space-lg)
     display: inline-flex
-    flex: 0 0 auto
     align-items: center
-    justify-content: center
-    min-width: 40px
-    min-height: 40px
+    justify-content: flex-start
+    overflow: hidden
+    transform: translate3d(0, -50%, 0)
+    width: 96px
+    height: 36px
+    transition: left var(--transition-duration-sidebar) var(--transition-timing-sidebar), width var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
   .sidebar-logo-open-button
     position: absolute
     inset: 0
+    z-index: 1
     display: inline-flex
     align-items: center
     justify-content: center
     opacity: 0
     pointer-events: none
-    transition: opacity var(--transition-duration-main) var(--transition-timing-main)
+    transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
   .sidebar-controls
     display: inline-flex
-    gap: 0
+    flex: 0 1 auto
+    max-width: 132px
+    opacity: 1
+    overflow: hidden
+    transform: translate3d(0, 0, 0)
+    transition: max-width var(--transition-duration-sidebar) var(--transition-timing-sidebar), opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar), transform var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
   .sidebar-primary
     display: grid
     gap: var(--space-sm)
 
   .sidebar-collapsed-unfold-hit
-    display: none
+    flex: 1 1 auto
+    width: 100%
+    opacity: 0
+    pointer-events: none
+    transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
-  &.sidebar-collapsed
-    .sidebar-header
-      justify-content: center
-      padding: var(--space-md) var(--space-sm)
-
-    .sidebar-controls
-      display: none
-
+  &.sidebar-content-collapsed
     .sidebar-logo-slot:hover,
     .sidebar-logo-slot:focus-within
       .logo
@@ -71,7 +84,36 @@
         pointer-events: auto
 
     .sidebar-collapsed-unfold-hit
-      display: block
       cursor: e-resize
-      flex: 1 1 auto
-      width: 100%
+      opacity: 1
+      pointer-events: auto
+
+  &.sidebar-collapsed
+    .sidebar-logo-slot
+      left: calc((var(--sidebar-collapsed-width) - 36px) / 2)
+      width: 40px
+
+    .sidebar-logo-open-button
+      left: calc(((var(--sidebar-collapsed-width) - var(--sidebar-open-button-width)) / 2) - ((var(--sidebar-collapsed-width) - var(--sidebar-collapsed-logo-width)) / 2))
+      right: auto
+      width: var(--sidebar-open-button-width)
+
+    .sidebar-controls
+      max-width: 0
+      opacity: 0
+      pointer-events: none
+      transform: translate3d(10px, 0, 0)
+
+  &.sidebar-closing
+    .sidebar-controls
+      opacity: 0
+      pointer-events: none
+
+@media (prefers-reduced-motion: reduce)
+  .sidebar,
+  .sidebar .sidebar-header,
+  .sidebar .sidebar-logo-slot,
+  .sidebar .sidebar-logo-open-button,
+  .sidebar .sidebar-controls,
+  .sidebar .sidebar-collapsed-unfold-hit
+    transition: none

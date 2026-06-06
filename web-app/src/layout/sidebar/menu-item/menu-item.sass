@@ -4,18 +4,19 @@
   gap: var(--space-sm)
   box-sizing: border-box
   width: 100%
+  min-height: 40px
   padding: var(--space-sm)
   border-radius: var(--border-radius-md)
   color: var(--color-text)
   text-align: left
   text-decoration: none
-  transition: color var(--transition-duration-main) var(--transition-timing-main), background-color var(--transition-duration-main) var(--transition-timing-main)
+  transition: color var(--transition-duration-main) var(--transition-timing-main), background-color var(--transition-duration-main) var(--transition-timing-main), gap var(--transition-duration-sidebar) var(--transition-timing-sidebar), padding var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
   .menu-item-icon
     flex: 0 0 auto
     color: var(--color-text)
     font-size: var(--font-size-xl)
-    transition: transform var(--transition-duration-main) var(--transition-timing-main)
+    transition: transform var(--transition-duration-main) var(--transition-timing-main), color var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
   .menu-item-label
     flex: 1 1 auto
@@ -25,11 +26,13 @@
     line-height: var(--line-height-md)
     text-overflow: ellipsis
     white-space: nowrap
+    transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
   .menu-item-shortcut
     display: none
     align-items: center
     gap: var(--space-xs)
+    transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
   .menu-item-shortcut-key
     display: inline-flex
@@ -95,20 +98,27 @@
       color: var(--color-text-disabled)
 
   &.menu-item-collapsed
-    justify-content: center
-    min-height: 40px
-    padding: var(--space-xs)
-
     .menu-item-label,
     .menu-item-shortcut,
     .badge
+      opacity: 0
       display: none
 
     &:hover:not(:disabled):not([aria-disabled='true']) .menu-item-shortcut
       display: none
 
+.sidebar-closing .menu-item
+  .menu-item-label,
+  .menu-item-shortcut,
+  .badge
+    opacity: 0
+
 @media (prefers-reduced-motion: reduce)
   .menu-item .menu-item-icon
+    transition: none
+
+  .menu-item,
+  .menu-item .menu-item-label
     transition: none
 
   .menu-item:hover:not(:disabled):not([aria-disabled='true']) .menu-item-icon,

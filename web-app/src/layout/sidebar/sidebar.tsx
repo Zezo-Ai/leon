@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type TransitionEvent } from 'react'
 import { clsx } from 'clsx'
 
 import './sidebar.sass'
@@ -18,13 +18,20 @@ import { Menu } from './menu'
 
 const DARK_THEME_LOGO_SRC = '/img/logo-for-dark-bg-text.svg'
 const LIGHT_THEME_LOGO_SRC = '/img/logo-for-light-bg-text.svg'
-const DARK_THEME_COLLAPSED_LOGO_SRC = '/img/logo-for-dark-bg.svg'
-const LIGHT_THEME_COLLAPSED_LOGO_SRC = '/img/logo-for-light-bg.svg'
+const REDUCED_MOTION_MEDIA_QUERY = '(prefers-reduced-motion: reduce)'
+
+function shouldReduceMotion(): boolean {
+  return window.matchMedia(REDUCED_MOTION_MEDIA_QUERY).matches
+}
 
 export function Sidebar() {
   const [soundsEnabled, setSoundsEnabled] = useState(getStoredSoundsEnabled)
   const [theme, setTheme] = useState<Theme>(getStoredTheme)
   const [sidebarExpanded, setSidebarExpanded] = useState(getStoredSidebarExpanded)
+  const [sidebarContentCollapsed, setSidebarContentCollapsed] = useState(
+    () => !getStoredSidebarExpanded()
+  )
+  const [sidebarClosing, setSidebarClosing] = useState(false)
 
   function toggleTheme(): void {
     const nextTheme = theme === 'dark' ? 'light' : 'dark'
@@ -39,24 +46,55 @@ export function Sidebar() {
   }
 
   function updateSidebarExpanded(nextSidebarExpanded: boolean): void {
+    if (nextSidebarExpanded) {
+      setSidebarClosing(false)
+      setSidebarContentCollapsed(false)
+      setSidebarExpanded(true)
+      saveSidebarExpanded(true)
+      return
+    }
+
+    setSidebarClosing(true)
     setSidebarExpanded(nextSidebarExpanded)
     saveSidebarExpanded(nextSidebarExpanded)
+
+    if (shouldReduceMotion()) {
+      setSidebarContentCollapsed(true)
+      setSidebarClosing(false)
+    }
   }
 
-  const logoSrc = sidebarExpanded
-    ? theme === 'dark' ? DARK_THEME_LOGO_SRC : LIGHT_THEME_LOGO_SRC
-    : theme === 'dark' ? DARK_THEME_COLLAPSED_LOGO_SRC : LIGHT_THEME_COLLAPSED_LOGO_SRC
+  function handleSidebarTransitionEnd(
+    event: TransitionEvent<HTMLElement>
+  ): void {
+    if (
+      event.propertyName !== 'width' ||
+      sidebarExpanded
+    ) {
+      return
+    }
+
+    setSidebarContentCollapsed(true)
+    setSidebarClosing(false)
+  }
+
+  const logoSrc = theme === 'dark' ? DARK_THEME_LOGO_SRC : LIGHT_THEME_LOGO_SRC
 
   return (
     <aside className={clsx(
       'sidebar',
-      sidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed'
-    )}>
+      sidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed',
+      {
+        'sidebar-closing': sidebarClosing,
+        'sidebar-content-collapsed': sidebarContentCollapsed
+      }
+    )}
+    onTransitionEnd={handleSidebarTransitionEnd}>
       <header className="sidebar-header">
         <div className="sidebar-logo-slot">
           <Logo
             src={logoSrc}
-            width={sidebarExpanded ? 96 : 32}
+            width={96}
             height={36}
           />
           <div className="sidebar-logo-open-button">
@@ -86,7 +124,7 @@ export function Sidebar() {
           />
         </div>
       </header>
-      <Menu collapsed={!sidebarExpanded} />
+      <Menu collapsed={sidebarContentCollapsed} />
       <button
         type="button"
         className="sidebar-collapsed-unfold-hit"
