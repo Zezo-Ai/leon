@@ -35,6 +35,18 @@
     transform: translateY(-50%)
     transition: opacity var(--transition-duration-main) var(--transition-timing-main)
 
+  .session-list-item-pinned-icon
+    position: absolute
+    top: 50%
+    right: 18px
+    width: 16px
+    height: 16px
+    color: var(--color-text-tertiary)
+    font-size: var(--font-size-md)
+    line-height: 16px
+    transform: translateY(-50%)
+    transition: right var(--transition-duration-main) var(--transition-timing-main)
+
   &:hover,
   &:focus-within
     .session-list-item-link
@@ -45,12 +57,34 @@
       opacity: 1
       pointer-events: auto
 
+    .session-list-item-pinned-icon
+      right: 44px
+
   .session-list-item-active + .session-list-item-actions
     opacity: 1
     pointer-events: auto
 
+  .session-list-item-active ~ .session-list-item-actions
+    opacity: 1
+    pointer-events: auto
+
+  .session-list-item-active ~ .session-list-item-pinned-icon
+    right: 44px
+
   .session-list-item-link:active
     background-color: var(--color-surface-active)
+
+  &.session-list-item-pinned
+    .session-list-item-link
+      padding-right: 44px
+
+    &:hover,
+    &:focus-within
+      .session-list-item-link
+        padding-right: 64px
+
+    .session-list-item-active
+      padding-right: 64px
 
   .session-list-item-title
     min-width: 0
@@ -65,4 +99,7 @@
     transition: none
 
   .session-list-item .session-list-item-actions
+    transition: none
+
+  .session-list-item .session-list-item-pinned-icon
     transition: none

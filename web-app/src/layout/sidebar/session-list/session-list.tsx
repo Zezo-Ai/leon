@@ -33,13 +33,25 @@ interface SessionListProps {
 
 const sessionIndex = sessionsData satisfies ConversationSessionIndex
 
+function sortPinnedSessionsFirst(
+  sessions: ConversationSession[]
+): ConversationSession[] {
+  return [...sessions].sort((firstSession, secondSession) => {
+    if (firstSession.isPinned === secondSession.isPinned) {
+      return 0
+    }
+
+    return firstSession.isPinned ? -1 : 1
+  })
+}
+
 export function SessionList({
   collapsed = false,
   scrollElementRef
 }: SessionListProps) {
   const virtualListRef = useRef<HTMLUListElement>(null)
   const [scrollMargin, setScrollMargin] = useState(0)
-  const sessions = sessionIndex.sessions
+  const sessions = sortPinnedSessionsFirst(sessionIndex.sessions)
   const rowVirtualizer = useVirtualizer({
     count: sessions.length,
     getScrollElement: () => scrollElementRef.current,
@@ -96,6 +108,7 @@ export function SessionList({
             <SessionListItem
               key={session.id}
               id={session.id}
+              isPinned={session.isPinned}
               title={session.title}
               style={{
                 height: `${virtualRow.size}px`,

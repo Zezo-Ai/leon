@@ -1,0 +1,79 @@
+.dropdown-trigger
+  display: inline-flex
+
+.dropdown-content
+  position: fixed
+  z-index: 110
+  display: flex
+  flex-direction: column
+  box-sizing: border-box
+  gap: 1px
+  padding: var(--space-xs)
+  background: linear-gradient(var(--color-surface-elevated), var(--color-surface-elevated)) padding-box, var(--gradient-border) border-box
+  border: 1px solid transparent
+  border-radius: var(--border-radius-md)
+  opacity: 0
+  pointer-events: none
+  transition: opacity var(--transition-duration-main) var(--transition-timing-main), transform var(--transition-duration-main) var(--transition-timing-main)
+
+.dropdown-content-open
+  opacity: 1
+  pointer-events: auto
+
+.dropdown-content-bottom
+  transform: translate3d(0, -4px, 0)
+
+  &.dropdown-content-open
+    transform: translate3d(0, 0, 0)
+
+.dropdown-content-top
+  transform: translate3d(0, 4px, 0)
+
+  &.dropdown-content-open
+    transform: translate3d(0, 0, 0)
+
+.dropdown-item
+  display: flex
+  align-items: center
+  gap: var(--space-sm)
+  box-sizing: border-box
+  width: 100%
+  min-height: 40px
+  padding: var(--space-sm)
+  border-radius: var(--border-radius-md)
+  color: var(--color-text)
+  font-size: var(--font-size-md)
+  line-height: var(--line-height-md)
+  text-align: left
+  transition: color var(--transition-duration-main) var(--transition-timing-main), background-color var(--transition-duration-main) var(--transition-timing-main)
+
+  &:hover
+    background-color: var(--color-surface-hover)
+
+  &:active
+    background-color: var(--color-surface-active)
+
+.dropdown-item-danger
+  color: var(--color-danger)
+
+  &:hover
+    background-color: var(--color-danger-soft)
+
+  &:active
+    background-color: var(--color-danger-active)
+
+.dropdown-item-icon
+  flex: 0 0 auto
+  color: currentColor
+  font-size: var(--font-size-xl)
+
+.dropdown-item-label
+  min-width: 0
+  overflow: hidden
+  text-overflow: ellipsis
+  white-space: nowrap
+
+@media (prefers-reduced-motion: reduce)
+  .dropdown-content,
+  .dropdown-item
+    transition: none
