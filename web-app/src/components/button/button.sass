@@ -39,12 +39,20 @@
   &.button-surface:hover:not(:disabled):not([aria-disabled='true'])
     background-color: var(--color-surface)
 
+  &.button-ghost:active:not(:disabled):not([aria-disabled='true']),
+  &.button-surface:active:not(:disabled):not([aria-disabled='true'])
+    background-color: var(--color-surface-active)
+    color: var(--color-text)
+
   &.button-primary
     background-color: var(--color-accent)
     color: var(--color-accent-contrast)
 
   &.button-primary:hover:not(:disabled):not([aria-disabled='true'])
     background-color: var(--color-accent-hover)
+
+  &.button-primary:active:not(:disabled):not([aria-disabled='true'])
+    background-color: var(--color-accent)
 
   &.button-danger
     background-color: var(--color-danger)

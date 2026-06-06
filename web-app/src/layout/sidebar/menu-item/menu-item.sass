@@ -65,6 +65,10 @@
     background-color: var(--color-surface-hover)
     color: var(--color-text)
 
+  &:active:not(:disabled):not([aria-disabled='true'])
+    background-color: var(--color-surface-active)
+    color: var(--color-text)
+
   &.menu-item-animation-write:hover:not(:disabled):not([aria-disabled='true']) .menu-item-icon
     transform: rotate(-8deg) translate(1px, -1px)
 
