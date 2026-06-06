@@ -1,12 +1,12 @@
 .sidebar
   --sidebar-collapsed-logo-width: 32px
+  --sidebar-footer-height: 120px
   --sidebar-open-button-width: 40px
   position: fixed
   inset: 0 auto 0 0
   z-index: 5
   display: flex
   flex-direction: column
-  gap: var(--space-sm)
   width: var(--sidebar-width)
   border-right: 1px solid var(--color-border)
   background-color: var(--color-sidebar-background)
@@ -65,14 +65,62 @@
     display: grid
     gap: var(--space-sm)
 
-  .sidebar-collapsed-unfold-hit
+  .sidebar-scroll-area
+    position: relative
     flex: 1 1 auto
+    min-height: 0
+    overflow-x: hidden
+    overflow-y: auto
+    scrollbar-color: var(--color-scrollbar-thumb) transparent
+    scrollbar-width: thin
+    transition: box-shadow var(--transition-duration-main) var(--transition-timing-main), opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar)
+
+    &::-webkit-scrollbar
+      width: 8px
+
+    &::-webkit-scrollbar-track
+      background: transparent
+
+    &::-webkit-scrollbar-thumb
+      border: 2px solid transparent
+      border-radius: var(--border-radius-pill)
+      background-color: var(--color-scrollbar-thumb)
+      background-clip: content-box
+
+    &::-webkit-scrollbar-thumb:hover
+      background-color: var(--color-scrollbar-thumb-hover)
+
+    &::after
+      position: sticky
+      bottom: 0
+      display: block
+      width: 100%
+      height: 54px
+      margin-top: -54px
+      background: var(--gradient-sidebar-scroll-shadow)
+      content: ''
+      pointer-events: none
+
+    &.sidebar-scroll-area-scrolled
+      box-shadow: inset 0 1px 0 var(--color-border)
+
+  .sidebar-collapsed-unfold-hit
+    flex: 0 0 0
+    min-height: 0
     width: 100%
     opacity: 0
     pointer-events: none
     transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
+  .sidebar-footer-slot
+    flex: 0 0 var(--sidebar-footer-height)
+    min-height: var(--sidebar-footer-height)
+
   &.sidebar-content-collapsed
+    .sidebar-scroll-area
+      display: none
+      pointer-events: none
+
     .sidebar-logo-slot:hover,
     .sidebar-logo-slot:focus-within
       .logo
@@ -85,6 +133,7 @@
 
     .sidebar-collapsed-unfold-hit
       cursor: e-resize
+      flex: 1 1 auto
       opacity: 1
       pointer-events: auto
 
@@ -109,11 +158,15 @@
       opacity: 0
       pointer-events: none
 
+    .sidebar-scroll-area
+      opacity: 0
+
 @media (prefers-reduced-motion: reduce)
   .sidebar,
   .sidebar .sidebar-header,
   .sidebar .sidebar-logo-slot,
   .sidebar .sidebar-logo-open-button,
   .sidebar .sidebar-controls,
+  .sidebar .sidebar-scroll-area,
   .sidebar .sidebar-collapsed-unfold-hit
     transition: none

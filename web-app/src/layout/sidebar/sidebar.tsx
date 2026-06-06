@@ -1,4 +1,4 @@
-import { useState, type TransitionEvent } from 'react'
+import { useRef, useState, type TransitionEvent } from 'react'
 import { clsx } from 'clsx'
 
 import './sidebar.sass'
@@ -15,6 +15,7 @@ import {
 
 import { Logo } from './logo'
 import { Menu } from './menu'
+import { SessionList } from './session-list'
 
 const DARK_THEME_LOGO_SRC = '/img/logo-for-dark-bg-text.svg'
 const LIGHT_THEME_LOGO_SRC = '/img/logo-for-light-bg-text.svg'
@@ -25,6 +26,7 @@ function shouldReduceMotion(): boolean {
 }
 
 export function Sidebar() {
+  const sidebarScrollAreaRef = useRef<HTMLDivElement>(null)
   const [soundsEnabled, setSoundsEnabled] = useState(getStoredSoundsEnabled)
   const [theme, setTheme] = useState<Theme>(getStoredTheme)
   const [sidebarExpanded, setSidebarExpanded] = useState(getStoredSidebarExpanded)
@@ -32,6 +34,8 @@ export function Sidebar() {
     () => !getStoredSidebarExpanded()
   )
   const [sidebarClosing, setSidebarClosing] = useState(false)
+  const [sidebarScrollAreaScrolled, setSidebarScrollAreaScrolled] =
+    useState(false)
 
   function toggleTheme(): void {
     const nextTheme = theme === 'dark' ? 'light' : 'dark'
@@ -76,6 +80,16 @@ export function Sidebar() {
 
     setSidebarContentCollapsed(true)
     setSidebarClosing(false)
+  }
+
+  function handleSidebarScroll(): void {
+    const scrollArea = sidebarScrollAreaRef.current
+
+    if (scrollArea === null) {
+      return
+    }
+
+    setSidebarScrollAreaScrolled(scrollArea.scrollTop > 0)
   }
 
   const logoSrc = theme === 'dark' ? DARK_THEME_LOGO_SRC : LIGHT_THEME_LOGO_SRC
@@ -124,14 +138,26 @@ export function Sidebar() {
           />
         </div>
       </header>
-      <Menu collapsed={sidebarContentCollapsed} />
+      <Menu collapsed={sidebarContentCollapsed} variant="fixed" />
+      <div
+        className={clsx('sidebar-scroll-area', {
+          'sidebar-scroll-area-scrolled': sidebarScrollAreaScrolled
+        })}
+        ref={sidebarScrollAreaRef}
+        onScroll={handleSidebarScroll}
+      >
+        <Menu collapsed={sidebarContentCollapsed} variant="scrollable" />
+        <SessionList
+          collapsed={sidebarContentCollapsed}
+          scrollElementRef={sidebarScrollAreaRef}
+        />
+      </div>
       <button
         type="button"
         className="sidebar-collapsed-unfold-hit"
         aria-label="Open sidebar"
         onClick={() => updateSidebarExpanded(true)}
       />
-      {/* <SessionList /> */}
       <footer className="sidebar-footer-slot">
 
       </footer>
