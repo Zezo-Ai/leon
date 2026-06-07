@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState
 } from 'react'
 import { createPortal } from 'react-dom'
@@ -23,6 +24,7 @@ interface ToastInput {
 }
 
 interface ToastItem extends Required<ToastInput> {
+  exiting: boolean
   id: string
 }
 
@@ -35,11 +37,13 @@ interface ToastProviderProps {
 }
 
 interface ToastCardProps {
+  stackIndex: number
   toast: ToastItem
   onClose: (toastId: string) => void
 }
 
-const DEFAULT_TOAST_DURATION_MS = 7_000
+const DEFAULT_TOAST_DURATION_MS = 120_000
+const TOAST_EXIT_DURATION_MS = 350
 const MAX_VISIBLE_TOASTS = 3
 const TOAST_ICONS: Record<ToastType, string> = {
   success: 'check-line',
@@ -54,6 +58,7 @@ function createToastId(): string {
 }
 
 function ToastCard({
+  stackIndex,
   toast,
   onClose
 }: ToastCardProps) {
@@ -68,7 +73,14 @@ function ToastCard({
   }, [onClose, toast.id])
 
   return (
-    <article className={clsx('toast', `toast-${toast.type}`)}>
+    <article
+      className={clsx(
+        'toast',
+        `toast-${toast.type}`,
+        `toast-stack-${stackIndex}`,
+        { 'toast-exiting': toast.exiting }
+      )}
+    >
       <div className="toast-content-container">
         <div className="toast-header">
           <span className="toast-icon" aria-hidden="true">
@@ -94,12 +106,36 @@ function ToastCard({
 export function ToastProvider({
   children
 }: ToastProviderProps) {
+  const removalTimeoutsRef = useRef<Map<string, number>>(new Map())
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
   const closeToast = useCallback((toastId: string): void => {
     setToasts((currentToasts) =>
-      currentToasts.filter((toast) => toast.id !== toastId)
+      currentToasts.map((toast) =>
+        toast.id === toastId
+          ? { ...toast, exiting: true }
+          : toast
+      )
     )
+
+    if (removalTimeoutsRef.current.has(toastId)) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setToasts((currentToasts) =>
+        currentToasts.filter((toast) => toast.id !== toastId)
+      )
+      removalTimeoutsRef.current.delete(toastId)
+    }, TOAST_EXIT_DURATION_MS)
+
+    removalTimeoutsRef.current.set(toastId, timeoutId)
+  }, [])
+
+  useEffect(() => () => {
+    removalTimeoutsRef.current.forEach((timeoutId) => {
+      window.clearTimeout(timeoutId)
+    })
   }, [])
 
   const contextValue = useMemo<ToastContextValue>(() => ({
@@ -107,6 +143,7 @@ export function ToastProvider({
       setToasts((currentToasts) => [
         {
           id: createToastId(),
+          exiting: false,
           type: toast.type ?? 'info',
           title: toast.title,
           description: toast.description
@@ -125,9 +162,10 @@ export function ToastProvider({
           aria-label="Notifications"
           aria-live="polite"
         >
-          {toasts.map((toast) => (
+          {toasts.map((toast, stackIndex) => (
             <ToastCard
               key={toast.id}
+              stackIndex={stackIndex}
               toast={toast}
               onClose={closeToast}
             />
