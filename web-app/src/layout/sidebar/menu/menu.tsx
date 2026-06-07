@@ -48,10 +48,12 @@ function getPlatform(): string | undefined {
 
 interface MenuProps {
   collapsed?: boolean
+  variant?: 'fixed' | 'scrollable'
 }
 
 export function Menu({
-  collapsed = false
+  collapsed = false,
+  variant = 'fixed'
 }: MenuProps) {
   const [modifierKey, setModifierKey] = useState<string | typeof MACOS_MODIFIER_KEY>(
     MACOS_MODIFIER_KEY
@@ -68,13 +70,23 @@ export function Menu({
     }
   }, [])
 
-  return (
-    <nav className="menu" aria-label="Main menu">
+  const fixedItems = (
+    <>
       <MenuItem iconName="edit-box" label="New session" iconAnimation="write" to="/" shortcutKeys={[modifierKey, 'Shift', 'O']} collapsed={collapsed} />
       <MenuItem iconName="search" label="Search sessions" iconAnimation="search" shortcutKeys={[modifierKey, 'K']} collapsed={collapsed} />
+    </>
+  )
+  const scrollableItems = (
+    <>
       <MenuItem iconName="settings" label="Settings" iconAnimation="settings" shortcutKeys={['/']} collapsed={collapsed} />
       <MenuItem iconName="download-cloud-2" label="Update" iconAnimation="download" badge={NewBadge} collapsed={collapsed} />
       <MenuItem iconName="book-open" label="Docs" iconAnimation="book" disabled badge={SoonBadge} collapsed={collapsed} />
+    </>
+  )
+
+  return (
+    <nav className={`menu menu-${variant}`} aria-label={variant === 'fixed' ? 'Main menu' : 'More menu'}>
+      {variant === 'fixed' ? fixedItems : scrollableItems}
     </nav>
   )
 }

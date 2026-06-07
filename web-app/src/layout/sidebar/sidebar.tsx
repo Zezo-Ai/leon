@@ -1,22 +1,41 @@
-import { useState } from 'react'
+import { useRef, useState, type TransitionEvent } from 'react'
 import { clsx } from 'clsx'
 
 import './sidebar.sass'
 import { Button } from '../../components/button'
-import { getStoredTheme, saveTheme, type Theme } from '../../theme'
+import {
+  getStoredSidebarExpanded,
+  getStoredSoundsEnabled,
+  getStoredTheme,
+  saveSidebarExpanded,
+  saveSoundsEnabled,
+  saveTheme,
+  type Theme
+} from '../../theme'
 
 import { Logo } from './logo'
 import { Menu } from './menu'
+import { SessionList } from './session-list'
 
 const DARK_THEME_LOGO_SRC = '/img/logo-for-dark-bg-text.svg'
 const LIGHT_THEME_LOGO_SRC = '/img/logo-for-light-bg-text.svg'
-const DARK_THEME_COLLAPSED_LOGO_SRC = '/img/logo-for-dark-bg.svg'
-const LIGHT_THEME_COLLAPSED_LOGO_SRC = '/img/logo-for-light-bg.svg'
+const REDUCED_MOTION_MEDIA_QUERY = '(prefers-reduced-motion: reduce)'
+
+function shouldReduceMotion(): boolean {
+  return window.matchMedia(REDUCED_MOTION_MEDIA_QUERY).matches
+}
 
 export function Sidebar() {
-  const [soundsEnabled, setSoundsEnabled] = useState(true)
+  const sidebarScrollAreaRef = useRef<HTMLDivElement>(null)
+  const [soundsEnabled, setSoundsEnabled] = useState(getStoredSoundsEnabled)
   const [theme, setTheme] = useState<Theme>(getStoredTheme)
-  const [sidebarExpanded, setSidebarExpanded] = useState(true)
+  const [sidebarExpanded, setSidebarExpanded] = useState(getStoredSidebarExpanded)
+  const [sidebarContentCollapsed, setSidebarContentCollapsed] = useState(
+    () => !getStoredSidebarExpanded()
+  )
+  const [sidebarClosing, setSidebarClosing] = useState(false)
+  const [sidebarScrollAreaScrolled, setSidebarScrollAreaScrolled] =
+    useState(false)
 
   function toggleTheme(): void {
     const nextTheme = theme === 'dark' ? 'light' : 'dark'
@@ -25,20 +44,71 @@ export function Sidebar() {
     saveTheme(nextTheme)
   }
 
-  const logoSrc = sidebarExpanded
-    ? theme === 'dark' ? DARK_THEME_LOGO_SRC : LIGHT_THEME_LOGO_SRC
-    : theme === 'dark' ? DARK_THEME_COLLAPSED_LOGO_SRC : LIGHT_THEME_COLLAPSED_LOGO_SRC
+  function updateSoundsEnabled(nextSoundsEnabled: boolean): void {
+    setSoundsEnabled(nextSoundsEnabled)
+    saveSoundsEnabled(nextSoundsEnabled)
+  }
+
+  function updateSidebarExpanded(nextSidebarExpanded: boolean): void {
+    if (nextSidebarExpanded) {
+      setSidebarClosing(false)
+      setSidebarContentCollapsed(false)
+      setSidebarExpanded(true)
+      saveSidebarExpanded(true)
+      return
+    }
+
+    setSidebarClosing(true)
+    setSidebarExpanded(nextSidebarExpanded)
+    saveSidebarExpanded(nextSidebarExpanded)
+
+    if (shouldReduceMotion()) {
+      setSidebarContentCollapsed(true)
+      setSidebarClosing(false)
+    }
+  }
+
+  function handleSidebarTransitionEnd(
+    event: TransitionEvent<HTMLElement>
+  ): void {
+    if (
+      event.propertyName !== 'width' ||
+      sidebarExpanded
+    ) {
+      return
+    }
+
+    setSidebarContentCollapsed(true)
+    setSidebarClosing(false)
+  }
+
+  function handleSidebarScroll(): void {
+    const scrollArea = sidebarScrollAreaRef.current
+
+    if (scrollArea === null) {
+      return
+    }
+
+    setSidebarScrollAreaScrolled(scrollArea.scrollTop > 0)
+  }
+
+  const logoSrc = theme === 'dark' ? DARK_THEME_LOGO_SRC : LIGHT_THEME_LOGO_SRC
 
   return (
     <aside className={clsx(
       'sidebar',
-      sidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed'
-    )}>
+      sidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed',
+      {
+        'sidebar-closing': sidebarClosing,
+        'sidebar-content-collapsed': sidebarContentCollapsed
+      }
+    )}
+    onTransitionEnd={handleSidebarTransitionEnd}>
       <header className="sidebar-header">
         <div className="sidebar-logo-slot">
           <Logo
             src={logoSrc}
-            width={sidebarExpanded ? 96 : 32}
+            width={96}
             height={36}
           />
           <div className="sidebar-logo-open-button">
@@ -46,7 +116,7 @@ export function Sidebar() {
               iconName="sidebar-unfold"
               tooltipMessage="Open sidebar"
               tooltipPosition="right"
-              onClick={() => setSidebarExpanded(true)}
+              onClick={() => updateSidebarExpanded(true)}
             />
           </div>
         </div>
@@ -54,7 +124,7 @@ export function Sidebar() {
           <Button
             iconName={soundsEnabled ? 'volume-up' : 'volume-mute'}
             tooltipMessage={soundsEnabled ? 'Mute sounds' : 'Unmute sounds'}
-            onClick={() => setSoundsEnabled((enabled) => !enabled)}
+            onClick={() => updateSoundsEnabled(!soundsEnabled)}
           />
           <Button
             iconName={theme === 'dark' ? 'moon' : 'sun'}
@@ -64,18 +134,30 @@ export function Sidebar() {
           <Button
             iconName={sidebarExpanded ? 'sidebar-fold' : 'sidebar-unfold'}
             tooltipMessage={sidebarExpanded ? 'Close sidebar' : 'Open sidebar'}
-            onClick={() => setSidebarExpanded((expanded) => !expanded)}
+            onClick={() => updateSidebarExpanded(!sidebarExpanded)}
           />
         </div>
       </header>
-      <Menu collapsed={!sidebarExpanded} />
+      <Menu collapsed={sidebarContentCollapsed} variant="fixed" />
+      <div
+        className={clsx('sidebar-scroll-area', {
+          'sidebar-scroll-area-scrolled': sidebarScrollAreaScrolled
+        })}
+        ref={sidebarScrollAreaRef}
+        onScroll={handleSidebarScroll}
+      >
+        <Menu collapsed={sidebarContentCollapsed} variant="scrollable" />
+        <SessionList
+          collapsed={sidebarContentCollapsed}
+          scrollElementRef={sidebarScrollAreaRef}
+        />
+      </div>
       <button
         type="button"
         className="sidebar-collapsed-unfold-hit"
         aria-label="Open sidebar"
-        onClick={() => setSidebarExpanded(true)}
+        onClick={() => updateSidebarExpanded(true)}
       />
-      {/* <SessionList /> */}
       <footer className="sidebar-footer-slot">
 
       </footer>

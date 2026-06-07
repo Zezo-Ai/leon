@@ -1,5 +1,145 @@
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent
+} from 'react'
+import { Link } from '@tanstack/react-router'
+import { clsx } from 'clsx'
+
+import { Button } from '../../../components/button'
+import { Dropdown } from '../../../components/dropdown'
+
 import './session-list-item.sass'
 
-export function SessionListItem() {
-  return <li className="session-list-item" />
+interface SessionListItemProps {
+  id: string
+  isPinned: boolean
+  onRename: (sessionId: string, title: string) => void
+  title: string
+  style?: CSSProperties
+}
+
+export function SessionListItem({
+  id,
+  isPinned,
+  onRename,
+  title,
+  style
+}: SessionListItemProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [editing, setEditing] = useState(false)
+  const [draftTitle, setDraftTitle] = useState(title)
+  const pinDropdownItem = isPinned
+    ? {
+        iconName: 'unpin',
+        label: 'Unpin session'
+      }
+    : {
+        iconName: 'pushpin',
+        label: 'Pin session'
+      }
+
+  useEffect(() => {
+    if (!editing) {
+      setDraftTitle(title)
+      return
+    }
+
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [editing, title])
+
+  function startEditing(): void {
+    setDraftTitle(title)
+    setEditing(true)
+  }
+
+  function cancelEditing(): void {
+    setDraftTitle(title)
+    setEditing(false)
+  }
+
+  function commitEditing(): void {
+    const titleToCommit = draftTitle.trim()
+
+    if (titleToCommit.length > 0) {
+      onRename(id, titleToCommit)
+    }
+
+    setEditing(false)
+  }
+
+  function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      commitEditing()
+      return
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      cancelEditing()
+    }
+  }
+
+  return (
+    <li className={clsx('session-list-item', { 'session-list-item-pinned': isPinned })} style={style}>
+      {editing ? (
+        <input
+          ref={inputRef}
+          className="session-list-item-input"
+          aria-label="Session title"
+          value={draftTitle}
+          onBlur={commitEditing}
+          onChange={(event) => setDraftTitle(event.target.value)}
+          onKeyDown={handleInputKeyDown}
+        />
+      ) : (
+        <Link
+          to="/sessions/$sessionId"
+          params={{ sessionId: id }}
+          className="session-list-item-link"
+          activeProps={{
+            className: clsx('session-list-item-link', 'session-list-item-active')
+          }}
+          onDoubleClick={(event) => {
+            event.preventDefault()
+            startEditing()
+          }}
+        >
+          <span className="session-list-item-title">{title}</span>
+        </Link>
+      )}
+      {isPinned && (
+        <i
+          className="session-list-item-pinned-icon ri-unpin-fill"
+          aria-hidden="true"
+        />
+      )}
+      <div className="session-list-item-actions">
+        <Dropdown
+          items={[
+            {
+              iconName: 'edit',
+              label: 'Rename',
+              onSelect: startEditing
+            },
+            pinDropdownItem,
+            {
+              iconName: 'delete-bin',
+              label: 'Delete',
+              variant: 'danger'
+            }
+          ]}
+        >
+          <Button
+            iconName="more-2"
+            ariaLabel="Session options"
+          />
+        </Dropdown>
+      </div>
+    </li>
+  )
 }

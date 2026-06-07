@@ -17,7 +17,13 @@ const indexRoute = createRoute({
   component: HomeRoute
 })
 
-const routeTree = rootRoute.addChildren([indexRoute])
+const sessionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sessions/$sessionId',
+  component: HomeRoute
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, sessionRoute])
 
 export const router = createRouter({ routeTree })
 

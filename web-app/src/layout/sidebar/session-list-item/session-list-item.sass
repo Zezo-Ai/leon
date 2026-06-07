@@ -1,32 +1,124 @@
 .session-list-item
-  display: grid
-  grid-template-columns: 1fr 24px
-  align-items: center
-  gap: var(--space-sm)
+  position: absolute
+  top: 0
+  left: 0
   width: 100%
-  min-height: 44px
-  padding: 0 var(--space-md)
-  border-radius: var(--border-radius-md)
-  color: var(--color-text-secondary)
-  text-align: left
 
-  .session-list-item-label
+  .session-list-item-link
+    display: flex
+    align-items: center
+
+  .session-list-item-input
+    display: block
+    outline: none
+
+  .session-list-item-link,
+  .session-list-item-input
+    box-sizing: border-box
+    width: 100%
+    height: 40px
+    min-height: 40px
+    padding: var(--space-sm)
+    border-radius: var(--border-radius-md)
+    transition: color var(--transition-duration-main) var(--transition-timing-main), background-color var(--transition-duration-main) var(--transition-timing-main)
+
+  .session-list-item-link
+    color: var(--color-text)
+    text-decoration: none
+
+    &:hover,
+    &.session-list-item-active
+      padding-right: 44px
+      background-color: var(--color-surface-hover)
+      color: var(--color-text)
+    &:active
+      background-color: var(--color-surface-active)
+
+  .session-list-item-actions
+    position: absolute
+    top: 50%
+    right: var(--space-sm)
+    display: inline-flex
+    opacity: 0
+    pointer-events: none
+    transform: translateY(-50%)
+    transition: opacity var(--transition-duration-main) var(--transition-timing-main)
+
+  .session-list-item-pinned-icon
+    position: absolute
+    top: 50%
+    right: 18px
+    width: 16px
+    height: 16px
+    color: var(--color-text-tertiary)
+    font-size: var(--font-size-md)
+    line-height: 16px
+    transform: translateY(-50%)
+
+  &:hover,
+  &:focus-within
+    .session-list-item-link
+      padding-right: 44px
+      background-color: var(--color-surface-hover)
+
+    .session-list-item-actions
+      opacity: 1
+      pointer-events: auto
+
+    .session-list-item-pinned-icon
+      right: 44px
+
+  .session-list-item-active + .session-list-item-actions
+    opacity: 1
+    pointer-events: auto
+
+  .session-list-item-active ~ .session-list-item-actions
+    opacity: 1
+    pointer-events: auto
+
+  .session-list-item-active ~ .session-list-item-pinned-icon
+    right: 44px
+
+  .session-list-item-link:active
+    background-color: var(--color-surface-active)
+
+  .session-list-item-input
+    border: 0
+    background-color: var(--color-surface-hover)
+    color: var(--color-text)
+    font-family: var(--font-family)
+    font-size: var(--font-size-md)
+    line-height: var(--line-height-md)
+
+  &.session-list-item-pinned
+    .session-list-item-link,
+    .session-list-item-input
+      padding-right: 44px
+
+    &:hover,
+    &:focus-within
+      .session-list-item-link,
+      .session-list-item-input
+        padding-right: 64px
+
+    .session-list-item-active
+      padding-right: 64px
+
+  .session-list-item-title
+    min-width: 0
     overflow: hidden
     font-size: var(--font-size-md)
     line-height: var(--line-height-md)
     text-overflow: ellipsis
     white-space: nowrap
 
-  .session-list-item-icon
-    justify-self: end
-    color: var(--color-text-tertiary)
-    font-size: 20px
+@media (prefers-reduced-motion: reduce)
+  .session-list-item .session-list-item-link,
+  .session-list-item .session-list-item-input
+    transition: none
 
-  &:hover,
-  &.session-list-item-active
-    background-color: var(--color-surface-hover)
-    color: var(--color-text)
+  .session-list-item .session-list-item-actions
+    transition: none
 
-  &.session-list-item-active
-    background-color: rgba(28, 117, 219, .3)
-    font-weight: var(--font-weight-semi-bold)
+  .session-list-item .session-list-item-pinned-icon
+    transition: none

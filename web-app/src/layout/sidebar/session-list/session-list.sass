@@ -1,21 +1,37 @@
 .session-list
-  display: grid
-  min-height: 0
-  gap: var(--space-lg)
+  padding: var(--space-sm)
+  transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
-  h2
-    padding: 0 var(--space-md)
+  .session-list-title
+    margin: 0 0 var(--space-sm)
+    padding: 0 var(--space-sm)
     color: var(--color-text)
     font-size: var(--font-size-md)
-    font-weight: var(--font-weight-bold)
+    font-weight: var(--font-weight-semi-bold)
     line-height: var(--line-height-md)
 
-  ul
-    display: grid
-    gap: 2px
-    overflow: auto
-    min-height: 0
-    scrollbar-width: none
+  .session-list-items
+    position: relative
+    margin: 0
+    padding: 0
+    list-style: none
 
-    &::-webkit-scrollbar
-      display: none
+  .session-list-mask
+    position: sticky
+    bottom: 0
+    display: block
+    width: 100%
+    height: 54px
+    margin-top: -54px
+    background-color: var(--color-sidebar-background)
+    mask-image: linear-gradient(to bottom, transparent, #000 74%, #000)
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 74%, #000)
+    pointer-events: none
+    transition: background-color var(--transition-duration-sidebar) var(--transition-timing-sidebar)
+
+@media (prefers-reduced-motion: reduce)
+  .session-list
+    transition: none
+
+    .session-list-mask
+      transition: none
