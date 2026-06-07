@@ -9,6 +9,7 @@ import { createRoot } from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 
+import { ToastProvider } from './components/toast'
 import { queryClient } from './query-client'
 import { router } from './router'
 import { applyStoredTheme } from './theme'
@@ -24,7 +25,9 @@ if (rootElement === null) {
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
     </QueryClientProvider>
   </StrictMode>
 )

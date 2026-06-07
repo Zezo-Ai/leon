@@ -1,6 +1,13 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject
+} from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
+import { useToast } from '../../../components/toast'
 import sessionsData from '../../../data/sessions.json'
 import { SessionListItem } from '../session-list-item'
 
@@ -49,16 +56,55 @@ export function SessionList({
   collapsed = false,
   scrollElementRef
 }: SessionListProps) {
+  const { showToast } = useToast()
   const virtualListRef = useRef<HTMLUListElement>(null)
   const [scrollMargin, setScrollMargin] = useState(0)
-  const sessions = sortPinnedSessionsFirst(sessionIndex.sessions)
+  const [sessions, setSessions] = useState<ConversationSession[]>(
+    () => sessionIndex.sessions
+  )
+  const sortedSessions = useMemo(
+    () => sortPinnedSessionsFirst(sessions),
+    [sessions]
+  )
   const rowVirtualizer = useVirtualizer({
-    count: sessions.length,
+    count: sortedSessions.length,
     getScrollElement: () => scrollElementRef.current,
     estimateSize: () => SESSION_ITEM_ESTIMATED_HEIGHT,
     overscan: SESSION_LIST_OVERSCAN,
     scrollMargin
   })
+
+  function renameSession(sessionId: string, nextTitle: string): void {
+    const title = nextTitle.trim()
+    const session = sessions.find((currentSession) =>
+      currentSession.id === sessionId
+    )
+
+    if (
+      session === undefined ||
+      title.length === 0 ||
+      title === session.title
+    ) {
+      return
+    }
+
+    setSessions((currentSessions) =>
+      currentSessions.map((currentSession) =>
+        currentSession.id === sessionId
+          ? {
+              ...currentSession,
+              title,
+              updatedAt: Date.now()
+            }
+          : currentSession
+      )
+    )
+    showToast({
+      type: 'success',
+      title: 'Session title edited',
+      description: `I edited your session title to "${title}".`
+    })
+  }
 
   useLayoutEffect(() => {
     const virtualList = virtualListRef.current
@@ -98,7 +144,7 @@ export function SessionList({
         style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
       >
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-          const session = sessions[virtualRow.index]
+          const session = sortedSessions[virtualRow.index]
 
           if (session === undefined) {
             return null
@@ -110,6 +156,7 @@ export function SessionList({
               id={session.id}
               isPinned={session.isPinned}
               title={session.title}
+              onRename={renameSession}
               style={{
                 height: `${virtualRow.size}px`,
                 transform: `translateY(${virtualRow.start - rowVirtualizer.options.scrollMargin}px)`
