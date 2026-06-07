@@ -42,10 +42,10 @@ interface ToastCardProps {
 const DEFAULT_TOAST_DURATION_MS = 7_000
 const MAX_VISIBLE_TOASTS = 3
 const TOAST_ICONS: Record<ToastType, string> = {
-  success: 'check',
+  success: 'check-line',
   info: 'info-i',
-  warning: 'alert',
-  error: 'close-circle'
+  warning: 'alert-line',
+  error: 'close-circle-line'
 }
 const ToastContext = createContext<ToastContextValue | null>(null)
 
@@ -72,7 +72,7 @@ function ToastCard({
       <div className="toast-content-container">
         <div className="toast-header">
           <span className="toast-icon" aria-hidden="true">
-            <i className={`toast-icon-symbol ri-${TOAST_ICONS[toast.type]}-line`} />
+            <i className={`toast-icon-symbol ri-${TOAST_ICONS[toast.type]}`} />
           </span>
           <strong className="toast-title">{toast.title}</strong>
         </div>
