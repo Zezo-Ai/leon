@@ -8,12 +8,7 @@
     display: flex
     align-items: center
 
-  .session-list-item-input
-    display: block
-    outline: none
-
-  .session-list-item-link,
-  .session-list-item-input
+  .session-list-item-link
     box-sizing: border-box
     width: 100%
     height: 40px
@@ -83,8 +78,14 @@
     background-color: var(--color-surface-active)
 
   .session-list-item-input
-    border: 0
-    background-color: var(--color-surface-hover)
+    box-sizing: border-box
+    width: 100%
+    height: 100%
+    padding: calc(var(--space-sm) - 1px)
+    border-radius: calc(var(--border-radius-md) - 1px)
+    outline: none
+    background: linear-gradient(var(--color-sidebar-background), var(--color-sidebar-background)) padding-box, var(--gradient-border) border-box
+    border: 1px solid transparent
     color: var(--color-text)
     font-family: var(--font-family)
     font-size: var(--font-size-md)
@@ -113,8 +114,7 @@
     white-space: nowrap
 
 @media (prefers-reduced-motion: reduce)
-  .session-list-item .session-list-item-link,
-  .session-list-item .session-list-item-input
+  .session-list-item .session-list-item-link
     transition: none
 
   .session-list-item .session-list-item-actions
