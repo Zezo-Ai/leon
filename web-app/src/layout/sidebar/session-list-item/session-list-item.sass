@@ -105,6 +105,15 @@
     .session-list-item-active
       padding-right: 64px
 
+  &.session-list-item-editing
+    .session-list-item-actions,
+    .session-list-item-pinned-icon
+      opacity: 0
+      pointer-events: none
+
+    .session-list-item-input
+      padding-right: calc(var(--space-sm) - 1px)
+
   .session-list-item-title
     min-width: 0
     overflow: hidden

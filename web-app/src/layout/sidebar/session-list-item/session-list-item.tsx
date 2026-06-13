@@ -85,7 +85,13 @@ export function SessionListItem({
   }
 
   return (
-    <li className={clsx('session-list-item', { 'session-list-item-pinned': isPinned })} style={style}>
+    <li
+      className={clsx('session-list-item', {
+        'session-list-item-editing': editing,
+        'session-list-item-pinned': isPinned
+      })}
+      style={style}
+    >
       {editing ? (
         <input
           ref={inputRef}
