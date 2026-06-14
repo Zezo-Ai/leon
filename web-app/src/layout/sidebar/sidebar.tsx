@@ -1,8 +1,9 @@
-import { useRef, useState, type TransitionEvent } from 'react'
+import { useEffect, useRef, useState, type TransitionEvent } from 'react'
 import { clsx } from 'clsx'
 
 import './sidebar.sass'
 import { Button } from '../../components/button'
+import { Dialog } from '../../components/dialog'
 import {
   getStoredSidebarExpanded,
   getStoredSoundsEnabled,
@@ -21,6 +22,18 @@ const DARK_THEME_LOGO_SRC = '/img/logo-for-dark-bg-text.svg'
 const LIGHT_THEME_LOGO_SRC = '/img/logo-for-light-bg-text.svg'
 const REDUCED_MOTION_MEDIA_QUERY = '(prefers-reduced-motion: reduce)'
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (
+      target instanceof HTMLElement &&
+      target.isContentEditable
+    )
+  )
+}
+
 function shouldReduceMotion(): boolean {
   return window.matchMedia(REDUCED_MOTION_MEDIA_QUERY).matches
 }
@@ -35,6 +48,8 @@ export function Sidebar() {
   )
   const [sidebarClosing, setSidebarClosing] = useState(false)
   const [sidebarScrollAreaScrolled, setSidebarScrollAreaScrolled] =
+    useState(false)
+  const [searchSessionsDialogOpen, setSearchSessionsDialogOpen] =
     useState(false)
 
   function toggleTheme(): void {
@@ -92,6 +107,33 @@ export function Sidebar() {
     setSidebarScrollAreaScrolled(scrollArea.scrollTop > 0)
   }
 
+  function openSearchSessionsDialog(): void {
+    setSearchSessionsDialogOpen(true)
+  }
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (
+        isEditableTarget(event.target) ||
+        event.altKey ||
+        event.shiftKey ||
+        event.key.toLowerCase() !== 'k' ||
+        (!event.ctrlKey && !event.metaKey)
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      openSearchSessionsDialog()
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
   const logoSrc = theme === 'dark' ? DARK_THEME_LOGO_SRC : LIGHT_THEME_LOGO_SRC
 
   return (
@@ -138,7 +180,11 @@ export function Sidebar() {
           />
         </div>
       </header>
-      <Menu collapsed={sidebarContentCollapsed} variant="fixed" />
+      <Menu
+        collapsed={sidebarContentCollapsed}
+        variant="fixed"
+        onSearchSessions={openSearchSessionsDialog}
+      />
       <div
         className={clsx('sidebar-scroll-area', {
           'sidebar-scroll-area-scrolled': sidebarScrollAreaScrolled
@@ -161,6 +207,18 @@ export function Sidebar() {
       <footer className="sidebar-footer-slot">
 
       </footer>
+      <Dialog
+        open={searchSessionsDialogOpen}
+        title="Search sessions"
+        actions={[
+          {
+            label: 'Close',
+            variant: 'surface',
+            onClick: () => setSearchSessionsDialogOpen(false)
+          }
+        ]}
+        onClose={() => setSearchSessionsDialogOpen(false)}
+      />
     </aside>
   )
 }

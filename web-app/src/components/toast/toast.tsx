@@ -42,7 +42,7 @@ interface ToastCardProps {
   onClose: (toastId: string) => void
 }
 
-const DEFAULT_TOAST_DURATION_MS = 120_000
+const DEFAULT_TOAST_DURATION_MS = 9_000
 const TOAST_EXIT_DURATION_MS = 350
 const MAX_VISIBLE_TOASTS = 3
 const TOAST_ICONS: Record<ToastType, string> = {

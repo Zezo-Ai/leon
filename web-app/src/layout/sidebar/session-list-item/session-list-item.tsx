@@ -9,6 +9,7 @@ import { Link } from '@tanstack/react-router'
 import { clsx } from 'clsx'
 
 import { Button } from '../../../components/button'
+import { Dialog } from '../../../components/dialog'
 import { Dropdown } from '../../../components/dropdown'
 
 import './session-list-item.sass'
@@ -16,6 +17,7 @@ import './session-list-item.sass'
 interface SessionListItemProps {
   id: string
   isPinned: boolean
+  onDelete: (sessionId: string) => void
   onRename: (sessionId: string, title: string) => void
   title: string
   style?: CSSProperties
@@ -24,12 +26,14 @@ interface SessionListItemProps {
 export function SessionListItem({
   id,
   isPinned,
+  onDelete,
   onRename,
   title,
   style
 }: SessionListItemProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [editing, setEditing] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [draftTitle, setDraftTitle] = useState(title)
   const pinDropdownItem = isPinned
     ? {
@@ -84,6 +88,11 @@ export function SessionListItem({
     }
   }
 
+  function confirmDelete(): void {
+    onDelete(id)
+    setDeleteDialogOpen(false)
+  }
+
   return (
     <li
       className={clsx('session-list-item', {
@@ -104,7 +113,7 @@ export function SessionListItem({
         />
       ) : (
         <Link
-          to="/sessions/$sessionId"
+          to="/session/$sessionId"
           params={{ sessionId: id }}
           className="session-list-item-link"
           activeProps={{
@@ -136,6 +145,7 @@ export function SessionListItem({
             {
               iconName: 'delete-bin',
               label: 'Delete',
+              onSelect: () => setDeleteDialogOpen(true),
               variant: 'danger'
             }
           ]}
@@ -146,6 +156,25 @@ export function SessionListItem({
           />
         </Dropdown>
       </div>
+      <Dialog
+        open={deleteDialogOpen}
+        role="alertdialog"
+        title="You sure?"
+        description="This action cannot be undone. This will permanently delete the session."
+        actions={[
+          {
+            label: 'Cancel',
+            variant: 'surface',
+            onClick: () => setDeleteDialogOpen(false)
+          },
+          {
+            label: 'Delete',
+            variant: 'danger',
+            onClick: confirmDelete
+          }
+        ]}
+        onClose={() => setDeleteDialogOpen(false)}
+      />
     </li>
   )
 }

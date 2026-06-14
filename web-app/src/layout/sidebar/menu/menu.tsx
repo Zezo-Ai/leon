@@ -48,11 +48,13 @@ function getPlatform(): string | undefined {
 
 interface MenuProps {
   collapsed?: boolean
+  onSearchSessions?: () => void
   variant?: 'fixed' | 'scrollable'
 }
 
 export function Menu({
   collapsed = false,
+  onSearchSessions,
   variant = 'fixed'
 }: MenuProps) {
   const [modifierKey, setModifierKey] = useState<string | typeof MACOS_MODIFIER_KEY>(
@@ -73,7 +75,14 @@ export function Menu({
   const fixedItems = (
     <>
       <MenuItem iconName="edit-box" label="New session" iconAnimation="write" to="/" shortcutKeys={[modifierKey, 'Shift', 'O']} collapsed={collapsed} />
-      <MenuItem iconName="search" label="Search sessions" iconAnimation="search" shortcutKeys={[modifierKey, 'K']} collapsed={collapsed} />
+      <MenuItem
+        iconName="search"
+        label="Search sessions"
+        iconAnimation="search"
+        shortcutKeys={[modifierKey, 'K']}
+        collapsed={collapsed}
+        {...(onSearchSessions === undefined ? {} : { onClick: onSearchSessions })}
+      />
     </>
   )
   const scrollableItems = (

@@ -1,66 +1,98 @@
-.dialog-backdrop
+.dialog-overlay
   position: fixed
   inset: 0
-  z-index: 20
-  display: grid
-  place-items: start center
+  z-index: 105
+  display: flex
+  align-items: flex-start
+  justify-content: center
   padding-top: 112px
-  background-color: var(--color-overlay)
-  backdrop-filter: blur(10px)
+  background-color: rgba(0, 0, 0, .1)
+  backdrop-filter: blur(4px)
+  opacity: 0
+  pointer-events: none
+  transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar)
+
+.dialog-overlay-open
+  opacity: 1
+  pointer-events: auto
+
+.dialog-overlay-exiting
+  opacity: 0
 
 .dialog
-  width: min(560px, calc(100vw - 48px))
+  width: min(464px, calc(100vw - 32px))
   overflow: hidden
-  border: 1px solid var(--color-border-strong)
+  background: linear-gradient(var(--color-surface-elevated), var(--color-surface-elevated)) padding-box, var(--gradient-border) border-box
+  border: 1px solid transparent
   border-radius: var(--border-radius-lg)
-  background-color: var(--color-surface)
-  box-shadow: 0 28px 90px rgba(0, 0, 0, .42)
+  color: var(--color-text)
+  opacity: 0
+  transform: translate3d(0, -18px, 0) scale(.97)
+  transform-origin: top center
+  animation: dialog-enter var(--transition-duration-sidebar) cubic-bezier(.18, 1.18, .24, 1) forwards
+  transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar), transform var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
-  header
-    display: flex
-    align-items: start
-    justify-content: space-between
-    gap: var(--space-lg)
-    padding: 28px 28px 24px
+.dialog-exiting
+  animation: none
+  opacity: 0
+  transform: translate3d(0, -18px, 0) scale(.97)
 
-    h2
-      color: var(--color-text)
-      font-size: 24px
-      font-weight: var(--font-weight-bold)
-      line-height: 30px
+@keyframes dialog-enter
+  0%
+    opacity: 0
+    transform: translate3d(0, -18px, 0) scale(.97)
 
-    p
-      margin-top: var(--space-md)
-      color: var(--color-text-secondary)
-      font-size: var(--font-size-md)
-      line-height: var(--line-height-md)
+  70%
+    opacity: 1
+    transform: translate3d(0, 2px, 0) scale(1.01)
 
-    button
-      color: var(--color-text)
-      font-size: 24px
+  100%
+    opacity: 1
+    transform: translate3d(0, 0, 0) scale(1)
 
-  .content
-    padding: 0 28px 28px
-
-  footer
-    display: flex
-    justify-content: end
-    gap: var(--space-sm)
-    padding: 24px 28px
-    border-top: 1px solid var(--color-border)
-    background-color: rgba(245, 245, 247, .04)
+.dialog-header
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: var(--space-lg)
+  padding: var(--space-xl) var(--space-xl) 0
 
   .button
-    min-width: 82px
-    height: 40px
-    padding: 0 var(--space-md)
-    border: 1px solid var(--color-border-strong)
-    border-radius: var(--border-radius-pill)
-    color: var(--color-text)
-    font-size: var(--font-size-md)
-    font-weight: var(--font-weight-semi-bold)
+    color: var(--color-text-secondary)
 
-    &.danger
-      border-color: transparent
-      background-color: var(--color-danger)
-      color: #FFFFFF
+    &:hover:not(:disabled):not([aria-disabled='true'])
+      color: var(--color-text)
+
+.dialog-title
+  margin: 0
+  color: var(--color-text)
+  font-size: var(--font-size-xl)
+  font-weight: var(--font-weight-semi-bold)
+  line-height: var(--line-height-xl)
+
+.dialog-body
+  padding: var(--space-md) var(--space-xl) var(--space-xl)
+  color: var(--color-text-secondary)
+  font-size: var(--font-size-md)
+  line-height: var(--line-height-md)
+
+.dialog-description
+  margin: 0
+
+.dialog-footer
+  display: flex
+  justify-content: flex-end
+  gap: var(--space-sm)
+  padding: var(--space-xl)
+  border-top: 1px solid var(--color-border)
+  background-color: var(--color-surface)
+
+@media (prefers-reduced-motion: reduce)
+  .dialog-overlay,
+  .dialog
+    animation: none
+    transition: none
+
+  .dialog
+    opacity: 1
+    transform: none

@@ -1,9 +1,143 @@
+import type { ReactNode } from 'react'
+import { useEffect, useId, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { clsx } from 'clsx'
+
+import { Button, type ButtonVariant } from '../button'
+
 import './dialog.sass'
 
-export function Dialog() {
-  return (
-    <div className="dialog-backdrop" role="presentation">
-      <section className="dialog" role="dialog" aria-modal="true" />
-    </div>
+type DialogRole = 'dialog' | 'alertdialog'
+
+interface DialogAction {
+  label: string
+  variant?: ButtonVariant
+  onClick: () => void
+}
+
+interface DialogProps {
+  actions: DialogAction[]
+  children?: ReactNode
+  closeOnOverlayClick?: boolean
+  description?: ReactNode
+  open: boolean
+  role?: DialogRole
+  title: string
+  onClose: () => void
+}
+
+const DIALOG_EXIT_DURATION_MS = 350
+
+export function Dialog({
+  actions,
+  children,
+  closeOnOverlayClick = true,
+  description,
+  open,
+  role = 'dialog',
+  title,
+  onClose
+}: DialogProps) {
+  const titleId = useId()
+  const descriptionId = useId()
+  const [mounted, setMounted] = useState(open)
+  const [exiting, setExiting] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      setExiting(false)
+      return undefined
+    }
+
+    if (!mounted) {
+      return undefined
+    }
+
+    setExiting(true)
+
+    const timeoutId = window.setTimeout(() => {
+      setMounted(false)
+      setExiting(false)
+    }, DIALOG_EXIT_DURATION_MS)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [mounted, open])
+
+  useEffect(() => {
+    if (!open) {
+      return undefined
+    }
+
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onClose, open])
+
+  if (!mounted) {
+    return null
+  }
+
+  return createPortal(
+    <div
+      className={clsx('dialog-overlay', {
+        'dialog-overlay-exiting': exiting,
+        'dialog-overlay-open': open && !exiting
+      })}
+      onMouseDown={(event) => {
+        if (closeOnOverlayClick && event.target === event.currentTarget) {
+          onClose()
+        }
+      }}
+    >
+      <section
+        className={clsx('dialog', { 'dialog-exiting': exiting })}
+        role={role}
+        aria-labelledby={titleId}
+        aria-describedby={description === undefined ? undefined : descriptionId}
+        aria-modal="true"
+      >
+        <header className="dialog-header">
+          <h2 className="dialog-title" id={titleId}>
+            {title}
+          </h2>
+          <Button
+            iconName="close"
+            ariaLabel="Close dialog"
+            onClick={onClose}
+          />
+        </header>
+        <div className="dialog-body">
+          {description !== undefined && (
+            <p className="dialog-description" id={descriptionId}>
+              {description}
+            </p>
+          )}
+          {children}
+        </div>
+        <footer className="dialog-footer">
+          {actions.map((action) => (
+            <Button
+              key={action.label}
+              variant={action.variant ?? 'ghost'}
+              onClick={action.onClick}
+            >
+              {action.label}
+            </Button>
+          ))}
+        </footer>
+      </section>
+    </div>,
+    document.body
   )
 }

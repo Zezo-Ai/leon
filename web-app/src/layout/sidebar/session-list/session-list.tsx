@@ -106,6 +106,12 @@ export function SessionList({
     })
   }
 
+  function deleteSession(sessionId: string): void {
+    setSessions((currentSessions) =>
+      currentSessions.filter((currentSession) => currentSession.id !== sessionId)
+    )
+  }
+
   useLayoutEffect(() => {
     const virtualList = virtualListRef.current
 
@@ -156,6 +162,7 @@ export function SessionList({
               id={session.id}
               isPinned={session.isPinned}
               title={session.title}
+              onDelete={deleteSession}
               onRename={renameSession}
               style={{
                 height: `${virtualRow.size}px`,
