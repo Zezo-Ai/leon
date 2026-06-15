@@ -32,6 +32,16 @@
   &.dropdown-content-open
     transform: translate3d(0, 0, 0)
 
+@starting-style
+  .dropdown-content-open
+    opacity: 0
+
+  .dropdown-content-bottom.dropdown-content-open
+    transform: translate3d(0, -4px, 0)
+
+  .dropdown-content-top.dropdown-content-open
+    transform: translate3d(0, 4px, 0)
+
 .dropdown-item
   display: flex
   align-items: center

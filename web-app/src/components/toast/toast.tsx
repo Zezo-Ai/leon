@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import {
   createContext,
   useCallback,
@@ -39,12 +39,14 @@ interface ToastProviderProps {
 interface ToastCardProps {
   stackIndex: number
   toast: ToastItem
+  toastCount: number
+  onActivate: () => void
   onClose: (toastId: string) => void
+  onExited: (toastId: string) => void
 }
 
 const DEFAULT_TOAST_DURATION_MS = 9_000
-const TOAST_EXIT_DURATION_MS = 350
-const MAX_VISIBLE_TOASTS = 3
+const MAX_STACKED_TOASTS = 3
 const TOAST_ICONS: Record<ToastType, string> = {
   success: 'check-line',
   info: 'info-i',
@@ -60,7 +62,10 @@ function createToastId(): string {
 function ToastCard({
   stackIndex,
   toast,
-  onClose
+  toastCount,
+  onActivate,
+  onClose,
+  onExited
 }: ToastCardProps) {
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -78,8 +83,20 @@ function ToastCard({
         'toast',
         `toast-${toast.type}`,
         `toast-stack-${stackIndex}`,
+        { 'toast-hidden-stack': stackIndex >= MAX_STACKED_TOASTS },
         { 'toast-exiting': toast.exiting }
       )}
+      style={{
+        '--toast-index': stackIndex,
+        zIndex: toastCount - stackIndex
+      } as CSSProperties}
+      onPointerEnter={onActivate}
+      onFocus={onActivate}
+      onTransitionEnd={(event) => {
+        if (event.propertyName === 'opacity' && toast.exiting) {
+          onExited(toast.id)
+        }
+      }}
     >
       <div className="toast-content-container">
         <div className="toast-header">
@@ -106,7 +123,8 @@ function ToastCard({
 export function ToastProvider({
   children
 }: ToastProviderProps) {
-  const removalTimeoutsRef = useRef<Map<string, number>>(new Map())
+  const regionRef = useRef<HTMLElement>(null)
+  const [expanded, setExpanded] = useState(false)
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
   const closeToast = useCallback((toastId: string): void => {
@@ -118,25 +136,45 @@ export function ToastProvider({
       )
     )
 
-    if (removalTimeoutsRef.current.has(toastId)) {
-      return
+  }, [])
+
+  const removeToast = useCallback((toastId: string): void => {
+    setToasts((currentToasts) =>
+      currentToasts.filter((toast) => toast.id !== toastId)
+    )
+  }, [])
+
+  useEffect(() => {
+    if (!expanded) {
+      return undefined
     }
 
-    const timeoutId = window.setTimeout(() => {
-      setToasts((currentToasts) =>
-        currentToasts.filter((toast) => toast.id !== toastId)
-      )
-      removalTimeoutsRef.current.delete(toastId)
-    }, TOAST_EXIT_DURATION_MS)
+    function handlePointerMove(event: PointerEvent): void {
+      const region = regionRef.current
 
-    removalTimeoutsRef.current.set(toastId, timeoutId)
-  }, [])
+      if (region === null) {
+        setExpanded(false)
+        return
+      }
 
-  useEffect(() => () => {
-    removalTimeoutsRef.current.forEach((timeoutId) => {
-      window.clearTimeout(timeoutId)
-    })
-  }, [])
+      const regionRect = region.getBoundingClientRect()
+      const isInsideRegion =
+        event.clientX >= regionRect.left &&
+        event.clientX <= regionRect.right &&
+        event.clientY >= regionRect.top &&
+        event.clientY <= regionRect.bottom
+
+      if (!isInsideRegion) {
+        setExpanded(false)
+      }
+    }
+
+    document.addEventListener('pointermove', handlePointerMove)
+
+    return () => {
+      document.removeEventListener('pointermove', handlePointerMove)
+    }
+  }, [expanded])
 
   const contextValue = useMemo<ToastContextValue>(() => ({
     showToast: (toast) => {
@@ -149,25 +187,39 @@ export function ToastProvider({
           description: toast.description
         },
         ...currentToasts
-      ].slice(0, MAX_VISIBLE_TOASTS))
+      ])
     }
   }), [])
 
   return (
     <ToastContext.Provider value={contextValue}>
       {children}
-      {createPortal(
+      {toasts.length > 0 && createPortal(
         <section
-          className="toast-region"
+          ref={regionRef}
+          className={clsx('toast-region', {
+            'toast-region-expanded': expanded
+          })}
           aria-label="Notifications"
           aria-live="polite"
+          style={{
+            '--toast-region-expanded-height': `calc((var(--toast-stack-item-height) * ${toasts.length}) + (var(--toast-stack-gap) * ${Math.max(toasts.length - 1, 0)}))`
+          } as CSSProperties}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) {
+              setExpanded(false)
+            }
+          }}
         >
           {toasts.map((toast, stackIndex) => (
             <ToastCard
               key={toast.id}
               stackIndex={stackIndex}
               toast={toast}
+              toastCount={toasts.length}
+              onActivate={() => setExpanded(true)}
               onClose={closeToast}
+              onExited={removeToast}
             />
           ))}
         </section>,

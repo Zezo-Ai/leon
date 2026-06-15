@@ -44,3 +44,19 @@
 
   &.tooltip-content-open
     transform: translate3d(0, -50%, 0)
+
+@starting-style
+  .tooltip-content-open
+    opacity: 0
+
+  .tooltip-content-top.tooltip-content-open
+    transform: translate3d(-50%, 4px, 0)
+
+  .tooltip-content-right.tooltip-content-open
+    transform: translate3d(-4px, -50%, 0)
+
+  .tooltip-content-bottom.tooltip-content-open
+    transform: translate3d(-50%, -4px, 0)
+
+  .tooltip-content-left.tooltip-content-open
+    transform: translate3d(4px, -50%, 0)

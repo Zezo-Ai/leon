@@ -51,6 +51,7 @@ export function Tooltip({
   message,
   position = 'bottom'
 }: TooltipProps) {
+  const [rendered, setRendered] = useState(false)
   const [open, setOpen] = useState(false)
   const [tooltipStyle, setTooltipStyle] = useState<CSSProperties>()
   const triggerRef = useRef<HTMLSpanElement>(null)
@@ -64,6 +65,7 @@ export function Tooltip({
       triggerRef.current.getBoundingClientRect(),
       position
     ))
+    setRendered(true)
     setOpen(true)
   }
 
@@ -121,7 +123,7 @@ export function Tooltip({
       >
         {children}
       </span>
-      {createPortal(
+      {rendered && createPortal(
         <span
           className={clsx(
             'tooltip-content',
@@ -130,6 +132,11 @@ export function Tooltip({
           )}
           role="tooltip"
           style={tooltipStyle}
+          onTransitionEnd={(event) => {
+            if (event.propertyName === 'opacity' && !open) {
+              setRendered(false)
+            }
+          }}
         >
           {message}
         </span>,

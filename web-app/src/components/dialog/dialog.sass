@@ -16,9 +16,6 @@
   opacity: 1
   pointer-events: auto
 
-.dialog-overlay-exiting
-  opacity: 0
-
 .dialog
   width: min(464px, calc(100vw - 32px))
   overflow: hidden
@@ -29,26 +26,23 @@
   opacity: 0
   transform: translate3d(0, -18px, 0) scale(.97)
   transform-origin: top center
-  animation: dialog-enter var(--transition-duration-sidebar) cubic-bezier(.18, 1.18, .24, 1) forwards
-  transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar), transform var(--transition-duration-sidebar) var(--transition-timing-sidebar)
+  transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar), transform var(--transition-duration-sidebar) cubic-bezier(.18, 1.18, .24, 1)
 
-.dialog-exiting
-  animation: none
-  opacity: 0
-  transform: translate3d(0, -18px, 0) scale(.97)
+.dialog-open
+  opacity: 1
+  transform: translate3d(0, 0, 0) scale(1)
 
-@keyframes dialog-enter
-  0%
+@starting-style
+  .dialog-overlay-open
+    opacity: 0
+
+  .dialog-open
     opacity: 0
     transform: translate3d(0, -18px, 0) scale(.97)
 
-  70%
-    opacity: 1
-    transform: translate3d(0, 2px, 0) scale(1.01)
-
-  100%
-    opacity: 1
-    transform: translate3d(0, 0, 0) scale(1)
+.dialog:not(.dialog-open)
+  opacity: 0
+  transform: translate3d(0, -18px, 0) scale(.97)
 
 .dialog-header
   display: flex

@@ -7,25 +7,18 @@
   z-index: 120
   height: 152px
   width: min(396px, calc(100vw - 32px))
-  pointer-events: auto
+  pointer-events: none
   transform: translateX(-50%)
   transition: height var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
-  &:hover,
+  &.toast-region-expanded,
   &:focus-within
-    height: calc((var(--toast-stack-item-height) * 3) + (var(--toast-stack-gap) * 2))
+    height: var(--toast-region-expanded-height)
 
     .toast
       pointer-events: auto
-
-    .toast-stack-0
-      transform: translate3d(0, 0, 0) scale(1)
-
-    .toast-stack-1
-      transform: translate3d(0, calc(100% + var(--toast-stack-gap)), 0) scale(1)
-
-    .toast-stack-2
-      transform: translate3d(0, calc((100% + var(--toast-stack-gap)) * 2), 0) scale(1)
+      opacity: 1
+      transform: translate3d(0, calc((var(--toast-stack-item-height) + var(--toast-stack-gap)) * var(--toast-index)), 0) scale(1)
 
 .toast
   --toast-close-button-size: var(--button-md-icon-only-size)
@@ -48,7 +41,6 @@
   opacity: 0
   pointer-events: none
   transform-origin: top center
-  animation: toast-enter var(--transition-duration-sidebar) var(--transition-timing-sidebar)
   transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar), transform var(--transition-duration-sidebar) var(--transition-timing-sidebar)
   will-change: transform, opacity
 
@@ -68,19 +60,22 @@
   opacity: 1
   transform: translate3d(0, 32px, 0) scale(.92)
 
+.toast-hidden-stack
+  opacity: 0
+  pointer-events: none
+  transform: translate3d(0, 32px, 0) scale(.92)
+
 .toast-region .toast.toast-exiting
   opacity: 0
   pointer-events: none
   transform: translate3d(0, -14px, 0) scale(.98)
 
-@keyframes toast-enter
-  from
+@starting-style
+  .toast-stack-0,
+  .toast-stack-1,
+  .toast-stack-2
     opacity: 0
     transform: translate3d(0, -14px, 0) scale(.98)
-
-  to
-    opacity: 1
-    transform: translate3d(0, 0, 0) scale(1)
 
 .toast-content-container
   display: flex

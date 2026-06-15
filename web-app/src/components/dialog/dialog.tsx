@@ -26,8 +26,6 @@ interface DialogProps {
   onClose: () => void
 }
 
-const DIALOG_EXIT_DURATION_MS = 350
-
 export function Dialog({
   actions,
   children,
@@ -41,30 +39,12 @@ export function Dialog({
   const titleId = useId()
   const descriptionId = useId()
   const [mounted, setMounted] = useState(open)
-  const [exiting, setExiting] = useState(false)
 
   useEffect(() => {
     if (open) {
       setMounted(true)
-      setExiting(false)
-      return undefined
     }
-
-    if (!mounted) {
-      return undefined
-    }
-
-    setExiting(true)
-
-    const timeoutId = window.setTimeout(() => {
-      setMounted(false)
-      setExiting(false)
-    }, DIALOG_EXIT_DURATION_MS)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [mounted, open])
+  }, [open])
 
   useEffect(() => {
     if (!open) {
@@ -91,9 +71,17 @@ export function Dialog({
   return createPortal(
     <div
       className={clsx('dialog-overlay', {
-        'dialog-overlay-exiting': exiting,
-        'dialog-overlay-open': open && !exiting
+        'dialog-overlay-open': open
       })}
+      onTransitionEnd={(event) => {
+        if (
+          event.target === event.currentTarget &&
+          event.propertyName === 'opacity' &&
+          !open
+        ) {
+          setMounted(false)
+        }
+      }}
       onMouseDown={(event) => {
         if (closeOnOverlayClick && event.target === event.currentTarget) {
           onClose()
@@ -101,7 +89,7 @@ export function Dialog({
       }}
     >
       <section
-        className={clsx('dialog', { 'dialog-exiting': exiting })}
+        className={clsx('dialog', { 'dialog-open': open })}
         role={role}
         aria-labelledby={titleId}
         aria-describedby={description === undefined ? undefined : descriptionId}
