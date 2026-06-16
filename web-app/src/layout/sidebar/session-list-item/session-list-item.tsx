@@ -164,7 +164,7 @@ export function SessionListItem({
         actions={[
           {
             label: 'Cancel',
-            variant: 'surface',
+            variant: 'secondary',
             onClick: () => setDeleteDialogOpen(false)
           },
           {
