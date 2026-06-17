@@ -24,13 +24,16 @@
   border-radius: var(--border-radius-lg)
   color: var(--color-text)
   opacity: 0
-  transform: translate3d(0, -18px, 0) scale(.97)
-  transform-origin: top center
-  transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar), transform var(--transition-duration-sidebar) cubic-bezier(.18, 1.18, .24, 1)
+  scale: .982
+  transform-origin: center
+  translate: 0 -10px
+  transition: opacity var(--transition-duration-sidebar) var(--transition-timing-sidebar), scale var(--transition-duration-sidebar) var(--transition-timing-sidebar), translate var(--transition-duration-sidebar) var(--transition-timing-sidebar)
 
 .dialog-open
   opacity: 1
-  transform: translate3d(0, 0, 0) scale(1)
+  animation: dialog-enter-pulse .75s cubic-bezier(.16, 1, .3, 1) both
+  scale: 1
+  translate: 0 0
 
 @starting-style
   .dialog-overlay-open
@@ -38,11 +41,23 @@
 
   .dialog-open
     opacity: 0
-    transform: translate3d(0, -18px, 0) scale(.97)
+    scale: .982
+    translate: 0 -10px
 
 .dialog:not(.dialog-open)
   opacity: 0
-  transform: translate3d(0, -18px, 0) scale(.97)
+  scale: .982
+  translate: 0 -10px
+
+@keyframes dialog-enter-pulse
+  0%
+    scale: .75
+
+  25%
+    scale: 1.03
+
+  100%
+    scale: 1
 
 .dialog-header
   display: flex
