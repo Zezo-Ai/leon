@@ -28,6 +28,7 @@ const REMOTE_LLM_PROVIDERS = [
         value: 'anthropic/claude-sonnet-4.6'
       },
       { label: 'xiaomi/mimo-v2.5-pro', value: 'xiaomi/mimo-v2.5-pro' },
+      { label: 'z-ai/glm-5.2', value: 'z-ai/glm-5.2' },
       { label: 'z-ai/glm-5.1', value: 'z-ai/glm-5.1' },
       { label: 'z-ai/glm-5-turbo', value: 'z-ai/glm-5-turbo' },
       { label: 'moonshotai/kimi-k2.6', value: 'moonshotai/kimi-k2.6' },
@@ -56,7 +57,8 @@ const REMOTE_LLM_PROVIDERS = [
   {
     ...getRequiredProviderAccountConfig('zai'),
     models: [
-      { label: 'GLM-5.1 (Recommended)', value: 'glm-5.1' },
+      { label: 'GLM-5.2 (Recommended)', value: 'glm-5.2' },
+      { label: 'GLM-5.1', value: 'glm-5.1' },
       { label: 'GLM-5-Turbo', value: 'glm-5-turbo' },
       { label: 'GLM-5', value: 'glm-5' }
     ]
