@@ -1,37 +1,98 @@
 .search-sessions-dialog
-  display: grid
-  gap: var(--space-md)
-
-  label
-    display: grid
-    grid-template-columns: 24px 1fr
-    align-items: center
-    gap: var(--space-sm)
-    height: 48px
-    padding: 0 var(--space-md)
-    border: 1px solid var(--color-border)
-    border-radius: var(--border-radius-md)
-    background-color: var(--color-surface-elevated)
-    color: var(--color-text-secondary)
+  display: flex
+  flex-direction: column
+  gap: var(--space-lg)
+  min-height: 360px
 
   input
-    border: 0
-    outline: 0
-    background: transparent
     font-size: var(--font-size-md)
 
-    &::placeholder
-      color: var(--color-text-secondary)
+.search-sessions-dialog-results
+  overflow: auto
+  min-height: 0
+  max-height: 320px
 
-  ul
-    display: grid
-    gap: var(--space-xs)
+.search-sessions-dialog-list
+  position: relative
 
-  li
-    padding: 10px 12px
-    border-radius: var(--border-radius-md)
-    color: var(--color-text-secondary)
+.search-sessions-dialog-item
+  position: absolute
+  top: 0
+  left: 0
+  width: 100%
 
-    &:hover
-      background-color: var(--color-surface-hover)
-      color: var(--color-text)
+.search-sessions-dialog-link
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: var(--space-lg)
+  box-sizing: border-box
+  width: 100%
+  height: 46px
+  padding: 0 var(--space-md)
+  border-radius: var(--border-radius-md)
+  color: var(--color-text)
+  text-decoration: none
+  transition: background-color var(--transition-duration-main) var(--transition-timing-main)
+
+  &:hover
+    background-color: var(--color-surface-hover)
+
+  &:active
+    background-color: var(--color-surface-active)
+
+.search-sessions-dialog-title
+  min-width: 0
+  overflow: hidden
+  font-size: var(--font-size-md)
+  line-height: var(--line-height-md)
+  text-overflow: ellipsis
+  white-space: nowrap
+
+.search-sessions-dialog-title-highlight
+  border-radius: var(--border-radius-sm)
+  background-color: var(--color-accent-soft)
+  color: var(--color-accent)
+
+.search-sessions-dialog-date
+  flex: 0 0 auto
+  color: var(--color-text-secondary)
+  font-size: var(--font-size-sm)
+  line-height: var(--line-height-sm)
+
+.search-sessions-dialog-empty
+  display: flex
+  align-items: center
+  justify-content: center
+  flex: 1 1 auto
+  flex-direction: column
+  gap: var(--space-md)
+  min-height: 220px
+  color: var(--color-text-secondary)
+
+.search-sessions-dialog-empty-text
+  margin: 0
+  font-size: var(--font-size-md)
+  line-height: var(--line-height-md)
+
+.search-sessions-dialog-empty-link
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  min-height: 34px
+  padding: 0 12px
+  border: 1px solid transparent
+  border-radius: var(--border-radius-lg)
+  background-color: var(--color-primary-button)
+  color: var(--color-primary-button-text)
+  font-size: var(--font-size-md)
+  font-weight: var(--font-weight-semi-bold)
+  line-height: var(--line-height-md)
+  text-decoration: none
+  transition: background-color var(--transition-duration-main) var(--transition-timing-main)
+
+  &:hover
+    background-color: var(--color-primary-button-hover)
+
+  &:active
+    background-color: var(--color-primary-button-active)

@@ -8,6 +8,7 @@ import { Button, type ButtonVariant } from '../button'
 import './dialog.sass'
 
 type DialogRole = 'dialog' | 'alertdialog'
+type DialogSize = 'medium' | 'large'
 
 interface DialogAction {
   label: string
@@ -16,23 +17,29 @@ interface DialogAction {
 }
 
 interface DialogProps {
-  actions: DialogAction[]
+  actions?: DialogAction[]
   children?: ReactNode
   closeOnOverlayClick?: boolean
+  hideFooter?: boolean
+  hideHeader?: boolean
   description?: ReactNode
   open: boolean
   role?: DialogRole
+  size?: DialogSize
   title: string
   onClose: () => void
 }
 
 export function Dialog({
-  actions,
+  actions = [],
   children,
   closeOnOverlayClick = true,
   description,
+  hideFooter = false,
+  hideHeader = false,
   open,
   role = 'dialog',
+  size = 'medium',
   title,
   onClose
 }: DialogProps) {
@@ -89,22 +96,25 @@ export function Dialog({
       }}
     >
       <section
-        className={clsx('dialog', { 'dialog-open': open })}
+        className={clsx('dialog', `dialog-${size}`, { 'dialog-open': open })}
         role={role}
-        aria-labelledby={titleId}
+        aria-label={hideHeader ? title : undefined}
+        aria-labelledby={hideHeader ? undefined : titleId}
         aria-describedby={description === undefined ? undefined : descriptionId}
         aria-modal="true"
       >
-        <header className="dialog-header">
-          <h2 className="dialog-title" id={titleId}>
-            {title}
-          </h2>
-          <Button
-            iconName="close"
-            ariaLabel="Close dialog"
-            onClick={onClose}
-          />
-        </header>
+        {!hideHeader && (
+          <header className="dialog-header">
+            <h2 className="dialog-title" id={titleId}>
+              {title}
+            </h2>
+            <Button
+              iconName="close"
+              ariaLabel="Close dialog"
+              onClick={onClose}
+            />
+          </header>
+        )}
         <div className="dialog-body">
           {description !== undefined && (
             <p className="dialog-description" id={descriptionId}>
@@ -113,17 +123,19 @@ export function Dialog({
           )}
           {children}
         </div>
-        <footer className="dialog-footer">
-          {actions.map((action) => (
-            <Button
-              key={action.label}
-              variant={action.variant ?? 'ghost'}
-              onClick={action.onClick}
-            >
-              {action.label}
-            </Button>
-          ))}
-        </footer>
+        {!hideFooter && actions.length > 0 && (
+          <footer className="dialog-footer">
+            {actions.map((action) => (
+              <Button
+                key={action.label}
+                variant={action.variant ?? 'ghost'}
+                onClick={action.onClick}
+              >
+                {action.label}
+              </Button>
+            ))}
+          </footer>
+        )}
       </section>
     </div>,
     document.body

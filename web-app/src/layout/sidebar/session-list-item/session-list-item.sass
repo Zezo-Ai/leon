@@ -78,28 +78,21 @@
     background-color: var(--color-surface-active)
 
   .session-list-item-input
-    box-sizing: border-box
-    width: 100%
     height: 100%
-    padding: calc(var(--space-sm) - 1px)
-    border-radius: calc(var(--border-radius-md) - 1px)
-    outline: none
-    background: linear-gradient(var(--color-sidebar-background), var(--color-sidebar-background)) padding-box, var(--gradient-border) border-box
-    border: 1px solid transparent
-    color: var(--color-text)
-    font-family: var(--font-family)
-    font-size: var(--font-size-md)
-    line-height: var(--line-height-md)
+
+    .input-field
+      height: 100%
+      padding: calc(var(--space-sm) - 1px)
 
   &.session-list-item-pinned
     .session-list-item-link,
-    .session-list-item-input
+    .session-list-item-input .input-field
       padding-right: 44px
 
     &:hover,
     &:focus-within
       .session-list-item-link,
-      .session-list-item-input
+      .session-list-item-input .input-field
         padding-right: 64px
 
     .session-list-item-active
@@ -111,7 +104,7 @@
       opacity: 0
       pointer-events: none
 
-    .session-list-item-input
+    .session-list-item-input .input-field
       padding-right: calc(var(--space-sm) - 1px)
 
   .session-list-item-title

@@ -17,16 +17,17 @@
   backdrop-filter: blur(18px)
 
   input
-    width: 100%
     border: 0
-    outline: 0
     background: transparent
+    padding: 0
     color: var(--color-text)
     font-size: var(--font-size-md)
     line-height: var(--line-height-md)
 
-    &::placeholder
-      color: var(--color-text-secondary)
+    &:hover,
+    &:focus,
+    &:active
+      border: 0
 
   button
     display: grid

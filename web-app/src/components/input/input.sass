@@ -1,0 +1,70 @@
+.input
+  position: relative
+  display: block
+  width: 100%
+
+.input-icon
+  position: absolute
+  top: 50%
+  left: var(--space-lg)
+  z-index: 1
+  color: var(--color-text-secondary)
+  font-size: var(--font-size-lg)
+  line-height: 1
+  pointer-events: none
+  transform: translateY(-50%)
+  transition: color var(--transition-duration-main) var(--transition-timing-main)
+
+.input-field
+  box-sizing: border-box
+  display: block
+  width: 100%
+  min-height: 40px
+  padding: 0 var(--space-lg)
+  border: 1px solid var(--color-input-border)
+  border-radius: var(--border-radius-pill)
+  outline: 0
+  background-color: var(--color-background)
+  color: var(--color-text)
+  font-family: var(--font-family)
+  font-size: var(--font-size-md)
+  line-height: var(--line-height-md)
+  transition: background-color var(--transition-duration-main) var(--transition-timing-main), border-color var(--transition-duration-main) var(--transition-timing-main), color var(--transition-duration-main) var(--transition-timing-main)
+
+  &::placeholder
+    color: var(--color-text-secondary)
+
+  &:hover
+    border-color: var(--color-border-strong)
+
+  &:focus,
+  &:active
+    border-color: var(--color-accent)
+
+  &[type='search']
+    appearance: textfield
+
+    &::-webkit-search-cancel-button,
+    &::-webkit-search-decoration
+      appearance: none
+
+.input-medium
+  .input-field
+    min-height: 40px
+
+.input-large
+  .input-field
+    min-height: 56px
+
+.input-with-icon
+  &.input-medium .input-field
+    // 16px left; 16px right; + icon font-size
+    padding-left: calc((var(--space-lg) * 2) + var(--font-size-lg))
+
+  &.input-large .input-field
+    // 16px left; 16px right; + icon font-size
+    padding-left: calc((var(--space-lg) * 2) + var(--font-size-lg))
+
+  &:focus-within
+    .input-icon
+      color: var(--color-accent)

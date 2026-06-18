@@ -4,6 +4,7 @@ import { clsx } from 'clsx'
 import './sidebar.sass'
 import { Button } from '../../components/button'
 import { Dialog } from '../../components/dialog'
+import { SearchSessionsDialog } from '../../components/search-sessions-dialog'
 import {
   getStoredSidebarExpanded,
   getStoredSoundsEnabled,
@@ -208,17 +209,23 @@ export function Sidebar() {
 
       </footer>
       <Dialog
+        hideHeader
         open={searchSessionsDialogOpen}
         title="Search sessions"
+        size="large"
         actions={[
           {
             label: 'Close',
-            variant: 'secondary',
+            variant: 'primary',
             onClick: () => setSearchSessionsDialogOpen(false)
           }
         ]}
         onClose={() => setSearchSessionsDialogOpen(false)}
-      />
+      >
+        <SearchSessionsDialog
+          onSessionSelect={() => setSearchSessionsDialogOpen(false)}
+        />
+      </Dialog>
     </aside>
   )
 }

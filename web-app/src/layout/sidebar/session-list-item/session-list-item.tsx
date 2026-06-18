@@ -11,6 +11,7 @@ import { clsx } from 'clsx'
 import { Button } from '../../../components/button'
 import { Dialog } from '../../../components/dialog'
 import { Dropdown } from '../../../components/dropdown'
+import { Input } from '../../../components/input'
 
 import './session-list-item.sass'
 
@@ -102,10 +103,12 @@ export function SessionListItem({
       style={style}
     >
       {editing ? (
-        <input
-          ref={inputRef}
+        <Input
+          ariaLabel="Session title"
           className="session-list-item-input"
-          aria-label="Session title"
+          fieldRef={(element) => {
+            inputRef.current = element instanceof HTMLInputElement ? element : null
+          }}
           value={draftTitle}
           onBlur={commitEditing}
           onChange={(event) => setDraftTitle(event.target.value)}
@@ -168,7 +171,7 @@ export function SessionListItem({
             onClick: () => setDeleteDialogOpen(false)
           },
           {
-            label: 'Delete',
+            label: 'Delete session',
             variant: 'danger',
             onClick: confirmDelete
           }
