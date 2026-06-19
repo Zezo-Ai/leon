@@ -1,4 +1,4 @@
-import type { ComponentType, MouseEvent } from 'react'
+import type { ComponentType, MouseEvent , ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { clsx } from 'clsx'
 
@@ -11,6 +11,36 @@ type MenuItemIconAnimation = 'write' | 'search' | 'settings' | 'download' | 'boo
 type MenuItemShortcutKey = string | {
   iconName: string
   label: string
+}
+
+function renderShortcutHint(
+  shortcutKeys: MenuItemShortcutKey[] | undefined
+): ReactNode {
+  if (shortcutKeys === undefined) {
+    return undefined
+  }
+
+  return shortcutKeys.map((shortcutKey, shortcutKeyIndex) => (
+    <span className="menu-item-tooltip-shortcut" key={
+      typeof shortcutKey === 'string'
+        ? `${shortcutKey}-${shortcutKeyIndex}`
+        : shortcutKey.label
+    }>
+      {shortcutKeyIndex > 0 && (
+        <span className="menu-item-tooltip-shortcut-separator">
+          +
+        </span>
+      )}
+      {typeof shortcutKey === 'string' ? (
+        <span>{shortcutKey}</span>
+      ) : (
+        <i
+          className={`tooltip-hint-icon ri-${shortcutKey.iconName}-line`}
+          aria-label={shortcutKey.label}
+        />
+      )}
+    </span>
+  ))
 }
 
 interface MenuItemBaseProps {
@@ -150,7 +180,11 @@ export function MenuItem({
   }
 
   return (
-    <Tooltip message={label} position="right">
+    <Tooltip
+      message={label}
+      hint={renderShortcutHint(shortcutKeys)}
+      position="right"
+    >
       {item}
     </Tooltip>
   )

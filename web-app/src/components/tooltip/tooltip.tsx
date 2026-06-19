@@ -9,6 +9,7 @@ export type TooltipPosition = 'top' | 'right' | 'bottom' | 'left'
 
 interface TooltipProps {
   children: ReactNode
+  hint?: ReactNode
   message: string
   position?: TooltipPosition
 }
@@ -48,6 +49,7 @@ function getTooltipStyle(
 
 export function Tooltip({
   children,
+  hint,
   message,
   position = 'bottom'
 }: TooltipProps) {
@@ -138,7 +140,10 @@ export function Tooltip({
             }
           }}
         >
-          {message}
+          <span className="tooltip-message">{message}</span>
+          {hint !== undefined && (
+            <span className="tooltip-hint">{hint}</span>
+          )}
         </span>,
         document.body
       )}

@@ -5,7 +5,6 @@ import { Badge } from '../../../components/badge'
 
 import './menu.sass'
 
-const DEFAULT_MODIFIER_KEY = 'Ctrl'
 const MACOS_PLATFORM_KEYWORD = 'mac'
 const NAVIGATOR_USER_AGENT_DATA_KEY = 'userAgentData'
 const MACOS_MODIFIER_KEY = {

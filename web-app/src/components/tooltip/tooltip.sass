@@ -4,6 +4,9 @@
 .tooltip-content
   position: fixed
   z-index: 100
+  display: inline-flex
+  align-items: center
+  gap: var(--space-md)
   width: max-content
   max-width: 220px
   padding: 6px 10px
@@ -17,6 +20,20 @@
   pointer-events: none
   transition: opacity var(--transition-duration-main) var(--transition-timing-main), transform var(--transition-duration-main) var(--transition-timing-main)
   white-space: nowrap
+
+.tooltip-message,
+.tooltip-hint
+  display: inline-flex
+  align-items: center
+  gap: var(--space-xs)
+
+.tooltip-hint
+  color: var(--color-text-secondary)
+
+.tooltip-hint-icon
+  color: currentColor
+  font-size: calc(var(--font-size-sm) - 1px)
+  line-height: var(--line-height-sm)
 
 .tooltip-content-open
   opacity: 1
