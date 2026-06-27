@@ -20,6 +20,7 @@ export class ArchitectureContextFile extends ContextFile {
       '## Client Interfaces',
       '- Leon exposes a client-agnostic Socket.IO interface so built-in and custom clients can connect through the same live dialogue contract.',
       '- HTTP APIs remain request/response support surfaces; live owner utterances should use the Socket.IO client interface.',
+      '- Custom clients can read profile-owned extension JSON files through a generic redacted HTTP endpoint, covering skill memory, skill settings, and tool settings without exposing secrets.',
       '## ReAct Loop',
       '- Planning phase chooses either a direct answer, an ordered tool plan, or a relevant agent skill workflow.',
       '- Tool state is separated: installed tools exist in the registry, enabled tools are not disabled by the owner, and available tools have the required settings to run.',

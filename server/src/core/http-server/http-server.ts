@@ -27,6 +27,7 @@ import { systemWidgetsPlugin } from '@/core/http-server/api/system-widgets'
 import { sessionsPlugin } from '@/core/http-server/api/sessions'
 import { openPathPlugin } from '@/core/http-server/api/open-path'
 import { fileSystemListPlugin } from '@/core/http-server/api/file-system-list'
+import { extensionFilesPlugin } from '@/core/http-server/api/extension-files'
 import { PERSONA } from '@/core'
 import { SystemHelper } from '@/helpers/system-helper'
 import { getRoutingModeLLMDisplay } from '@/core/llm-manager/llm-routing'
@@ -182,6 +183,7 @@ export default class HTTPServer {
     this.fastify.register(inferencePlugin, { apiVersion: API_VERSION })
     this.fastify.register(openPathPlugin, { apiVersion: API_VERSION })
     this.fastify.register(fileSystemListPlugin, { apiVersion: API_VERSION })
+    this.fastify.register(extensionFilesPlugin, { apiVersion: API_VERSION })
 
     try {
       await this.listen()
