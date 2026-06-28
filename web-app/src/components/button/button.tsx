@@ -11,7 +11,7 @@ type AppRouteTo = '/'
 type ButtonIconType = 'line' | 'fill'
 type ButtonIconPosition = 'left' | 'right'
 type ButtonSize = 'sm' | 'md'
-type ButtonVariant = 'ghost' | 'surface' | 'primary' | 'danger'
+export type ButtonVariant = 'ghost' | 'secondary' | 'primary' | 'danger'
 
 interface ButtonBaseProps {
   children?: ReactNode

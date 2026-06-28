@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { clsx } from 'clsx'
 
@@ -68,11 +68,12 @@ export function Dropdown({
 }: DropdownProps) {
   const triggerRef = useRef<HTMLSpanElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const [mounted, setMounted] = useState(false)
   const [open, setOpen] = useState(false)
   const [placement, setPlacement] = useState<DropdownPlacement>('bottom')
   const [dropdownStyle, setDropdownStyle] = useState<CSSProperties>()
 
-  function updateDropdownPosition(): void {
+  const updateDropdownPosition = useCallback((): void => {
     if (triggerRef.current === null) {
       return
     }
@@ -84,16 +85,29 @@ export function Dropdown({
 
     setPlacement(nextPosition.placement)
     setDropdownStyle(nextPosition.style)
-  }
+  }, [items.length])
 
-  function toggleDropdown(): void {
-    if (open) {
-      setOpen(false)
+  const closeDropdown = useCallback((): void => {
+    if (!open) {
       return
     }
 
+    setOpen(false)
+  }, [open])
+
+  const openDropdown = useCallback((): void => {
     updateDropdownPosition()
+    setMounted(true)
     setOpen(true)
+  }, [updateDropdownPosition])
+
+  function toggleDropdown(): void {
+    if (mounted && open) {
+      closeDropdown()
+      return
+    }
+
+    openDropdown()
   }
 
   useEffect(() => {
@@ -115,12 +129,12 @@ export function Dropdown({
         return
       }
 
-      setOpen(false)
+      closeDropdown()
     }
 
     function handleKeyDown(event: KeyboardEvent): void {
       if (event.key === 'Escape') {
-        setOpen(false)
+        closeDropdown()
       }
     }
 
@@ -136,7 +150,7 @@ export function Dropdown({
       window.removeEventListener('resize', updateDropdownPosition)
       window.removeEventListener('scroll', updateDropdownPosition, true)
     }
-  }, [items.length, open])
+  }, [closeDropdown, open, updateDropdownPosition])
 
   return (
     <>
@@ -150,7 +164,7 @@ export function Dropdown({
       >
         {children}
       </span>
-      {createPortal(
+      {mounted && createPortal(
         <div
           ref={dropdownRef}
           className={clsx(
@@ -160,6 +174,11 @@ export function Dropdown({
           )}
           role="menu"
           style={dropdownStyle}
+          onTransitionEnd={(event) => {
+            if (event.propertyName === 'opacity' && !open) {
+              setMounted(false)
+            }
+          }}
         >
           {items.map((item) => (
             <button
@@ -172,7 +191,7 @@ export function Dropdown({
               role="menuitem"
               onClick={() => {
                 item.onSelect?.()
-                setOpen(false)
+                closeDropdown()
               }}
             >
               <i

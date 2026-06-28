@@ -19,7 +19,7 @@ const indexRoute = createRoute({
 
 const sessionRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/sessions/$sessionId',
+  path: '/session/$sessionId',
   component: HomeRoute
 })
 

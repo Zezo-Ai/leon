@@ -3,7 +3,9 @@
   align-items: center
   justify-content: center
   gap: var(--space-sm)
-  border-radius: var(--border-radius-md)
+  box-sizing: border-box
+  border: 1px solid transparent
+  border-radius: var(--border-radius-lg)
   color: var(--color-text-secondary)
   font-weight: var(--font-weight-semi-bold)
   text-decoration: none
@@ -21,8 +23,8 @@
     white-space: nowrap
 
   &.button-md
-    min-height: 40px
-    padding: 0 var(--space-md)
+    min-height: 34px
+    padding: 0 12px
     font-size: var(--font-size-md)
     line-height: var(--line-height-md)
 
@@ -35,31 +37,39 @@
       padding: 8px
 
   &.button-ghost:hover:not(:disabled):not([aria-disabled='true']),
-  &.button-surface
+  &.button-secondary:hover:not(:disabled):not([aria-disabled='true'])
     background-color: var(--color-surface-hover)
     color: var(--color-text)
 
-  &.button-surface:hover:not(:disabled):not([aria-disabled='true'])
-    background-color: var(--color-surface)
+  &.button-secondary
+    background-color: transparent
+    border-color: var(--color-border)
+    color: var(--color-text)
 
   &.button-ghost:active:not(:disabled):not([aria-disabled='true']),
-  &.button-surface:active:not(:disabled):not([aria-disabled='true'])
+  &.button-secondary:active:not(:disabled):not([aria-disabled='true'])
     background-color: var(--color-surface-active)
     color: var(--color-text)
 
   &.button-primary
-    background-color: var(--color-accent)
-    color: var(--color-accent-contrast)
+    background-color: var(--color-primary-button)
+    color: var(--color-primary-button-text)
 
   &.button-primary:hover:not(:disabled):not([aria-disabled='true'])
-    background-color: var(--color-accent-hover)
+    background-color: var(--color-primary-button-hover)
 
   &.button-primary:active:not(:disabled):not([aria-disabled='true'])
-    background-color: var(--color-accent)
+    background-color: var(--color-primary-button-active)
 
   &.button-danger
     background-color: var(--color-danger)
-    color: #FFF
+    color: var(--color-danger-contrast)
+
+  &.button-danger:hover:not(:disabled):not([aria-disabled='true'])
+    background-color: var(--color-danger-hover)
+
+  &.button-danger:active:not(:disabled):not([aria-disabled='true'])
+    background-color: var(--color-danger-pressed)
 
   &:disabled
     color: var(--color-text-disabled)

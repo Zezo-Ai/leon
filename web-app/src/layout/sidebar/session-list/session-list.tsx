@@ -7,8 +7,8 @@ import {
 } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
+import { sessionIndex, type ConversationSession } from '../../../data/sessions'
 import { useToast } from '../../../components/toast'
-import sessionsData from '../../../data/sessions.json'
 import { SessionListItem } from '../session-list-item'
 
 import './session-list.sass'
@@ -16,29 +16,10 @@ import './session-list.sass'
 const SESSION_ITEM_ESTIMATED_HEIGHT = 41
 const SESSION_LIST_OVERSCAN = 5
 
-interface ConversationSession {
-  id: string
-  title: string
-  isTitleGenerated: boolean
-  isPinned: boolean
-  createdAt: number
-  updatedAt: number
-  lastMessageAt: number | null
-  messageCount: number
-  modelTarget: string | null
-}
-
-interface ConversationSessionIndex {
-  activeSessionId: string
-  sessions: ConversationSession[]
-}
-
 interface SessionListProps {
   collapsed?: boolean
   scrollElementRef: RefObject<HTMLDivElement | null>
 }
-
-const sessionIndex = sessionsData satisfies ConversationSessionIndex
 
 function sortPinnedSessionsFirst(
   sessions: ConversationSession[]
@@ -106,6 +87,12 @@ export function SessionList({
     })
   }
 
+  function deleteSession(sessionId: string): void {
+    setSessions((currentSessions) =>
+      currentSessions.filter((currentSession) => currentSession.id !== sessionId)
+    )
+  }
+
   useLayoutEffect(() => {
     const virtualList = virtualListRef.current
 
@@ -156,6 +143,7 @@ export function SessionList({
               id={session.id}
               isPinned={session.isPinned}
               title={session.title}
+              onDelete={deleteSession}
               onRename={renameSession}
               style={{
                 height: `${virtualRow.size}px`,

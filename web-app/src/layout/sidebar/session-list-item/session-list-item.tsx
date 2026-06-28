@@ -9,13 +9,16 @@ import { Link } from '@tanstack/react-router'
 import { clsx } from 'clsx'
 
 import { Button } from '../../../components/button'
+import { Dialog } from '../../../components/dialog'
 import { Dropdown } from '../../../components/dropdown'
+import { Input } from '../../../components/input'
 
 import './session-list-item.sass'
 
 interface SessionListItemProps {
   id: string
   isPinned: boolean
+  onDelete: (sessionId: string) => void
   onRename: (sessionId: string, title: string) => void
   title: string
   style?: CSSProperties
@@ -24,12 +27,14 @@ interface SessionListItemProps {
 export function SessionListItem({
   id,
   isPinned,
+  onDelete,
   onRename,
   title,
   style
 }: SessionListItemProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [editing, setEditing] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [draftTitle, setDraftTitle] = useState(title)
   const pinDropdownItem = isPinned
     ? {
@@ -84,13 +89,26 @@ export function SessionListItem({
     }
   }
 
+  function confirmDelete(): void {
+    onDelete(id)
+    setDeleteDialogOpen(false)
+  }
+
   return (
-    <li className={clsx('session-list-item', { 'session-list-item-pinned': isPinned })} style={style}>
+    <li
+      className={clsx('session-list-item', {
+        'session-list-item-editing': editing,
+        'session-list-item-pinned': isPinned
+      })}
+      style={style}
+    >
       {editing ? (
-        <input
-          ref={inputRef}
+        <Input
+          ariaLabel="Session title"
           className="session-list-item-input"
-          aria-label="Session title"
+          fieldRef={(element) => {
+            inputRef.current = element instanceof HTMLInputElement ? element : null
+          }}
           value={draftTitle}
           onBlur={commitEditing}
           onChange={(event) => setDraftTitle(event.target.value)}
@@ -98,7 +116,7 @@ export function SessionListItem({
         />
       ) : (
         <Link
-          to="/sessions/$sessionId"
+          to="/session/$sessionId"
           params={{ sessionId: id }}
           className="session-list-item-link"
           activeProps={{
@@ -130,6 +148,7 @@ export function SessionListItem({
             {
               iconName: 'delete-bin',
               label: 'Delete',
+              onSelect: () => setDeleteDialogOpen(true),
               variant: 'danger'
             }
           ]}
@@ -140,6 +159,25 @@ export function SessionListItem({
           />
         </Dropdown>
       </div>
+      <Dialog
+        open={deleteDialogOpen}
+        role="alertdialog"
+        title="You sure?"
+        description="This action cannot be undone. This will permanently delete the session."
+        actions={[
+          {
+            label: 'Cancel',
+            variant: 'secondary',
+            onClick: () => setDeleteDialogOpen(false)
+          },
+          {
+            label: 'Delete session',
+            variant: 'danger',
+            onClick: confirmDelete
+          }
+        ]}
+        onClose={() => setDeleteDialogOpen(false)}
+      />
     </li>
   )
 }
